@@ -154,6 +154,7 @@ impl TemplateApp {
         let area = ui.available_size();
         let size = egui::vec2(area.x.max(100.0), area.y.max(200.0));
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+        let response = response.accessible_name("Structural viewport");
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 6.0, egui::Color32::from_rgb(18, 25, 35));
 
@@ -313,6 +314,9 @@ impl eframe::App for TemplateApp {
         });
     }
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod ui_tests;
 
 #[cfg(test)]
 mod tests {
