@@ -9,11 +9,16 @@ Built with Rust 1.99.1, egui/eframe 0.37.0. The first experiment deliberately us
 `egui::Painter` for a lightweight, orthographic structural preview; it is **not**
 a native CAD/FEA renderer and does **not** contain Wry or ECharts yet.
 
+The native application explicitly uses eframe's **wgpu backend** to display the
+UI and wireframe. The model itself is projected on the CPU and drawn as 2D
+lines; it has no custom GPU 3D pipeline, depth buffer, or hidden-surface removal.
+
 It includes:
 
 - A six-storey **synthetic** frame, with four columns and four beams per storey.
 - Story selection, visibility filters, and member picking using a screen-space distance test.
-- Mouse drag to rotate around the vertical axis and wheel to zoom.
+- Mouse drag left/right to rotate around the vertical axis, up/down to change
+  elevation, and wheel to zoom. Orbit stays centered on the building.
 - A member inspector showing stable demo keys and endpoints in metres.
 - Unit tests for model identity, selection distance, visibility, and projection.
 - Native and web entry points carried forward from the upstream template.
@@ -52,7 +57,8 @@ name remains `eframe_template` for now; renaming/packaging is a separate task.
 
 1. Select a story and switch on "Isolate selected story".
 2. Toggle columns and beams; hidden elements must not be pickable.
-3. Drag in the dark viewport to rotate; use the wheel to zoom.
+3. Drag left/right and up/down in the dark viewport to orbit; use the wheel to
+   zoom. Reset view restores both rotation angles and zoom.
 4. Click a structural line; verify the inspector displays its key, kind, story,
    start and end coordinates.
 5. Click empty space to clear the member selection.

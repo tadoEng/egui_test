@@ -5,6 +5,9 @@
 
 const STORY_COUNT: usize = 6;
 const STORY_HEIGHT_M: f32 = 4.0;
+const DEFAULT_YAW: f32 = 0.65;
+const DEFAULT_PITCH: f32 = 0.5;
+const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.01;
 const PLAN: [[f32; 2]; 4] = [[-3.0, -2.5], [3.0, -2.5], [3.0, 2.5], [-3.0, 2.5]];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,13 +64,15 @@ fn sample_members() -> Vec<Member> {
     members
 }
 
-fn project(point: [f32; 3], origin: egui::Pos2, yaw: f32, scale: f32) -> egui::Pos2 {
+fn project(point: [f32; 3], origin: egui::Pos2, yaw: f32, pitch: f32, scale: f32) -> egui::Pos2 {
     let (sin, cos) = yaw.sin_cos();
+    let (pitch_sin, pitch_cos) = pitch.sin_cos();
     let horizontal_x = point[0] * cos - point[1] * sin;
     let horizontal_y = point[0] * sin + point[1] * cos;
+    let height_from_center = point[2] - STORY_COUNT as f32 * STORY_HEIGHT_M * 0.5;
     egui::pos2(
         origin.x + horizontal_x * scale,
-        origin.y + (horizontal_y * 0.45 - point[2] * 0.8) * scale,
+        origin.y + (horizontal_y * pitch_sin - height_from_center * pitch_cos) * scale,
     )
 }
 
@@ -91,6 +96,7 @@ pub struct TemplateApp {
     show_beams: bool,
     isolate_story: bool,
     yaw: f32,
+    pitch: f32,
     zoom: f32,
 }
 
@@ -102,7 +108,8 @@ impl Default for TemplateApp {
             show_columns: true,
             show_beams: true,
             isolate_story: false,
-            yaw: 0.65,
+            yaw: DEFAULT_YAW,
+            pitch: DEFAULT_PITCH,
             zoom: 15.0,
         }
     }
@@ -124,8 +131,14 @@ impl TemplateApp {
             15.0
         };
         if !app.yaw.is_finite() {
-            app.yaw = 0.65;
+            app.yaw = DEFAULT_YAW;
         }
+        app.yaw = app.yaw.rem_euclid(std::f32::consts::TAU);
+        app.pitch = if app.pitch.is_finite() {
+            app.pitch.clamp(-MAX_PITCH, MAX_PITCH)
+        } else {
+            DEFAULT_PITCH
+        };
         app
     }
 
@@ -145,7 +158,9 @@ impl TemplateApp {
         painter.rect_filled(rect, 6.0, egui::Color32::from_rgb(18, 25, 35));
 
         if response.dragged() {
-            self.yaw += response.drag_delta().x * 0.008;
+            let delta = response.drag_delta();
+            self.yaw = (self.yaw + delta.x * 0.008).rem_euclid(std::f32::consts::TAU);
+            self.pitch = (self.pitch + delta.y * 0.008).clamp(-MAX_PITCH, MAX_PITCH);
         }
         if response.hovered() {
             let scroll = ui.input(|input| input.smooth_scroll_delta.y);
@@ -154,7 +169,7 @@ impl TemplateApp {
             }
         }
 
-        let origin = rect.center() + egui::vec2(0.0, 100.0);
+        let origin = rect.center();
         let mut closest: Option<(f32, String)> = None;
         let pointer = if response.clicked() {
             response.interact_pointer_pos()
@@ -163,8 +178,8 @@ impl TemplateApp {
         };
 
         for member in members.iter().filter(|member| self.visible(member)) {
-            let start = project(member.start, origin, self.yaw, self.zoom);
-            let end = project(member.end, origin, self.yaw, self.zoom);
+            let start = project(member.start, origin, self.yaw, self.pitch, self.zoom);
+            let end = project(member.end, origin, self.yaw, self.pitch, self.zoom);
             let selected = self.selected_member.as_deref() == Some(member.key.as_str());
             let color = if selected {
                 egui::Color32::from_rgb(255, 177, 88)
@@ -205,7 +220,7 @@ impl TemplateApp {
         painter.text(
             rect.left_bottom() + egui::vec2(16.0, -15.0),
             egui::Align2::LEFT_BOTTOM,
-            "Drag: rotate  ·  Wheel: zoom  ·  Click: inspect member  ·  Rust egui::Painter, not wgpu 3D",
+            "Drag left/right + up/down: orbit  ·  Wheel: zoom  ·  Click: inspect member",
             egui::FontId::proportional(12.0),
             egui::Color32::from_rgb(155, 169, 186),
         );
@@ -254,7 +269,8 @@ impl eframe::App for TemplateApp {
                 ui.checkbox(&mut self.show_beams, "Beams");
                 ui.checkbox(&mut self.isolate_story, "Isolate selected story");
                 if ui.button("Reset view").clicked() {
-                    self.yaw = 0.65;
+                    self.yaw = DEFAULT_YAW;
+                    self.pitch = DEFAULT_PITCH;
                     self.zoom = 15.0;
                 }
             });
@@ -349,9 +365,30 @@ mod tests {
     fn projection_is_finite_and_rotates_with_yaw() {
         let point = [2.0, 1.0, 8.0];
         let origin = egui::pos2(100.0, 100.0);
-        let before = project(point, origin, 0.0, 10.0);
-        let after = project(point, origin, 1.0, 10.0);
+        let before = project(point, origin, 0.0, DEFAULT_PITCH, 10.0);
+        let after = project(point, origin, 1.0, DEFAULT_PITCH, 10.0);
         assert!(after.x.is_finite() && after.y.is_finite());
         assert!((before.x - after.x).abs() > 0.1);
+    }
+
+    #[test]
+    fn orbit_keeps_the_model_center_at_the_viewport_center() {
+        let center = [0.0, 0.0, STORY_COUNT as f32 * STORY_HEIGHT_M * 0.5];
+        let origin = egui::pos2(320.0, 240.0);
+        for yaw in [0.0, 1.0, 3.0] {
+            for pitch in [-MAX_PITCH, 0.0, MAX_PITCH] {
+                assert_eq!(project(center, origin, yaw, pitch, 15.0), origin);
+            }
+        }
+    }
+
+    #[test]
+    fn pitch_changes_elevation_in_both_directions_without_changing_horizontal_position() {
+        let point = [2.0, 3.0, STORY_COUNT as f32 * STORY_HEIGHT_M * 0.5];
+        let origin = egui::pos2(320.0, 240.0);
+        let above = project(point, origin, 0.0, 0.5, 15.0);
+        let below = project(point, origin, 0.0, -0.5, 15.0);
+        assert_eq!(above.x, below.x);
+        assert!(above.y > origin.y && below.y < origin.y);
     }
 }
