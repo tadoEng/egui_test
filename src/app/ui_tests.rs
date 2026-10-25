@@ -48,13 +48,8 @@ fn wheel(harness: &mut Harness<'_, TemplateApp>, position: egui::Pos2, delta: f3
 fn column_position(harness: &Harness<'_, TemplateApp>) -> egui::Pos2 {
     // Midpoint of C1@S3, well away from its endpoints.
     let app = harness.state();
-    project(
-        [-3.0, -2.5, 10.0],
-        viewport(harness).center(),
-        app.yaw,
-        app.pitch,
-        app.zoom,
-    )
+    app.projection(viewport(harness))
+        .project([-3.0, -2.5, 10.0])
 }
 
 #[test]
@@ -227,4 +222,25 @@ fn viewport_remains_usable_after_resize_and_dpi_changes() {
         click_at(&mut harness, position);
         assert_eq!(harness.state().selected_member.as_deref(), Some("C1@S3"));
     }
+}
+
+#[test]
+fn stress_presets_draw_the_full_count_and_reuse_cached_geometry() {
+    let mut harness = harness();
+    for preset in [
+        SyntheticPreset::FiftyThousand,
+        SyntheticPreset::HundredThousand,
+    ] {
+        harness.get_by_label(preset.label()).click();
+        harness.run();
+        assert_eq!(harness.state().statistics().members, preset.count());
+        assert_eq!(harness.state().statistics().drawn_segments, preset.count());
+        let model = Arc::clone(&harness.state().model);
+        drag(&mut harness, egui::vec2(40.0, 30.0));
+        assert!(Arc::ptr_eq(&model, &harness.state().model));
+        assert!(harness.state().statistics().viewport_ms.is_finite());
+    }
+    harness.get_by_label(SyntheticPreset::Demo.label()).click();
+    harness.run();
+    assert_eq!(harness.state().statistics().members, 48);
 }

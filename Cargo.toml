@@ -12,6 +12,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
+web-time = "1.1.0"
 egui = "0.37.0"
 eframe = { version = "0.37.0", features = ["persistence"] }
 log = "0.4.34"
@@ -22,6 +23,10 @@ serde = { version = "1.0.229", features = ["derive"] }
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.11"
+ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
+
+[features]
+e2k = ["dep:ext-e2k"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
