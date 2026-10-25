@@ -5,7 +5,7 @@ This repository does **not** modify or depend on EtabExtension.
 
 ## Current spike: native egui workbench
 
-Built with Rust 1.95, egui/eframe 0.36.0. The first experiment deliberately uses
+Built with Rust 1.99.1, egui/eframe 0.37.0. The first experiment deliberately uses
 `egui::Painter` for a lightweight, orthographic structural preview; it is **not**
 a native CAD/FEA renderer and does **not** contain Wry or ECharts yet.
 
@@ -23,20 +23,29 @@ It includes:
 ```powershell
 git clone https://github.com/tadoEng/egui_test.git
 cd egui_test
-rustup toolchain install 1.95.0
-cargo run --release
+rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --target wasm32-unknown-unknown
+cargo fetch --locked
+.\check.ps1
+cargo run --locked --release
 ```
 
-For the experimental PR branch, check out
-`feat/native-structural-workbench-spike` before running these commands.
+The structural workbench from PR #1 is merged into `main`. Start new experiments
+from an up-to-date `main`; there is no need to check out the old PR branch.
 
 ```powershell
-cargo test --lib
-cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
+# Repeat checks without network access after fetching dependencies:
+.\check.ps1 -Offline
+# Native checks only (skip the WASM target):
+.\check.ps1 -Offline -SkipWeb
 ```
 
-The dependency versions and `rust-toolchain` are pinned in the repo. The crate
+`check.ps1` runs formatting, native check, strict Clippy, tests, doc tests, and a
+WASM compile check. It stops on the first failure and works from any current
+directory. It does not package the website; `trunk build --locked` is a separate
+optional step requiring Trunk. Desktop interaction checks below remain manual.
+
+The toolchain is pinned in `rust-toolchain`; dependency resolution is pinned in
+`Cargo.lock`. Keep `--locked` when building or running the experiment. The crate
 name remains `eframe_template` for now; renaming/packaging is a separate task.
 
 ## Interaction checklist
@@ -54,7 +63,8 @@ only. No performance or native GPU claims follow from this prototype.
 
 ## Planned **separate** experiment
 
-Investigate `egui + wgpu + wry (WebView2 on Windows) + ECharts` by embedding
+Track [issue #2](https://github.com/tadoEng/egui_test/issues/2): investigate
+`egui + wry (WebView2 on Windows) + ECharts` by embedding
 one local, offline ECharts panel. Verify two-way story selection, resizing,
 focus, keyboard input, DPI, overlays/z-order, and cleanup before considering
 an application-level architecture change.

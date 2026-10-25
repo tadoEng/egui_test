@@ -5,12 +5,7 @@
 
 const STORY_COUNT: usize = 6;
 const STORY_HEIGHT_M: f32 = 4.0;
-const PLAN: [[f32; 2]; 4] = [
-    [-3.0, -2.5],
-    [3.0, -2.5],
-    [3.0, 2.5],
-    [-3.0, 2.5],
-];
+const PLAN: [[f32; 2]; 4] = [[-3.0, -2.5], [3.0, -2.5], [3.0, 2.5], [-3.0, 2.5]];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MemberKind {
@@ -189,9 +184,7 @@ impl TemplateApp {
             if let Some(pos) = pointer {
                 let distance = distance_to_segment_squared(pos, start, end);
                 if distance <= 9.0 * 9.0
-                    && closest
-                        .as_ref()
-                        .is_none_or(|(best, _)| distance < *best)
+                    && closest.as_ref().is_none_or(|(best, _)| distance < *best)
                 {
                     closest = Some((distance, member.key.clone()));
                 }
@@ -238,7 +231,7 @@ impl eframe::App for TemplateApp {
         });
 
         egui::Panel::left("model_explorer")
-            .default_width(200.0)
+            .default_size(200.0)
             .resizable(true)
             .show(ui, |ui| {
                 ui.heading("Model Explorer");
@@ -267,7 +260,7 @@ impl eframe::App for TemplateApp {
             });
 
         egui::Panel::right("properties")
-            .default_width(225.0)
+            .default_size(225.0)
             .resizable(true)
             .show(ui, |ui| {
                 ui.heading("Inspector");
@@ -293,7 +286,9 @@ impl eframe::App for TemplateApp {
                     ui.label("Click a member in the viewport.");
                 }
                 ui.separator();
-                ui.label("ECharts + Wry will be tested in a separate Windows-native integration slice.");
+                ui.label(
+                    "ECharts + Wry will be tested in a separate Windows-native integration slice.",
+                );
                 ui.small("No ETABS model or calculation data is loaded.");
             });
 
@@ -314,7 +309,11 @@ mod tests {
         assert_eq!(members.len(), STORY_COUNT * 8);
         let keys: HashSet<_> = members.iter().map(|member| &member.key).collect();
         assert_eq!(keys.len(), members.len());
-        assert!(members.iter().all(|member| (1..=STORY_COUNT).contains(&member.story)));
+        assert!(
+            members
+                .iter()
+                .all(|member| (1..=STORY_COUNT).contains(&member.story))
+        );
     }
 
     #[test]
@@ -328,10 +327,20 @@ mod tests {
     #[test]
     fn visibility_respects_story_and_element_filters() {
         let members = sample_members();
-        let mut app = TemplateApp { isolate_story: true, selected_story: 2, ..Default::default() };
-        assert_eq!(members.iter().filter(|member| app.visible(member)).count(), 8);
+        let mut app = TemplateApp {
+            isolate_story: true,
+            selected_story: 2,
+            ..Default::default()
+        };
+        assert_eq!(
+            members.iter().filter(|member| app.visible(member)).count(),
+            8
+        );
         app.show_beams = false;
-        assert_eq!(members.iter().filter(|member| app.visible(member)).count(), 4);
+        assert_eq!(
+            members.iter().filter(|member| app.visible(member)).count(),
+            4
+        );
         app.show_columns = false;
         assert!(!members.iter().any(|member| app.visible(member)));
     }
