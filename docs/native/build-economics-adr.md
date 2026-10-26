@@ -340,3 +340,48 @@ not yet a retained-symbol/link-map explanation of the executable-size increase. 
 separate measured link-boundary investigation; proposed upstream feature separation or a typed
 process boundary must preserve authority, and a process split alone would not make the heavy
 child's CRT policy safe. No production boundary or shipping process is implemented here.
+
+### Retained initializer and linker-map diagnostic
+
+A separate, **non-executing one-bin diagnostic** at published probe source `0895fe6` now
+records a linker map, compiler linker invocation and PE initialization table. No source,
+upstream crate, default-library suppression or global CRT policy was changed. Additional
+root link option `/MAP` and compiler diagnostic logging were used; an attempted `/VERBOSE:LIB`
+did not yield an archive-selection trace in captured Rust output, so no such trace is claimed.
+The actual invocation uses MSVC `link.exe`, `/defaultlib:msvcrt`, `/OPT:REF,ICF`, `/DEBUG`;
+no `/WHOLEARCHIVE` option was observed in that invocation. LNK4098 remains visible.
+
+Observed [artifact facts and hashes](evidence/perf19/retained-link-boundary.json):
+
+- The retained PE `.CRT$XCU` table has two pointers. One resolves through the map to
+  `_GLOBAL__sub_I_binding.cc` from `libv8:binding.obj`; the other is winit's main-thread
+  initializer. This is a file/table observation, not an observation of executing the GUI.
+- Disassembly of the V8 initializer loads the address of the dynamic `deserialized_data`
+  destructor and tail-jumps to `atexit`. That destructor is also retained in the map.
+  The shipped `v8 137.3.0/src/binding.cc` declares the global
+  `std::vector<InternalFieldData*> deserialized_data;` at line2001.
+- The source file hash was checked against the published registry archive; the archive
+  SHA256 matches Cargo.lock. Package VCS metadata reports `dirty=true`, so the package/file
+  hashes are the primary identity rather than an assumption of clean Git equivalence.
+  The previously inspected prebuilt native archive identity remains recorded separately.
+
+This establishes a **concrete native initialization retention anchor** despite no API service
+call in the root GUI, alongside retained V8 code symbols. It does **not** prove that this
+initializer alone accounts for all V8 code, identify the complete archive extraction/COMDAT
+chain, demonstrate runtime initialization cost, or establish CRT allocation safety. Further
+exact linker extraction attribution remains open. Discarding unused Rust call sites is not
+a sufficient verified dependency boundary for this configuration.
+
+The diagnostic EXE is44,900,864bytes. Its one-bin graph rebuilt font/egui units because the
+original measured two-target build also enabled example/dev-dependency features. It is
+**not a replacement** for the45,646,336byte matched-campaign artifact or a new performance
+comparison. Raw57MB maps and internal-path logs remain local; only selected symbols,
+section sizes, constructor pointers, disassembly and immutable hashes are public. Section
+sizes are PE image/file sizes, not runtime RSS. The GUI was never launched for this diagnostic.
+
+**Recommendation unchanged:** preserve the optional feature fence for the lab. Propose an
+owner-reviewed authoritative upstream project-domain facade/feature separation that can
+exclude the renderer/SSR/V8 closure, with a source API/dependency inventory before implementation;
+do not copy domain logic or fabricate missing DTO fields. A separate typed process is another
+proposal with ownership/version/lifecycle costs and still needs a safe CRT policy in its heavy
+child. **PASS for these artifact observations; PARTIAL for full size causality; packaged HOLD.**
