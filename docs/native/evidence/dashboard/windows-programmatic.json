@@ -1,5 +1,5 @@
 {
-  "source_commit": "26d6e7e4ac0f41a6492e99f720f3eda4fc334c39",
+  "source_commit": "739daf6abede4681d2bc69402b0f7ec67417b63e",
   "profile": "dev root unoptimized; dependencies opt-level2; debug0; jobs1",
   "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
   "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
@@ -11,19 +11,19 @@
   "ignored_optin_gpu_tests": 2,
   "explicit_offscreen_gpu_probe": "PASS: NVIDIA GeForce RTX 3050 Ti Laptop GPU / Vulkan / driver591.74",
   "offscreen_png_sha256": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2",
-  "gate_log_sha256": "64fe2f1d2e1d130fb96a077777c59b489f5bea9fc09ce377956dece06d7a422b",
-  "dashboard_report_sha256": "f3ee614368ddd5c66b13ae871da99617aa412f867c2d4651f07b4b1821542282",
+  "gate_log_sha256": "bae2acd0b22cc0d919b3c8c62d74b64a91df4c60d48daece52588c40eeff32a3",
+  "dashboard_report_sha256": "773142021e747020141ac90cb0fbeea8056895993db9031d7094e60f39233848",
   "stage_a_report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e",
   "artifacts": [
     {
       "artifact": "debug/examples/native_dashboard.exe",
-      "bytes": 25111040,
-      "sha256": "7fb6c358c6c2d4f3e379c7a2174b18650701c24be16ee9b9b0e160b0e4e351b2"
+      "bytes": 25114112,
+      "sha256": "5a7cc3c147d1b4ea9ddefa52863c891e4619d19d1e69834c78188389ac39c05b"
     },
     {
       "artifact": "debug/examples/native_renderer.exe",
-      "bytes": 21032960,
-      "sha256": "5d616509701eebda1de819daab6e73c743e0cc674295defec524d88b3643bfb7"
+      "bytes": 21034496,
+      "sha256": "52ec77ef03943cd9621f7f13e1f7821251f56077c167f9cc431c66f348c03e5f"
     },
     {
       "artifact": "debug/examples/webview_stage_a.exe",
