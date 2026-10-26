@@ -108,6 +108,20 @@ builds ran. Settings: Rust 1.99.1, `CARGO_BUILD_JOBS=1`,
 single build observation, not a controlled clean-build benchmark or a comparison
 with the current Tauri build, which reuses many of the same backend crates.
 
+The first full test code-generation build reported **63m 40s**, after the check
+artifacts had been cached, with `CARGO_PROFILE_TEST_DEBUG=0` as well. Its five
+focused adapter tests passed. The final `check.ps1 -Offline` then passed
+formatting, all-target/all-feature native check, strict Clippy, **all 28 tests
+(23 existing + 5 adapter)**, doc tests and all-target/all-feature WASM check.
+These are build/correctness observations, not UI or read-latency benchmarks.
+
+The Windows test link emitted **LNK4098**: default library `libcmt.lib` conflicts
+with other libraries. The test executable ran successfully, but that C-runtime
+compatibility warning remains unresolved. No `/NODEFAULTLIB`, lint suppression,
+upstream patch or global CRT change was used to hide it. Release/packaged
+linkage and native dependency/runtime policy require a separate review before
+delivery acceptance.
+
 Offline resolution initially lacked a newer non-yanked spin release in the
 local index; online locked resolution/cache population resolved that environment
 condition without changing the backend pin. Cross-platform manifests also needed
@@ -118,11 +132,13 @@ one-time caching before offline WASM checks. No private input was involved.
 | Criterion | Assessment |
 |---|---|
 | Single backend source pin and authoritative API boundary | PASS for source/lockfile inspection |
-| Initial Windows library compile | PASS; final exact-head checks recorded with the PR |
+| Windows native all-target/all-feature compile | PASS; final offline gate reproduced |
 | Native-only WASM feature fence | PASS for all-target/all-feature WASM check |
-| DTO parity and fixture non-mutation | Test implementation supplied; execution result pending |
-| Typed failures, stale out-of-order and busy-switch suppression | Test implementation supplied; execution result pending |
-| Final native strict Clippy / all-target checks | Pending |
+| DTO parity and fixture non-mutation | PASS for same-source API fixtures; includes real worker delivery and complete file byte/mtime comparison |
+| Typed failures, stale out-of-order and busy-switch suppression | PASS for focused negative tests; classification follows typed causes, not similar prose |
+| Final native strict Clippy / all-target checks | PASS |
+| Windows C-runtime compatibility | PARTIAL; observed LNK4098 remains unresolved despite passing tests |
+| Source Tauri/CLI end-to-end parity and meaningful E2K/geometric diff | NOT TESTED; no-E2K API/reference parity is narrower |
 | Release binary size/startup and packaged Windows evidence | NOT MEASURED / NOT TESTED |
 | Native GUI, actual slow-job interaction, cancellation and teardown | NOT TESTED |
 | Scene/provenance, numeric calculations, charts, reports and sidecar runtime | Deferred to the separate gate/integration issues |

@@ -474,22 +474,21 @@ fn validate_operation(operation: &ReadOperation) -> BackendResult<()> {
 }
 
 fn read_only_context(project_root: &Path) -> BackendResult<AppContext> {
-    if !project_root.exists() {
-        return Err(BackendError::new(
-            BackendErrorKind::NotFound,
-            "open project",
-            anyhow!("the selected project path does not exist"),
-        ));
-    }
-    if !project_root.is_dir() || !project_root.join(".etabs-ext").is_dir() {
-        return Err(BackendError::new(
-            BackendErrorKind::InvalidProject,
-            "open project",
-            anyhow!("the selected directory is not an initialized ext project"),
-        ));
-    }
     AppContext::new_read_only(project_root).map_err(|source| {
-        BackendError::new(BackendErrorKind::InvalidProject, "open project", source)
+        // Repository discovery/config validation stays in ext-api. Only classify
+        // typed causes here; constructor prose is never part of the contract.
+        let io_error = source
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<std::io::Error>());
+        let mut kind = classify_source(&source);
+        if kind == BackendErrorKind::Backend {
+            kind = match io_error.map(std::io::Error::kind) {
+                Some(std::io::ErrorKind::NotFound) => BackendErrorKind::NotFound,
+                Some(_) => BackendErrorKind::Backend,
+                None => BackendErrorKind::InvalidProject,
+            };
+        }
+        BackendError::new(kind, "open project", source)
     })
 }
 

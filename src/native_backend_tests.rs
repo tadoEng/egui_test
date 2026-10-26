@@ -132,6 +132,17 @@ fn reads_match_authoritative_api_and_preserve_all_fixture_bytes_and_mtimes() {
             json(&actual.overview),
             json(&get_project_overview(&reference, "main/v2").expect("reference overview"))
         );
+        let mut worker = NativeBackend::new().expect("real read worker");
+        let ticket = worker
+            .submit(BackendRequest::version(&project, "main", "v2"))
+            .expect("submit real read");
+        let completed = next_completion(&worker);
+        assert_eq!(completed.load.generation, ticket.generation);
+        let BackendOutcome::Current(Ok(BackendPayload::Version(worker_actual))) = completed.outcome
+        else {
+            panic!("expected real worker DTO")
+        };
+        assert_eq!(json(&worker_actual.detail), json(&actual.detail));
         let BackendPayload::Diff(actual) =
             execute_read(BackendRequest::diff(&project, "main", "v1", "v2"))
                 .await
@@ -154,6 +165,34 @@ fn reads_match_authoritative_api_and_preserve_all_fixture_bytes_and_mtimes() {
             "reads must preserve even partial snapshots and .git files"
         );
     });
+}
+
+#[test]
+fn error_categories_follow_typed_causes_instead_of_similar_prose() {
+    let busy = BackendError::from_backend(
+        "fixture",
+        AnyError::new(ExtError::SidecarBusy {
+            command: "synthetic".into(),
+            waited_ms: 5,
+        }),
+    );
+    assert_eq!(busy.kind(), BackendErrorKind::Busy);
+    let missing = BackendError::from_backend(
+        "fixture",
+        AnyError::new(ExtError::VersionNotFound("v404".into())),
+    );
+    assert_eq!(missing.kind(), BackendErrorKind::NotFound);
+    let ambiguous_prose = BackendError::from_backend(
+        "fixture",
+        AnyError::new(ExtError::Other("Version not found; Sidecar is busy".into())),
+    );
+    assert_eq!(ambiguous_prose.kind(), BackendErrorKind::Backend);
+    assert!(
+        ambiguous_prose
+            .source_chain()
+            .iter()
+            .any(|source| source.contains("Sidecar is busy"))
+    );
 }
 
 #[test]
@@ -197,7 +236,10 @@ fn invalid_paths_refs_and_corrupt_state_have_typed_errors_and_no_writes() {
             .await
             .expect_err("corrupt state");
         assert_eq!(error.kind(), BackendErrorKind::InvalidProject);
-        assert!(!error.source_chain().is_empty());
+        assert!(
+            error.source_chain().len() >= 2,
+            "retain operation context and the underlying state error"
+        );
         assert_eq!(snapshot(&project), before);
     });
 }
