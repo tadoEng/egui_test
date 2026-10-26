@@ -8,6 +8,8 @@ dist
 target
 target_ra
 target_wasm
+tests/chart-layout/node_modules/
+output/playwright/
 
 # https://github.com/lycheeverse/lychee
 .lycheecache
