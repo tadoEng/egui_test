@@ -1,0 +1,14 @@
+{
+  "source_commit": "f0946d6142b718ef5ab912ba2d44d6816e4714d3",
+  "offline_command": "./check.ps1 -Offline",
+  "assessment": "PASS59 recorded CPU test executions/fmt/native/strictClippy/docs0/WASM; PARTIAL native visual confirmation",
+  "log_sha256": "c7224efa9b1b4a01cc23443069e8efdeafefb68c49b772f4b8ad983aa9672cd2",
+  "headless_report": "chart-layout.json",
+  "headless_png_sha256": "58edc3baf01950158259031462cc6e86b419e7531f080c107abed029b9c4fd60",
+  "owner_synthetic_screenshot_sha256": "f44f0f7722f1e5a93dc1f525c75478639fe681ea186be86dda5b7a8c8becd006",
+  "screenshot_observation": "Explorer/table/two chart markers agree at story23; direction of selection unproven. Overflow/caption overlap visible.",
+  "no_private_results_used": true,
+  "native_input_tested": false,
+  "windows_dpi_tested": false,
+  "owned_headless_process_exit_observed": true
+}
