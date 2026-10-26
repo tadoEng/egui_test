@@ -377,9 +377,12 @@ impl Dashboard {
     }
     fn finish_smoke(&self, ctx: &egui::Context, smoke: Smoke, passed: bool) {
         let (vertices, triangles) = self.viewport.mesh_counts();
+        let callback_paints = self.viewport.callback_paints();
+        let passed = passed && callback_paints > 0;
         let report = serde_json::json!({"assessment":if passed{"PASS"}else{"FAIL"},"scope":"hidden composite programmatic two-chart options/readback/IPC and one WebView recreation; not manual input/presentation/network capture",
                 "webview2":wry::webview_version().ok(),"phase":smoke.phase,"rejected":self.rejected,"selected_story":self.state.selected(),"error":self.error,
                 "native_core_vertices":vertices,"native_core_triangles":triangles,"snapshots":smoke.snapshots,"manual_input_tested":false,"network_capture_performed":false,
+                "native_callback_paints":callback_paints,"presented_frames_measured":false,
                 "navigation_attempts":self.chart.as_ref().and_then(|chart|chart.navigation.lock().ok().map(|entries|entries.clone()))});
         if let Err(e) = std::fs::write(smoke.path, report.to_string()) {
             log::error!("write dashboard smoke report: {e}");

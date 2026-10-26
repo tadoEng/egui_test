@@ -33,6 +33,7 @@ impl eframe::App for native::NativeViewport {
                 if ui.button("Fit").clicked(){self.fit();}
                 let(vertices,triangles)=self.mesh_counts();
                 ui.label(format!("{vertices} vertices · {triangles} triangles"));
+                ui.label(format!("{} callback records",self.callback_paints()));
             });
             ui.small("Synthetic fidelity only: frames are rectangular boxes and the shell is a zero-thickness face. Section profiles, insertion offsets, openings and local axes are unsupported.");
         });

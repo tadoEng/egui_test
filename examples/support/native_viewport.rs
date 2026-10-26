@@ -1,5 +1,8 @@
 //! Shared synthetic GPU viewport, extracted from the reviewed renderer example.
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use bytemuck::{Pod, Zeroable};
 use eframe::egui_wgpu;
@@ -440,6 +443,7 @@ impl RendererCore {
 struct ViewportCallback {
     mesh: Arc<MeshData>,
     view_projection: [[f32; 4]; 4],
+    paints: Arc<AtomicU64>,
 }
 
 impl egui_wgpu::CallbackTrait for ViewportCallback {
@@ -479,6 +483,7 @@ impl egui_wgpu::CallbackTrait for ViewportCallback {
             1.0,
         );
         renderer.paint(pass);
+        self.paints.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -486,6 +491,7 @@ pub(crate) struct NativeViewport {
     mesh: Arc<MeshData>,
     camera: OrbitCamera,
     fit_pending: bool,
+    paints: Arc<AtomicU64>,
 }
 
 impl NativeViewport {
@@ -507,11 +513,16 @@ impl NativeViewport {
             camera: OrbitCamera::fit(mesh.bounds, 1.0),
             mesh,
             fit_pending: true,
+            paints: Arc::new(AtomicU64::new(0)),
         })
     }
 }
 
 impl NativeViewport {
+    /// Callback records, not presented/completed frames or GPU draw-call timing.
+    pub(crate) fn callback_paints(&self) -> u64 {
+        self.paints.load(Ordering::Relaxed)
+    }
     pub(crate) fn fit(&mut self) {
         self.fit_pending = true;
     }
@@ -549,6 +560,7 @@ impl NativeViewport {
             ViewportCallback {
                 mesh: Arc::clone(&self.mesh),
                 view_projection: self.camera.view_projection(aspect),
+                paints: Arc::clone(&self.paints),
             },
         ));
     }
