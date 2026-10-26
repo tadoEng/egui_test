@@ -104,7 +104,7 @@ mod windows {
                 && let Some(webview) = &self.webview
             {
                 let (sender, receiver) = mpsc::channel();
-                if webview.webview.evaluate_script_with_callback("JSON.stringify({url:location.href,state:document.readyState,bridge:typeof window.hostBridge,echarts:typeof window.echarts,scripts:document.scripts.length,error:window.__stageError,marker:window.__stageMarker})", move |value| { drop(sender.send(value)); }).is_ok() {
+                if webview.webview.evaluate_script_with_callback("JSON.stringify({scheme:location.protocol,state:document.readyState,bridge:typeof window.hostBridge,echarts:typeof window.echarts,scripts:document.scripts.length,error:window.__stageError,marker:window.__stageMarker})", move |value| { drop(sender.send(value)); }).is_ok() {
                         smoke.diagnostic = Some(receiver);
                     }
             }
