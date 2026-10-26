@@ -6,9 +6,9 @@ Scope: [#23](https://github.com/tadoEng/egui_test/issues/23), under [#22](https:
 
 ## Contract
 
-All coordinates are f64 metres, right-handed world axes, Z up. Beam/Column/Wall/Slab are explicit authored kinds. Frames are axis-aligned rectangular **solid test prisms**, walls are vertical **zero-thickness shell surfaces**, and slabs are planar convex shell surfaces (including one sloped surface). No engineering section, material, local-axis, insertion-point, offset, shell thickness, ETABS group or source-provenance semantics are implemented. Shells use authored outward normals; a zero-thickness surface has one authored front side, not the outside of a volume.
+All coordinates are f64 metres, right-handed world axes, Z up. Beam/Column/Wall/Slab are explicit authored kinds. Bulk frames are axis-aligned rectangular **solid test prisms**; the truth table also contains an actual **oriented swept rectangular beam**. Walls are vertical **zero-thickness shell surfaces**, and slabs are planar convex shell surfaces (including one sloped surface). No engineering section, material, authoritative local-axis, insertion-point, offset, shell thickness, ETABS group or source-provenance semantics are implemented. Shells use authored outward normals; a zero-thickness surface has one authored front side, not the outside of a volume.
 
-Stable IDs have the form `LAB/Column/S01/00000`. They are unique within a preset. Selection must use **(GeometryRevision, LabId)**; the same ID in a different preset is not the same selection. A validated `Fixture` exposes shared references only. Its revision is `(preset, formula_version=1)`, an authored formula identity, **not** an E2K fingerprint, hash or authoritative `EntityKey`. Any geometry, key or story-attribution change must bump the formula version. Future metadata-only revisions may be separate from the geometry cache identity; this slice has no metadata editing API.
+Stable IDs have the form `LAB/Column/S01/00000`. They are unique within a preset. Selection must use **(GeometryRevision, LabId)**; the same ID in a different preset is not the same selection. A validated `Fixture` exposes shared references only. Its revision is `(preset, formula_version)`: **2 for TruthTable** after the inclined-beam addition, **1 for unchanged bulk presets**. This is an authored formula identity, **not** an E2K fingerprint, hash or authoritative `EntityKey`. Any geometry, key or story-attribution change must bump the formula version. WB-02 must key geometry/selection by this revision and reject retired revisions. Future metadata-only revisions may be separate from the geometry cache identity; this slice has no metadata editing API.
 
 Stories are one-based with ascending elevations, 3 m apart. Columns/walls span the previous level to the named **upper** level; beams/slabs belong to their authored floor. The sloped slab belongs to story 2 despite extending above that elevation. Multi-story members, split-floor attribution, basements and other source conventions are unsupported.
 
@@ -20,17 +20,17 @@ No random seed: the formula is explicit. Large grids have 69 stories, 4 m bays, 
 
 | Preset | Bays X×Y | Stories | Beam | Column | Wall | Slab | Structural entities |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| TruthTable | authored | 2 | 8 | 8 | 4 | 3 | 23 |
+| TruthTable | authored | 2 | 9 | 8 | 4 | 3 | 24 |
 | Thousand | 1×1 | 69 | 276 | 276 | 414 | 69 | 1,035 |
 | TenThousand | 5×6 | 69 | 4,899 | 2,898 | 414 | 2,070 | 10,281 |
 | FiftyThousand | 13×13 | 69 | 25,116 | 13,524 | 414 | 11,661 | 50,715 |
 | HundredThousand | 18×19 | 69 | 49,749 | 26,220 | 414 | 23,598 | 99,981 |
 
-Per-floor entity totals for large presets are respectively 15, 149, 735, 1,449. TruthTable has 11 on story 1 and 12 on story 2.
+Per-floor entity totals for large presets are respectively 15, 149, 735, 1,449. TruthTable has 11 on story 1 and 13 on story 2.
 
 | Preset | Core | Perimeter | Zone A | Zone B | Lateral System | Empty |
 |---|---:|---:|---:|---:|---:|---:|
-| TruthTable | 2 | 16 | 16 | 17 | 20 | 0 |
+| TruthTable | 2 | 16 | 16 | 18 | 20 | 0 |
 | Thousand | 276 | 552 | 1,035 | 1,035 | 966 | 0 |
 | TenThousand | 276 | 3,036 | 6,555 | 6,555 | 3,450 | 0 |
 | FiftyThousand | 276 | 7,176 | 28,221 | 28,221 | 7,590 | 0 |
@@ -40,7 +40,7 @@ Group counts do **not** sum to the entity count. For large presets each row's gr
 
 | Preset | Geometry control points | Reference mesh vertices | Reference triangles | Actual GPU batches/draw calls |
 |---|---:|---:|---:|---|
-| TruthTable | 157 | 413 | 207 | N/A: no renderer |
+| TruthTable | 165 | 437 | 219 | N/A: no renderer |
 | Thousand | 6,348 | 15,180 | 7,590 | N/A |
 | TenThousand | 72,312 | 197,064 | 98,532 | N/A |
 | FiftyThousand | 357,420 | 975,660 | 487,830 | N/A |
@@ -54,11 +54,13 @@ At elevations 3/6 m: four perimeter columns at (0,0), (6,0), (0,4), (6,4); four 
 
 The occlusion oracle uses ray origin `(0,-10,1.5)`, unit direction +Y: near `LAB/Column/S01/00000` at `(0,-0.2,1.5)`, far `LAB/Column/S01/00002` at `(0,3.8,1.5)`. No other element intersects this ray earlier. This is a known geometry oracle for WB-03, not proof of an implemented picker or camera-to-pixel mapping.
 
+Inclined beam `LAB/Beam/S02/00004` has centreline `(8,1,3.5)` → `(11,3,5.5)`, explicit transverse unit Y `(-2,3,0)/sqrt(13)`, and half extents `(0.15,0.2)` m. Local X is the normalized centreline and Z=X×Y; eight swept corners retain the same right-handed face-ring ordering as axis-aligned prisms. Its story is authored as 2, sole group Zone B, reference topology 24 flat face vertices/12 triangles. Its extents fit inside the unchanged whole-fixture bounds above. Validation rejects non-unit/non-perpendicular transverse axes, zero-length sweeps and non-positive half extents; no auto-correction or guessed global-up roll. Tests check cap centres, an independently computed corner, section radius, all outward face triangles and reversed endpoints. This is a rectangular lab sweep, not a source section/orientation kernel.
+
 Openings are **unsupported**: any nonempty opening list produces `UnsupportedOpening`, with no fixture returned. Validation also rejects nonfinite/out-of-range (>1,000 km magnitude) coordinates, invalid/duplicate stories or IDs, duplicate group references or an assigned `Empty` group, zero-size prisms, kind/shape mismatch, degenerate shell edges/fans, wrong/non-unit normals, nonplanarity, concavity and self-intersection. Typed enums exclude unknown group/kind values. No fallback silently patches bad geometry. Raw malformed input is internal to the test crate; consumers obtain validated immutable fixtures through `Fixture::generate` only.
 
 ## Verification
 
-Planned exact-head commands (Windows evidence pending while the separate controlled API Release build runs):
+The original `126f30f` full Windows offline workflow completed successfully: 53 native tests (23 baseline + 7 renderer CPU + 11 WebView + 12 fixture), strict workspace Clippy, fmt, docs and all-target/all-feature WASM. That historical result predates the inclined-frame correction. The corrected source requires its own exact-head run:
 
 ```powershell
 cargo test -p lab-fixture --locked --offline
@@ -66,4 +68,4 @@ cargo clippy -p lab-fixture --all-targets --locked --offline -- -D warnings
 ./check.ps1 -Offline
 ```
 
-Regression cases compare two complete generations at every scale (including all coordinates, keys, normals, indexes, bounds and totals), independent closed-form counts, explicit truth-table membership sets, canonical prism outward triangle normals, the sloped polygon and near/far surfaces, and malformed identity/story/group/frame/shell/opening refusal. No Windows rendering measurements can result from these pure data tests. WB-02 async loading/batching, WB-03 picking, WB-04 visibility/selection and WB-05 authoritative project loading remain separate issues.
+Regression cases compare two complete generations at every scale (including all coordinates, keys, normals, indexes, bounds and totals), independent closed-form counts, explicit truth-table membership sets, canonical prism outward triangle normals, inclined/reversed beams, the sloped polygon and near/far surfaces, and malformed identity/story/group/frame/axis/shell/opening refusal. No Windows rendering measurements can result from these pure data tests. WB-02 async loading/batching, WB-03 picking, WB-04 visibility/selection and WB-05 authoritative project loading remain separate issues.

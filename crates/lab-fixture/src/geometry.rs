@@ -35,6 +35,15 @@ impl Bounds {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Geometry {
     Prism(Bounds),
+    /// Swept rectangle with explicit centreline endpoints and transverse roll axis.
+    /// Local X is start→end, local Y is the supplied unit perpendicular axis,
+    /// local Z is X×Y. Half extents are along Y/Z, in metres. No source-section fidelity.
+    OrientedPrism {
+        start: Point,
+        end: Point,
+        transverse_y: Point,
+        half_extents: [f64; 2],
+    },
     Shell {
         boundary: Vec<Point>,
         normal: Point,
@@ -70,10 +79,45 @@ impl Geometry {
                 [min[0], max[1], max[2]],
             ],
             Self::Shell { boundary, .. } => boundary.clone(),
+            Self::OrientedPrism {
+                start,
+                end,
+                transverse_y,
+                half_extents,
+            } => {
+                let delta = subtract(*end, *start);
+                let length = dot(delta, delta).sqrt();
+                let x = delta.map(|v| v / length);
+                let z = cross(x, *transverse_y);
+                let corner = |at: Point, sy: f64, sz: f64| {
+                    std::array::from_fn(|i| {
+                        at[i] + sy * half_extents[0] * transverse_y[i] + sz * half_extents[1] * z[i]
+                    })
+                };
+                vec![
+                    corner(*start, -1.0, -1.0),
+                    corner(*end, -1.0, -1.0),
+                    corner(*end, 1.0, -1.0),
+                    corner(*start, 1.0, -1.0),
+                    corner(*start, -1.0, 1.0),
+                    corner(*end, -1.0, 1.0),
+                    corner(*end, 1.0, 1.0),
+                    corner(*start, 1.0, 1.0),
+                ]
+            }
         }
     }
 
     pub(crate) fn validate(&self, id: LabId) -> Result<(), FixtureError> {
+        if let Self::OrientedPrism {
+            start,
+            end,
+            transverse_y,
+            half_extents,
+        } = self
+        {
+            validate_oriented(*start, *end, *transverse_y, *half_extents, id)?;
+        }
         let points = self.control_points();
         if !points
             .iter()
@@ -91,6 +135,7 @@ impl Geometry {
                     return Err(FixtureError::DegenerateGeometry(id));
                 }
             }
+            Self::OrientedPrism { .. } => {}
             Self::Shell {
                 boundary,
                 normal,
@@ -153,8 +198,38 @@ impl Geometry {
 
     pub fn reference_mesh_counts(&self) -> (usize, usize) {
         match self {
-            Self::Prism(_) => (24, 12),
+            Self::Prism(_) | Self::OrientedPrism { .. } => (24, 12),
             Self::Shell { boundary, .. } => (boundary.len(), boundary.len().saturating_sub(2)),
         }
     }
+}
+
+fn validate_oriented(
+    start: Point,
+    end: Point,
+    y: Point,
+    half_extents: [f64; 2],
+    id: LabId,
+) -> Result<(), FixtureError> {
+    if !matches!(id.kind, Kind::Beam | Kind::Column) {
+        return Err(FixtureError::KindGeometryMismatch(id));
+    }
+    if !start
+        .iter()
+        .chain(&end)
+        .chain(&y)
+        .chain(&half_extents)
+        .all(|v| v.is_finite())
+    {
+        return Err(FixtureError::InvalidCoordinate(id));
+    }
+    let delta = subtract(end, start);
+    let length = dot(delta, delta).sqrt();
+    if length <= EPS || !half_extents.iter().all(|v| *v > EPS) {
+        return Err(FixtureError::DegenerateGeometry(id));
+    }
+    if (dot(y, y) - 1.0).abs() > EPS || (dot(delta, y) / length).abs() > EPS {
+        return Err(FixtureError::InvalidFrameAxes(id));
+    }
+    Ok(())
 }

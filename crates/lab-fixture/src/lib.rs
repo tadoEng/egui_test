@@ -224,6 +224,7 @@ pub enum FixtureError {
     UnsupportedOpening(LabId),
     NonPlanarOrConcave(LabId),
     IncorrectNormal(LabId),
+    InvalidFrameAxes(LabId),
     KindGeometryMismatch(LabId),
 }
 

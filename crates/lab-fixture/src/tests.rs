@@ -84,7 +84,7 @@ fn truth_counts_story_attribution_and_group_members_are_explicit() {
     assert_eq!(
         f.counts().by_kind,
         BTreeMap::from([
-            (Kind::Beam, 8),
+            (Kind::Beam, 9),
             (Kind::Column, 8),
             (Kind::Wall, 4),
             (Kind::Slab, 3)
@@ -93,7 +93,7 @@ fn truth_counts_story_attribution_and_group_members_are_explicit() {
     );
     assert_eq!(
         f.counts().by_story,
-        BTreeMap::from([(StoryId(1), 11), (StoryId(2), 12)]),
+        BTreeMap::from([(StoryId(1), 11), (StoryId(2), 13)]),
         "sloped slab belongs to authored upper floor"
     );
     assert_eq!(
@@ -102,7 +102,7 @@ fn truth_counts_story_attribution_and_group_members_are_explicit() {
             f.counts().reference_mesh_vertices,
             f.counts().triangles
         ),
-        (157, 413, 207),
+        (165, 437, 219),
         "truth reference topology"
     );
     assert_eq!(
@@ -148,7 +148,7 @@ fn truth_counts_story_attribution_and_group_members_are_explicit() {
 #[test]
 fn exact_group_counts_match_authored_manifest_at_all_scales() {
     for (preset, core, perimeter, zone_a, zone_b, lateral) in [
-        (Preset::TruthTable, 2, 16, 16, 17, 20),
+        (Preset::TruthTable, 2, 16, 16, 18, 20),
         (Preset::Thousand, 276, 552, 1035, 1035, 966),
         (Preset::TenThousand, 276, 3036, 6555, 6555, 3450),
         (Preset::FiftyThousand, 276, 7176, 28221, 28221, 7590),
@@ -180,9 +180,13 @@ fn exact_group_counts_match_authored_manifest_at_all_scales() {
 fn prism_face_triangles_have_correct_outward_normals_for_every_frame() {
     let f = truth();
     for e in f.entities() {
-        if let Geometry::Prism(bounds) = e.geometry() {
+        if matches!(
+            e.geometry(),
+            Geometry::Prism(_) | Geometry::OrientedPrism { .. }
+        ) {
             let points = e.geometry().control_points();
-            let center: Point = std::array::from_fn(|i| bounds.min[i].midpoint(bounds.max[i]));
+            let center: Point =
+                std::array::from_fn(|i| points.iter().map(|p| p[i]).sum::<f64>() / 8.0);
             for face in PRISM_FACE_RINGS {
                 for [a, b, c] in [[face[0], face[1], face[2]], [face[0], face[2], face[3]]] {
                     let n = cross(
@@ -196,6 +200,161 @@ fn prism_face_triangles_have_correct_outward_normals_for_every_frame() {
                     );
                 }
             }
+        }
+    }
+}
+
+#[test]
+fn inclined_beam_has_explicit_sweep_endpoints_roll_story_and_groups() {
+    let f = truth();
+    let key = id(Kind::Beam, 2, 4);
+    let e = f
+        .entities()
+        .iter()
+        .find(|e| e.id() == key)
+        .expect("inclined beam");
+    let Geometry::OrientedPrism {
+        start,
+        end,
+        transverse_y,
+        half_extents,
+    } = e.geometry()
+    else {
+        panic!("inclined beam must retain its oriented frame geometry");
+    };
+    assert_eq!(
+        (*start, *end),
+        ([8.0, 1.0, 3.5], [11.0, 3.0, 5.5]),
+        "centreline endpoints in metres"
+    );
+    assert_eq!(*half_extents, [0.15, 0.2], "authored half-width/depth");
+    let delta = subtract(*end, *start);
+    assert!(
+        dot(delta, *transverse_y).abs() < 1.0e-12,
+        "explicit transverse roll axis is perpendicular"
+    );
+    let points = e.geometry().control_points();
+    for (indices, expected) in [([0, 3, 4, 7], *start), ([1, 2, 5, 6], *end)] {
+        let centre: Point =
+            std::array::from_fn(|i| indices.iter().map(|&j| points[j][i]).sum::<f64>() / 4.0);
+        assert!(
+            (0..3).all(|i| (centre[i] - expected[i]).abs() < 1.0e-12),
+            "cap centres reproduce the actual inclined segment"
+        );
+        for index in indices {
+            assert!(
+                (dot(
+                    subtract(points[index], expected),
+                    subtract(points[index], expected)
+                ) - 0.0625)
+                    .abs()
+                    < 1.0e-12,
+                "each corner lies at the swept rectangle radius"
+            );
+        }
+    }
+    let independent_corner = [
+        8.0 + 0.3 / 13.0_f64.sqrt() + 1.2 / 221.0_f64.sqrt(),
+        1.0 - 0.45 / 13.0_f64.sqrt() + 0.8 / 221.0_f64.sqrt(),
+        3.5 - 2.6 / 221.0_f64.sqrt(),
+    ];
+    assert!(
+        (0..3).all(|i| (points[0][i] - independent_corner[i]).abs() < 1.0e-12),
+        "independent right-handed swept corner"
+    );
+    assert_eq!(
+        e.groups(),
+        &[Group::ZoneB],
+        "authored interior inclined beam is not a perimeter member"
+    );
+    assert!(
+        f.story_members()[&StoryId(2)].contains(&key),
+        "stable key on authored story2"
+    );
+    assert_eq!(
+        f.revision().formula_version,
+        2,
+        "changed truth geometry must invalidate revision1 caches"
+    );
+    assert_eq!(
+        e.geometry().reference_mesh_counts(),
+        (24, 12),
+        "actual frame topology, not its AABB"
+    );
+}
+
+#[test]
+fn invalid_oriented_frame_axes_and_sweeps_are_refused() {
+    let key = id(Kind::Beam, 2, 4);
+    for (mode, expected) in [
+        (0, FixtureError::InvalidFrameAxes(key)),
+        (1, FixtureError::InvalidFrameAxes(key)),
+        (2, FixtureError::DegenerateGeometry(key)),
+        (3, FixtureError::DegenerateGeometry(key)),
+        (4, FixtureError::InvalidCoordinate(key)),
+        (5, FixtureError::InvalidFrameAxes(key)),
+    ] {
+        reject(
+            |entities, _| {
+                let e = entities
+                    .iter_mut()
+                    .find(|e| e.id() == key)
+                    .expect("inclined beam");
+                if let Geometry::OrientedPrism {
+                    start,
+                    end,
+                    transverse_y,
+                    half_extents,
+                } = &mut e.geometry
+                {
+                    match mode {
+                        0 => *transverse_y = [0.0; 3],
+                        1 => *transverse_y = [1.0, 0.0, 0.0],
+                        2 => *end = *start,
+                        3 => half_extents[0] = -0.1,
+                        4 => start[0] = f64::NAN,
+                        _ => *transverse_y = transverse_y.map(|v| v * 2.0),
+                    }
+                }
+            },
+            expected,
+        );
+    }
+}
+
+#[test]
+fn reversed_inclined_segment_preserves_right_handed_outward_topology() {
+    let key = id(Kind::Beam, 2, 4);
+    let f = truth();
+    let mut geometry = f
+        .entities()
+        .iter()
+        .find(|e| e.id() == key)
+        .expect("inclined beam")
+        .geometry()
+        .clone();
+    if let Geometry::OrientedPrism { start, end, .. } = &mut geometry {
+        std::mem::swap(start, end);
+    }
+    assert_eq!(
+        geometry.validate(key),
+        Ok(()),
+        "reversed centreline is valid with explicit roll axis"
+    );
+    let points = geometry.control_points();
+    let centre = [9.5, 2.0, 4.5];
+    for face in PRISM_FACE_RINGS {
+        for [a, b, c] in [[face[0], face[1], face[2]], [face[0], face[2], face[3]]] {
+            assert!(
+                dot(
+                    cross(
+                        subtract(points[b], points[a]),
+                        subtract(points[c], points[a])
+                    ),
+                    subtract(points[a], centre)
+                ) > 1.0e-9,
+                "reversing a swept beam must not invert any face"
+            );
         }
     }
 }

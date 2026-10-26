@@ -149,11 +149,30 @@ pub(crate) fn fixture(preset: Preset) -> Result<Fixture, FixtureError> {
             false,
             3.0,
         ));
+        entities.push(inclined_beam());
         Some(truth_occlusion())
     } else {
         None
     };
     validate(preset, entities, stories, occlusion)
+}
+
+fn inclined_beam() -> Entity {
+    let length = 13.0_f64.sqrt();
+    entity(
+        Kind::Beam,
+        StoryId(2),
+        4,
+        Geometry::OrientedPrism {
+            start: [8.0, 1.0, 3.5],
+            end: [11.0, 3.0, 5.5],
+            transverse_y: [-2.0 / length, 3.0 / length, 0.0],
+            half_extents: [0.15, 0.2],
+        },
+        false,
+        false,
+        3.0,
+    )
 }
 
 fn truth_occlusion() -> OcclusionOracle {
@@ -385,7 +404,7 @@ pub(crate) fn validate(
     Ok(Fixture {
         revision: GeometryRevision {
             preset,
-            formula_version: 1,
+            formula_version: if preset == Preset::TruthTable { 2 } else { 1 },
         },
         entities,
         stories,
