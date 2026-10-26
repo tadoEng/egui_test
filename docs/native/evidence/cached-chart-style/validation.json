@@ -4,8 +4,30 @@
   "upstream_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
   "chart_blob": "daace89cd7464532a9efaf5cc67e85a0897c7234",
   "native": {
-    "reason": "Serial build policy: prior reader Release verification still compiling. No style-head native app built or launched yet.",
-    "assessment": "PENDING"
+    "full_offline_gate": true,
+    "wasm_all_targets_all_features": true,
+    "fmt": true,
+    "gui_launched_by_agent": false,
+    "strict_clippy": true,
+    "public_input_removed": true,
+    "debug_artifact": {
+      "native_source": "0dad38cda91abcc676fb5ecf2c597fe25ff7a99e",
+      "bytes": 25237504,
+      "sha256": "ad74b9cb42d03d66a11cb18b955c220042cc9ccc39674847d984996f5071107f"
+    },
+    "native_all_targets_all_features": true,
+    "cpu_test_executions": 82,
+    "debug_build_log_sha256": "c0802a0ffd64926ab2f4467f7b8142bddbeb94970f5be0c6336481f19eabf858",
+    "compiled_source": "0dad38cda91abcc676fb5ecf2c597fe25ff7a99e",
+    "public_report_removed": true,
+    "public_native_fixture_passed": true,
+    "log_sha256": "d856a0a837db3021b9ce6977b175f9d9ac5783fca0b5c2767b5380a93ee0c699",
+    "release_verified": false,
+    "gpu_instances_ignored": 2,
+    "release_limitation": "Parent reader Release was stopped by the unchanged 2GiB available-memory guard during Polars codegen. No style Release run or packaged readiness claim.",
+    "docs": true,
+    "assessment": "PASS",
+    "shared_duplicate_executions": 13
   },
   "private_inputs_used": false,
   "browser": {
