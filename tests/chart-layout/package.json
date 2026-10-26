@@ -2,6 +2,6 @@
   "name": "egui-lab-chart-layout-check",
   "private": true,
   "version": "0.0.0",
-  "scripts": { "test": "node layout.cjs" },
+  "scripts": { "test": "node layout.cjs", "test:cached": "node cached.cjs" },
   "devDependencies": { "playwright": "1.62.1" }
 }
