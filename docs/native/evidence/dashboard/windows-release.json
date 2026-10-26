@@ -1,0 +1,14 @@
+{
+  "source_commit": "a21ba7983ce34a3b97815056d43ecd92b205985c",
+  "build": "release-build.json",
+  "artifacts": "release-artifacts.json",
+  "gpu_probe": "PASS: RTX3050Ti/Vulkan/driver591.74",
+  "gpu_log_sha256": "5548ae35bb37475b13f81693f29239fecb92f056c082651e95bbd8c6c61743d0",
+  "gpu_png_sha256": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2",
+  "dashboard_report_sha256": "6a4ce45b27da7c362eceb8f665a6476f7bb84d6752083d37bfefd79923589a3c",
+  "stage_a_report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e",
+  "assessment": "PASS recorded Release build and programmatic checks; PARTIAL actual Windows input/presentation/lifecycle/performance",
+  "manual_input_tested": false,
+  "network_capture_performed": false,
+  "copied_preview_smoke_sha256": "3b4ea421435706884130e31d00be6d7a630a4b53eac3ddceb38bb3c255af9ecd"
+}
