@@ -85,3 +85,7 @@ Offline controls (PowerShell7, fresh scratch path, no app launch):
 ```
 
 The positive control copies a public synthetic report; negative controls mutate/remove it. These test the gate and are **not new Windows smoke results**. No compiled inputs change; accepted #31 test/build results remain at their historical source heads rather than being relabeled as script validation.
+
+### Recorded gate verification
+
+At source `c8ab02ca23b86f456938172a1f161c83f9be63c2`, PowerShell7.6.5 on Windows passed **32 offline controls**: one accepted synthetic copy and31 rejected inputs (missing/malformed/empty/oversized/stale reports, failed exit, invalid time intervals, explicit failure/error, overclaimed manual/network/presentation, wrong context/counts/values/types). Both scripts parse successfully and Git whitespace checks pass. [Sanitized results and script/fixture identities](evidence/dashboard/windows-matrix-gate-controls.json) include every case. No app launch, new GPU/input test, runtime measurement or full Cargo gate occurred in this verification-only branch. The evidence follow-up changes docs/JSON only.
