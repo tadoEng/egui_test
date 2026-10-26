@@ -1,0 +1,92 @@
+polars v0.53.0
+├── polars feature "dtype-array"
+│   └── polars feature "dtype-full"
+│       └── ext-calc v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+│           └── ext-calc feature "default"
+│               ├── ext-api v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+│               │   └── ext-api feature "default"
+│               │       └── eframe_template v0.1.0 (<workspace>)
+│               │           ├── eframe_template feature "default" (command-line)
+│               │           ├── eframe_template feature "native_backend" (command-line)
+│               │           └── eframe_template feature "webview" (command-line)
+│               ├── ext-render v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+│               │   ├── ext-render feature "default"
+│               │   │   ├── ext-api v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879) (*)
+│               │   │   └── ext-report v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+│               │   │       └── ext-report feature "default"
+│               │   │           └── ext-api v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879) (*)
+│               │   └── ext-render feature "ssr"
+│               │       └── ext-render feature "default" (*)
+│               └── ext-report v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879) (*)
+├── polars feature "dtype-categorical"
+│   ├── polars feature "dtype-full" (*)
+│   └── polars feature "new_streaming"
+│       └── polars feature "parquet"
+│           └── ext-calc v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879) (*)
+├── polars feature "dtype-date"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-datetime"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-decimal"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-duration"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-f16"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-full" (*)
+├── polars feature "dtype-i128"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-i16"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-i8"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-struct"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-time"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-u128"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-u16"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "dtype-u8"
+│   └── polars feature "dtype-full" (*)
+├── polars feature "lazy"
+│   └── ext-calc v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879) (*)
+├── polars feature "new_streaming" (*)
+├── polars feature "parquet" (*)
+├── polars feature "polars-io"
+│   ├── polars feature "dtype-categorical" (*)
+│   ├── polars feature "dtype-date" (*)
+│   ├── polars feature "dtype-datetime" (*)
+│   ├── polars feature "dtype-decimal" (*)
+│   ├── polars feature "dtype-duration" (*)
+│   ├── polars feature "dtype-f16" (*)
+│   ├── polars feature "dtype-i128" (*)
+│   ├── polars feature "dtype-i16" (*)
+│   ├── polars feature "dtype-i8" (*)
+│   ├── polars feature "dtype-struct" (*)
+│   ├── polars feature "dtype-time" (*)
+│   ├── polars feature "dtype-u128" (*)
+│   ├── polars feature "dtype-u16" (*)
+│   ├── polars feature "dtype-u8" (*)
+│   └── polars feature "parquet" (*)
+├── polars feature "polars-lazy"
+│   └── polars feature "lazy" (*)
+├── polars feature "polars-ops"
+│   ├── polars feature "dtype-array" (*)
+│   ├── polars feature "dtype-categorical" (*)
+│   ├── polars feature "dtype-date" (*)
+│   ├── polars feature "dtype-datetime" (*)
+│   ├── polars feature "dtype-decimal" (*)
+│   ├── polars feature "dtype-duration" (*)
+│   ├── polars feature "dtype-f16" (*)
+│   ├── polars feature "dtype-i128" (*)
+│   ├── polars feature "dtype-i16" (*)
+│   ├── polars feature "dtype-i8" (*)
+│   ├── polars feature "dtype-struct" (*)
+│   ├── polars feature "dtype-time" (*)
+│   ├── polars feature "dtype-u128" (*)
+│   ├── polars feature "dtype-u16" (*)
+│   └── polars feature "dtype-u8" (*)
+└── polars feature "polars-parquet"
+    └── polars feature "parquet" (*)

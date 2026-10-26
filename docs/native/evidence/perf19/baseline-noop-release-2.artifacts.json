@@ -1,0 +1,17 @@
+{
+  "source_commit": "aa28552a23da0e9983ed768ba3e1ccaee7937baa",
+  "measured_run": "baseline-noop-release-2",
+  "artifacts": [
+    {
+      "artifact": "release/eframe_template.exe",
+      "bytes": 17955840,
+      "sha256": "0096da6fb37394b34cab15090600aff896710bf42b56d5bc39d1218d3053e997"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 18573824,
+      "sha256": "2a0b925a0a2b69af96f1aa66efc1519c09cabc5fe740db91ba8414566d488a8d"
+    }
+  ]
+}
+

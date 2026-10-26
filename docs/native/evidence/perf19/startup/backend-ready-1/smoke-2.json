@@ -1,0 +1,1 @@
+{"assessment":"PASS","scope":"programmatic native-to-JS selection readback and JS-to-Rust IPC only","webview2":"156.0.4314.42","native_to_chart_story":5,"phase":3,"script_result":"5","diagnostic":null,"chart_to_native_story":2,"manual_input_tested":false,"network_capture_performed":false,"error":null,"navigation_attempts":["allowed bootstrap"]}

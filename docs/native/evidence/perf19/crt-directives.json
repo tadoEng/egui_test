@@ -1,0 +1,68 @@
+{
+  "source_commit": "6336023c37777ee9c98fb086cbe78aad498063f9",
+  "inspection_scope": "Existing pre-main native test cache; not a packaged Release linkage certification",
+  "tool": "MSVC dumpbin",
+  "tool_version": "14.44.35228.0",
+  "v8_crate": "137.3.0",
+  "upstream_archive": "https://github.com/denoland/rusty_v8/releases/download/v137.3.0/rusty_v8_release_x86_64-pc-windows-msvc.lib.gz",
+  "archives": [
+    {
+      "archive": "rusty_v8.lib",
+      "sha256": "b36ae296e7bbd1069ad74eee533031a3955c2d9ce1556477fe83fa6357e5d8e8",
+      "directives": [
+        "/DEFAULTLIB:advapi32.lib",
+        "/DEFAULTLIB:bcrypt.lib",
+        "/DEFAULTLIB:dbghelp.lib",
+        "/DEFAULTLIB:kernel32.lib",
+        "/DEFAULTLIB:libcmt.lib",
+        "/DEFAULTLIB:oldnames.lib",
+        "/DEFAULTLIB:uuid.lib",
+        "/FAILIFMISMATCH:_CRT_STDIO_ISO_WIDE_SPECIFIERS=0",
+        "/FAILIFMISMATCH:TLG_METADATA_SEGMENT_BASE=.rdata"
+      ]
+    },
+    {
+      "archive": "zstd.lib",
+      "sha256": "52bc4bb9d4ef747f83ced33109f2a0a12acfe5580c877ecc434f4335857968f5",
+      "directives": [
+        "/DEFAULTLIB:MSVCRT",
+        "/DEFAULTLIB:OLDNAMES"
+      ]
+    },
+    {
+      "archive": "sqlite3.lib",
+      "sha256": "00417908969c0783200aad6de822f9317dc37ef8c408dc288c2e58af8e54f2ea",
+      "directives": [
+        "/DEFAULTLIB:MSVCRT",
+        "/DEFAULTLIB:OLDNAMES",
+        "/DEFAULTLIB:uuid.lib"
+      ]
+    },
+    {
+      "archive": "lz4.lib",
+      "sha256": "238f86de04458a5092e957e887f84c6032ba8c0c44506a950e63167d45b86b98",
+      "directives": [
+        "/DEFAULTLIB:MSVCRT",
+        "/DEFAULTLIB:OLDNAMES"
+      ]
+    },
+    {
+      "archive": "ring_core_0_17_14_.lib",
+      "sha256": "67c0a223e0a639fded6dc0f82b3dae36a18711c0afcacfc041702b9fa2880ea6",
+      "directives": [
+        "/DEFAULTLIB:MSVCRT",
+        "/DEFAULTLIB:OLDNAMES"
+      ]
+    },
+    {
+      "archive": "stacker.lib",
+      "sha256": "6e41e27e81e3082d9e703ca309a96b5421889eb6f4bdc5c0422583f38889bb7e",
+      "directives": [
+        "/DEFAULTLIB:MSVCRT",
+        "/DEFAULTLIB:OLDNAMES",
+        "/DEFAULTLIB:uuid.lib"
+      ]
+    }
+  ],
+  "disposition": "Conflicting CRT directives established; hold packaged backend acceptance; no suppressions or global CRT change"
+}

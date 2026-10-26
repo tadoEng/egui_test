@@ -1,0 +1,17 @@
+{
+  "source_commit": "014f576c3202df386b6b5b937b74a7cf0d163b40",
+  "measured_run": "baseline-ui-release-2",
+  "artifacts": [
+    {
+      "artifact": "release/eframe_template.exe",
+      "bytes": 17955840,
+      "sha256": "4c54ed19c38a70468f11d3d895e4b1e20aecc40eb700cf0dd58d3a74e75cee63"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 18573824,
+      "sha256": "b742c25c040a6057d3db20fc553339578a03fe1260a3c59ec68b5a6964e8b696"
+    }
+  ]
+}
+

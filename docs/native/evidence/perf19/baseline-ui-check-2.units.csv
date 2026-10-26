@@ -1,0 +1,7 @@
+"name","version","target","mode","start","duration"
+"eframe_template","0.1.0"," (check)","todo","0.68","0.27"
+"eframe_template","0.1.0"," webview_stage_a ""example"" (check)","todo","0.95","0.23"
+"eframe_template","0.1.0"," eframe_template ""bin"" (check-test)","todo","1.18","0.2"
+"eframe_template","0.1.0"," eframe_template ""bin"" (check)","todo","1.38","0.2"
+"eframe_template","0.1.0"," stress ""example"" (check)","todo","1.58","0.21"
+"eframe_template","0.1.0"," (check-test)","todo","1.79","0.26"

@@ -1,0 +1,40 @@
+{
+  "label": "integrated-first-check",
+  "measurement_script_sha256": "085cd9bc1396e7b06267076971c8571459ba470098d42797463ff8add8f79fb9",
+  "source_commit": "cf4fbb218da1e62cf767a17a35e49f9c4f48e50e",
+  "source_commit_unchanged": true,
+  "tracked_source_dirty": false,
+  "started_utc": "2026-10-26T12:01:43.3014489+07:00",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "arguments": [
+    "check",
+    "--locked",
+    "--offline",
+    "--all-targets",
+    "--all-features",
+    "--timings"
+  ],
+  "target_directory": "<workspace>/target/backend-build",
+  "fresh_target_required": false,
+  "settings": {
+    "CARGO_BUILD_JOBS": "1",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "RUST_MIN_STACK": "268435456",
+    "CARGO_TARGET_DIR": "<workspace>/target/backend-build"
+  },
+  "elapsed_seconds": 93.718105,
+  "exit_code": 0,
+  "stopped_for_disk": false,
+  "process_tree_samples": 80,
+  "sampled_peak_sum_working_set_bytes": 1432444928,
+  "sampled_peak_sum_private_bytes": 1521451008,
+  "minimum_available_system_memory_bytes": 5437333504,
+  "sampling_error": null,
+  "target_bytes_before": 7032064894,
+  "target_bytes_after": 7179419582,
+  "free_bytes_before": 7996989440,
+  "free_bytes_after": 7854624768,
+  "caveat": "Approximate one-second process-tree samples; short-lived children may be missed. Working sets can double-count shared pages. Global registry/source and OS caches are not cleared. Raw local logs/paths require review before publication.",
+  "measurement_harness_commit": "6b26fcad6afdf917b70b5c04de9d6767eeb31efc"
+}

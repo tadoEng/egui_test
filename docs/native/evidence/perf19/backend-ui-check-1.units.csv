@@ -1,0 +1,8 @@
+"name","version","target","mode","start","duration"
+"eframe_template","0.1.0"," (check)","todo","1.5","0.52"
+"eframe_template","0.1.0"," native_backend ""example"" (check)","todo","2.01","0.35"
+"eframe_template","0.1.0"," eframe_template ""bin"" (check)","todo","2.36","0.36"
+"eframe_template","0.1.0"," webview_stage_a ""example"" (check)","todo","2.72","0.22"
+"eframe_template","0.1.0"," eframe_template ""bin"" (check-test)","todo","2.94","0.35"
+"eframe_template","0.1.0"," stress ""example"" (check)","todo","3.29","0.37"
+"eframe_template","0.1.0"," (check-test)","todo","3.67","0.48"

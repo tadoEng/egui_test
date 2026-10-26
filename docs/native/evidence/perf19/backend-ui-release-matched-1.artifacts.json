@@ -1,0 +1,17 @@
+{
+  "source_commit": "8e4f80b933cf793994948729941f339eedf26f08",
+  "measured_run": "backend-ui-release-matched-1",
+  "artifacts": [
+    {
+      "artifact": "release/eframe_template.exe",
+      "bytes": 45646336,
+      "sha256": "b06d4d83e9b0a563cc2a5551f1b35bb179891251d4dbd07169996004970d49a6"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 19971072,
+      "sha256": "20cae4e3b1f03b5ac9d1bd701b2f824f170e20ddc02acc36d2bb157a1d22e7bf"
+    }
+  ]
+}
+

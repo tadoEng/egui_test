@@ -1,0 +1,10 @@
+typst v0.15.1
+└── typst feature "default"
+    └── ext-report v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+        └── ext-report feature "default"
+            └── ext-api v0.1.0 (https://github.com/tadoEng/EtabExtension?rev=9eb1c8792a1d41f3f81c60428afe89f1655782ba#9eb1c879)
+                └── ext-api feature "default"
+                    └── eframe_template v0.1.0 (<workspace>)
+                        ├── eframe_template feature "default" (command-line)
+                        ├── eframe_template feature "native_backend" (command-line)
+                        └── eframe_template feature "webview" (command-line)

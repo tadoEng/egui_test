@@ -1,0 +1,25 @@
+{
+  "script_sha256": "31ce5ba302754e74676d3b3f50d892a0fce83949900c856f3b585202bf35213b",
+  "cases": [
+    {
+      "case": "stale-source",
+      "assessment": "PASS: rejected before process launch",
+      "reason": "Stale or uncontrolled build source: compile the exact telemetry commit first"
+    },
+    {
+      "case": "stale-binary",
+      "assessment": "PASS: rejected before process launch",
+      "reason": "Stale binary hash/size"
+    },
+    {
+      "case": "structural-gui-forbidden",
+      "assessment": "PASS: rejected before process launch",
+      "reason": "Require exactly the synthetic WebView example; never launch the structural GUI"
+    },
+    {
+      "case": "reused-marker-label",
+      "assessment": "PASS: rejected before process launch",
+      "reason": "Fresh report label required; never reuse readiness markers"
+    }
+  ]
+}

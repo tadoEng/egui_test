@@ -1,0 +1,83 @@
+{
+  "source_commit": "0895fe6e746dfe2fb8d8f08cbcb3112226a12748",
+  "mode": "One-bin diagnostic, not the original two-target benchmark; no application execution",
+  "arguments": [
+    "cargo rustc --release --locked --offline --all-features --bin eframe_template -- -C link-arg=/MAP:<LOCAL-DIAGNOSTIC>/backend-trace.map"
+  ],
+  "diagnostic_environment": {
+    "RUSTC_LOG": "rustc_codegen_ssa::back::link=info"
+  },
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "linker": "MSVC link.exe; observed /defaultlib:msvcrt /OPT:REF,ICF /DEBUG; no /WHOLEARCHIVE option observed",
+  "executable_bytes": 44900864,
+  "executable_sha256": "b46312570e086d0f83bfa8c028dfaae76e0027e4e8e753e474713279fac1f3d6",
+  "raw_map_bytes": 57118383,
+  "raw_map_sha256": "fd2f51157e131378805db826d1a29174a2a866fdd26dd3ca0c8c2e34b9226b47",
+  "trace_log_sha256": "9c0599cf60c33262341162e5515d7dfd1cfa89b51321844a587e7773fb585c4a",
+  "clean_source_before": true,
+  "clean_source_after": true,
+  "pe_sections": [
+    {
+      "name": ".text",
+      "virtual_bytes": 36125356,
+      "raw_bytes": 36125696
+    },
+    {
+      "name": "malloc_h",
+      "virtual_bytes": 304,
+      "raw_bytes": 512
+    },
+    {
+      "name": ".rdata",
+      "virtual_bytes": 7464890,
+      "raw_bytes": 7464960
+    },
+    {
+      "name": ".data",
+      "virtual_bytes": 328180,
+      "raw_bytes": 187392
+    },
+    {
+      "name": ".pdata",
+      "virtual_bytes": 975120,
+      "raw_bytes": 975360
+    },
+    {
+      "name": ".reloc",
+      "virtual_bytes": 145828,
+      "raw_bytes": 145920
+    }
+  ],
+  "crt_xcu_pointer_entries": [
+    {
+      "preferred_va": "0x0000000140051f20",
+      "symbol": "_GLOBAL__sub_I_binding.cc",
+      "archive_member": "libv8-065217b2a55eb1ff:binding.obj"
+    },
+    {
+      "preferred_va": "0x0000000141741e00",
+      "symbol": "_RNvNvNvNtNtNtCs4nPuLwLz8xe_5winit13platform_impl7windows10event_loop14main_thread_id19INIT_MAIN_THREAD_ID6initer",
+      "archive_member": "libwinit-73bd9e897ae0cde8:winit-73bd9e897ae0cde8.winit.33114147dfbd70c6-cgu.03.rcgu.o"
+    }
+  ],
+  "selected_map_rows": [
+    "0001:00050eb0       ?MaxAllocationSize@Allocator@ArrayBuffer@v8@@UEBA_KXZ 0000000140051eb0 f i libv8-065217b2a55eb1ff:binding.obj",
+    "0001:00050e50       ??__Fdeserialized_data@@YAXXZ 0000000140051e50 f   libv8-065217b2a55eb1ff:binding.obj",
+    "0001:00050f20       _GLOBAL__sub_I_binding.cc  0000000140051f20 f   libv8-065217b2a55eb1ff:binding.obj"
+  ],
+  "constructor_disassembly": [
+    "  0000000140051F20: lea         rcx,[140051E50h]",
+    "  0000000140051F27: jmp         atexit"
+  ],
+  "registry_source": {
+    "package": "v8 137.3.0",
+    "registry_archive_sha256": "33995a1fee055ff743281cde33a41f0d618ee0bdbe8bdf6859e11864499c2595",
+    "lock_checksum_verified": true,
+    "binding_cc_sha256": "a534422bffcf775d127c3dc03241a2b20301189097933e503b20579ea4dafd1f",
+    "local_source_matches_archive": true
+  },
+  "package_vcs_metadata": "v8 package reports git 81ca2bfe27a6fc3c0833fabbc29c7fe8b1ff2960 dirty=true; package archive and binding.cc hashes verified instead of assuming clean Git equivalence",
+  "assessment": "PASS for retained PE symbols/initializer observations; PARTIAL full archive-selection/size causality; CRT packaging HOLD",
+  "limits": "Single-bin graph rebuilt font/egui units; 44,900,864-byte diagnostic is not a replacement for original45,646,336-byte two-target result. Initializer retention does not alone attribute all V8 bytes. Raw maps/logs stay local. GUI was not executed."
+}
