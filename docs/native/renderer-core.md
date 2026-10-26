@@ -12,7 +12,8 @@ cargo run --release --locked --offline --example native_renderer --features nati
 The example uses stock eframe/egui-wgpu 0.37 and the already locked wgpu 30.0.1. It creates one
 cached native vertex buffer, index buffer, camera uniform, depth-tested render pipeline and egui
 paint callback. Orbit and wheel zoom update only the uniform. Fit derives the camera target,
-radius and distance from geometry bounds. Eframe owns the native surface and recreates its
+radius and distance from geometry bounds and the limiting horizontal/vertical field of view.
+A vertex-projection regression test covers tall and wide viewports. Eframe owns the native surface and recreates its
 24-bit depth attachment when the window size changes; the callback derives projection aspect
 from its current rectangle.
 
@@ -51,14 +52,15 @@ vertex buffer. It is ignored by default and must be explicitly invoked; absence 
 fails rather than silently passing. It prints the adapter. It is GPU pixel/depth evidence, not a
 native-window capture or Windows interaction test.
 
-The explicit Windows probe passed on **NVIDIA GeForce RTX 3050 Ti Laptop GPU** on 2026-10-26.
+The explicit Windows probe passed on **NVIDIA GeForce RTX 3050 Ti Laptop GPU**,
+reported by wgpu as **DiscreteGpu / Vulkan / NVIDIA driver 591.74**, on 2026-10-26.
 The machine has a Ryzen 5 6600H (6 cores/12 logical processors), 16,312,721,408 bytes physical
 RAM, Windows 11 build 26300, and NVIDIA driver 32.0.15.9174. The 64×64 RGBA8 offscreen target
 uses Depth24Plus, one sample, normal depth (clear 1, compare Less). This was a correctness probe;
 no GPU execution time, presentation interval, FPS, or performance result was measured.
 
 `check.ps1 -Offline` passed: formatting, native all-target/all-feature check, strict Clippy,
-23 existing library tests plus 2 renderer CPU tests, doc tests and WASM all-target/all-feature
+23 existing library tests plus 3 renderer CPU tests, doc tests and WASM all-target/all-feature
 check. The GPU probe is a separate explicit run (1 passed). The Windows release example built
 with `--locked --offline` and produced a 15,776,256-byte EXE. Cargo reported 4m 58s for this
 partly cached build while other tracks were compiling; it is not a controlled clean build-time

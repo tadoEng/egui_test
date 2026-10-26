@@ -239,14 +239,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     impl OrbitCamera {
-        fn fit(bounds: Bounds) -> Self {
+        fn fit(bounds: Bounds, aspect: f32) -> Self {
             let radius = bounds.radius();
-            let fov = 50.0_f32.to_radians();
+            let vertical_half = 25.0_f32.to_radians();
+            let horizontal_half = (vertical_half.tan() * aspect.max(0.001)).atan();
+            let limiting_half = vertical_half.min(horizontal_half);
             Self {
                 target: bounds.center(),
                 yaw: -0.7,
                 pitch: 0.55,
-                distance: (radius / (fov * 0.5).tan() * 1.35).max(0.1),
+                distance: (radius / limiting_half.sin() * 1.1).max(0.1),
                 radius,
             }
         }
@@ -490,6 +492,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     struct ExampleApp {
         mesh: Arc<MeshData>,
         camera: OrbitCamera,
+        fit_pending: bool,
     }
 
     impl ExampleApp {
@@ -508,8 +511,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                     render_state.target_format,
                 ));
             Ok(Self {
-                camera: OrbitCamera::fit(mesh.bounds),
+                camera: OrbitCamera::fit(mesh.bounds, 1.0),
                 mesh,
+                fit_pending: true,
             })
         }
     }
@@ -521,7 +525,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 ui.horizontal_wrapped(|ui| {
                     ui.heading("Native wgpu structural core");
                     if ui.button("Fit").clicked() {
-                        self.camera = OrbitCamera::fit(self.mesh.bounds);
+                        self.fit_pending = true;
                     }
                     ui.label(format!(
                         "{} vertices · {} triangles",
@@ -536,6 +540,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             egui::CentralPanel::default().show(ui, |ui| {
                 let size = ui.available_size().max(egui::vec2(160.0, 120.0));
                 let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+                let aspect = rect.width() / rect.height().max(1.0);
+                if self.fit_pending {
+                    self.camera = OrbitCamera::fit(self.mesh.bounds, aspect);
+                    self.fit_pending = false;
+                }
                 if response.dragged() {
                     self.camera.orbit(ui.input(|input| input.pointer.delta()));
                     ctx.request_repaint();
@@ -548,7 +557,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                     }
                 }
                 ui.painter().rect_filled(rect, 0.0, BACKGROUND);
-                let aspect = rect.width() / rect.height().max(1.0);
                 ui.painter().add(egui_wgpu::Callback::new_paint_callback(
                     rect,
                     ViewportCallback {
@@ -649,7 +657,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             let mesh = synthetic_structure();
             for tilt in [-10000.0, 10000.0] {
                 for zoom in [-10000.0, 10000.0] {
-                    let mut camera = OrbitCamera::fit(mesh.bounds);
+                    let mut camera = OrbitCamera::fit(mesh.bounds, 1.0);
                     camera.orbit(egui::vec2(10000.0, tilt));
                     camera.zoom(zoom);
                     for aspect in [0.001, 0.5, 1.0, 4.0] {
@@ -662,6 +670,33 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                         );
                     }
                     assert!(camera.pitch.abs() < std::f32::consts::FRAC_PI_2);
+                }
+            }
+        }
+
+        #[test]
+        fn fit_contains_every_fixture_vertex_in_tall_and_wide_viewports() {
+            let mesh = synthetic_structure();
+            for aspect in [0.25, 0.5, 1.0, 2.0, 4.0] {
+                let projection = OrbitCamera::fit(mesh.bounds, aspect).view_projection(aspect);
+                for vertex in &mesh.vertices {
+                    let point = [
+                        vertex.position[0],
+                        vertex.position[1],
+                        vertex.position[2],
+                        1.0,
+                    ];
+                    let clip: [f32; 4] = std::array::from_fn(|row| {
+                        (0..4)
+                            .map(|column| projection[column][row] * point[column])
+                            .sum()
+                    });
+                    assert!(clip[3] > 0.0);
+                    assert!(
+                        clip[0].abs() <= clip[3] && clip[1].abs() <= clip[3],
+                        "fit clips a vertex at aspect {aspect}: {clip:?}"
+                    );
+                    assert!(clip[2] >= 0.0 && clip[2] <= clip[3]);
                 }
             }
         }
@@ -822,7 +857,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 instance.request_adapter(&wgpu::RequestAdapterOptions::default()),
             )
             .ok()?;
-            let name = adapter.get_info().name;
+            let info = adapter.get_info();
+            let name = format!(
+                "{} ({:?}, {:?}, driver {})",
+                info.name, info.device_type, info.backend, info.driver_info
+            );
             let (device, queue) =
                 pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                     required_features: wgpu::Features::empty(),
