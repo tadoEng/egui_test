@@ -73,9 +73,13 @@ $started = [DateTimeOffset]::UtcNow
 $timer = [Diagnostics.Stopwatch]::StartNew()
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $info
+$stdoutFile = [IO.FileStream]::new((Join-Path $reportPath "$Label.stdout.log"),
+    [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::Read, 1, [IO.FileOptions]::Asynchronous)
+$stderrFile = [IO.FileStream]::new((Join-Path $reportPath "$Label.stderr.log"),
+    [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::Read, 1, [IO.FileOptions]::Asynchronous)
 [void]$process.Start()
-$stdout = $process.StandardOutput.ReadToEndAsync()
-$stderr = $process.StandardError.ReadToEndAsync()
+$stdout = $process.StandardOutput.BaseStream.CopyToAsync($stdoutFile)
+$stderr = $process.StandardError.BaseStream.CopyToAsync($stderrFile)
 [long]$peakSumWorkingSet = 0
 [long]$peakSumPrivate = 0
 [long]$minimumAvailableMemory = [long]::MaxValue
@@ -122,8 +126,10 @@ try {
 } finally {
     if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
     $timer.Stop()
-    [IO.File]::WriteAllText((Join-Path $reportPath "$Label.stdout.log"), $stdout.GetAwaiter().GetResult())
-    [IO.File]::WriteAllText((Join-Path $reportPath "$Label.stderr.log"), $stderr.GetAwaiter().GetResult())
+    $stdout.GetAwaiter().GetResult()
+    $stderr.GetAwaiter().GetResult()
+    $stdoutFile.Dispose()
+    $stderrFile.Dispose()
     $afterHead = (& git -C $checkoutPath rev-parse HEAD).Trim()
     $receipt = [ordered]@{
         label = $Label
@@ -137,7 +143,8 @@ try {
         target_directory = $targetPath
         fresh_target_required = [bool]$RequireEmptyTarget
         settings = $settings
-        elapsed_seconds = $timer.Elapsed.TotalSeconds
+        elapsed_seconds = ($process.ExitTime - $process.StartTime).TotalSeconds
+        runner_observed_seconds = $timer.Elapsed.TotalSeconds
         exit_code = $process.ExitCode
         stopped_for_disk = $stoppedForDisk
         process_tree_samples = $samples
