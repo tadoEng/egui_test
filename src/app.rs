@@ -313,7 +313,7 @@ impl TemplateApp {
                 egui::ScrollArea::vertical()
                     .id_salt("explorer_scroll")
                     .show(ui, |ui| {
-                        ui.heading("Model Explorer (profile 1)");
+                        ui.heading("Model Explorer (profile 2)");
                         ui.label(format!(
                             "{} · {} entities",
                             self.model.source,
