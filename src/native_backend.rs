@@ -75,7 +75,7 @@ impl fmt::Display for BackendError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
-            "{:?} while running {}: {}",
+            "{:?} while running {}: {} [profile 1]",
             self.kind, self.operation, self.source
         )
     }
