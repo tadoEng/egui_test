@@ -1,0 +1,28 @@
+{
+  "source_commit": "7e4a917c7483f2fc2c1ebfa3c1b47fce448f64c3",
+  "binary_sha256": "46cd0b74854962dea769ca529289ac7bc93d36d339b0e34ac7274607184a79bc",
+  "fresh_unique_report_paths": true,
+  "runs": [
+    {
+      "run": 1,
+      "captured_utc": "2026-10-26T03:31:53.4539871+00:00",
+      "exit_code": 0,
+      "assessment": "PASS",
+      "report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e"
+    },
+    {
+      "run": 2,
+      "captured_utc": "2026-10-26T03:31:55.2560151+00:00",
+      "exit_code": 0,
+      "assessment": "PASS",
+      "report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e"
+    },
+    {
+      "run": 3,
+      "captured_utc": "2026-10-26T03:31:56.9774087+00:00",
+      "exit_code": 0,
+      "assessment": "PASS",
+      "report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e"
+    }
+  ]
+}
