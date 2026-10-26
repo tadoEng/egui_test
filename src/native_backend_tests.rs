@@ -74,6 +74,41 @@ fn json(value: &impl serde::Serialize) -> serde_json::Value {
     serde_json::to_value(value).expect("authoritative DTO serializes")
 }
 
+async fn assert_project_and_history_match(project: &Path, reference: &AppContext) {
+    let BackendPayload::Project(actual) = execute_read(BackendRequest::project(project))
+        .await
+        .expect("read project")
+    else {
+        panic!("wrong project DTO")
+    };
+    assert_eq!(
+        json(&actual.status),
+        json(
+            &project_status(reference, StatusOptions { verbose: false })
+                .await
+                .expect("reference status")
+        )
+    );
+    assert_eq!(
+        json(&actual.branches),
+        json(&list_branches(reference).await.expect("reference branches"))
+    );
+    let BackendPayload::Versions(history) = execute_read(BackendRequest::versions(project, "main"))
+        .await
+        .expect("history before selection")
+    else {
+        panic!("wrong history DTO")
+    };
+    assert_eq!(
+        json(&history.versions),
+        json(
+            &list_versions(reference, Some("main"), false)
+                .await
+                .expect("reference history")
+        )
+    );
+}
+
 #[test]
 fn reads_match_authoritative_api_and_preserve_all_fixture_bytes_and_mtimes() {
     runtime().block_on(async {
@@ -87,24 +122,7 @@ fn reads_match_authoritative_api_and_preserve_all_fixture_bytes_and_mtimes() {
         let mut reference = AppContext::new_read_only(&project).expect("reference context");
         reference.set_sidecar(None);
 
-        let BackendPayload::Project(actual) = execute_read(BackendRequest::project(&project))
-            .await
-            .expect("read project")
-        else {
-            panic!("wrong DTO")
-        };
-        assert_eq!(
-            json(&actual.status),
-            json(
-                &project_status(&reference, StatusOptions { verbose: false })
-                    .await
-                    .expect("reference status")
-            )
-        );
-        assert_eq!(
-            json(&actual.branches),
-            json(&list_branches(&reference).await.expect("reference branches"))
-        );
+        assert_project_and_history_match(&project, &reference).await;
         let BackendPayload::Version(actual) =
             execute_read(BackendRequest::version(&project, "main", "v2"))
                 .await

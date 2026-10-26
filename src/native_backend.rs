@@ -111,6 +111,9 @@ pub type BackendResult<T> = Result<T, BackendError>;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReadOperation {
     Project,
+    Versions {
+        branch: String,
+    },
     Version {
         branch: String,
         version: String,
@@ -151,6 +154,15 @@ impl BackendRequest {
         }
     }
 
+    pub fn versions(project_root: impl Into<PathBuf>, branch: impl Into<String>) -> Self {
+        Self {
+            project_root: project_root.into(),
+            operation: ReadOperation::Versions {
+                branch: branch.into(),
+            },
+        }
+    }
+
     pub fn diff(
         project_root: impl Into<PathBuf>,
         branch: impl Into<String>,
@@ -178,6 +190,7 @@ impl BackendRequest {
     fn requested_ref(&self) -> String {
         match &self.operation {
             ReadOperation::Project => "project".to_owned(),
+            ReadOperation::Versions { branch } => format!("{branch}/versions"),
             ReadOperation::Version { branch, version } => format!("{branch}/{version}"),
             ReadOperation::Diff {
                 branch,
@@ -204,6 +217,13 @@ pub struct VersionRead {
     pub overview: ProjectOverview,
 }
 
+/// Authoritative history for a branch before selecting a committed version.
+#[derive(Debug)]
+pub struct BranchRead {
+    pub branches: ListBranchesResult,
+    pub versions: ListVersionsResult,
+}
+
 /// Authoritative version validation and diff DTOs returned unchanged by `ext-api`.
 #[derive(Debug)]
 pub struct DiffRead {
@@ -217,6 +237,7 @@ pub struct DiffRead {
 #[derive(Debug)]
 pub enum BackendPayload {
     Project(Box<ProjectRead>),
+    Versions(Box<BranchRead>),
     Version(Box<VersionRead>),
     Diff(Box<DiffRead>),
 }
@@ -228,7 +249,8 @@ pub enum BackendOutcome {
     Superseded,
 }
 
-/// One settled completion carrying generation and requested-version identity.
+/// One settled completion carrying project, generation and operation reference.
+/// Committed version identity comes from the authoritative payload DTOs.
 #[derive(Debug)]
 pub struct BackendCompletion {
     pub load: SceneLoadOperation,
@@ -438,6 +460,13 @@ async fn execute_read(request: BackendRequest) -> BackendResult<BackendPayload> 
             .await
             .map(Box::new)
             .map(BackendPayload::Project),
+        ReadOperation::Versions { branch } => {
+            let (branches, versions) = read_branch(&context, &branch).await?;
+            Ok(BackendPayload::Versions(Box::new(BranchRead {
+                branches,
+                versions,
+            })))
+        }
         ReadOperation::Version { branch, version } => read_version(&context, &branch, &version)
             .await
             .map(Box::new)
@@ -456,6 +485,7 @@ async fn execute_read(request: BackendRequest) -> BackendResult<BackendPayload> 
 fn validate_operation(operation: &ReadOperation) -> BackendResult<()> {
     let identifiers: &[&str] = match operation {
         ReadOperation::Project => &[],
+        ReadOperation::Versions { branch } => &[branch],
         ReadOperation::Version { branch, version } => &[branch, version],
         ReadOperation::Diff {
             branch,

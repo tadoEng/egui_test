@@ -1,0 +1,50 @@
+{
+  "date_local": "2026-10-26",
+  "baseline": "61f6b74adbbd38255a5736fb0de7f432a3e82cd4",
+  "backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "rust": "1.99.1",
+  "platform": "Windows 11 build 26300",
+  "gates": {
+    "fmt": "PASS",
+    "native_all_targets_all_features": "PASS",
+    "strict_clippy": "PASS",
+    "tests": "PASS",
+    "test_count": 28,
+    "existing_tests": 23,
+    "new_adapter_tests": 5,
+    "doc_tests": "PASS (0 tests)",
+    "wasm_all_targets_all_features": "PASS"
+  },
+  "settings": {
+    "build_jobs": 1,
+    "dev_debug": 0,
+    "test_debug": 0,
+    "rust_min_stack": 268435456
+  },
+  "build_observations": {
+    "first_library_check_seconds": 1762,
+    "first_test_codegen_seconds": 3820,
+    "controlled_clean_benchmark": false,
+    "lockfile_records": 967,
+    "baseline_lockfile_records": 464
+  },
+  "unresolved": [
+    "LNK4098 libcmt.lib conflict at native test link",
+    "Release/packaged runtime and binary size not verified",
+    "Source Tauri/CLI end-to-end and engineering scene parity not verified"
+  ],
+  "source_files": [
+    {
+      "file": "native_backend.rs",
+      "sha256": "e7dc21aac1406efaadef8617baeeeb7d75aaf15504af1db749d41333e521895e"
+    },
+    {
+      "file": "native_backend_tests.rs",
+      "sha256": "c04c258fefa89b64712a43629aaf6d90c43637d3c4850ccc686d2f7d8c658f12"
+    },
+    {
+      "file": "Cargo.lock",
+      "sha256": "cff68976e5cc5c7ad171ef2678c6e72295217c517f8ee72b98e2cde89150f402"
+    }
+  ]
+}

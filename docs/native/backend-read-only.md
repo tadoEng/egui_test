@@ -27,7 +27,8 @@ No `ext-tauri` dependency is added.
 Ordinary `AppContext::new` performs startup cleanup. The read-only constructor
 deliberately avoids it. The adapter also clears any config/env/PATH-resolved
 sidecar with `set_sidecar(None)` and never requests verbose/live status. Its
-public request enum exposes only Project, Version and Diff reads. There is no
+public request enum exposes only Project, Versions (branch history before
+selection), Version and Diff reads. There is no
 Save/Analyze/Checkout/start-ETABS operation or fixture initializer in that API.
 
 ## Worker and identity rules
@@ -42,6 +43,11 @@ includes its requested project path, version reference and generation. Source
 SceneLoadGuard classifies it; stale payloads are dropped before the caller can
 observe them. There is no reuse of a separate guard per project that could
 accidentally accept an old project's equal generation.
+
+This service has one active result stream. Chain project/history/version reads;
+it does not merge independently submitted concurrent query results. The ticket's
+requested reference labels the operation; committed branch/version/hash identity
+comes from source DTOs, never from that label.
 
 Dropping the service closes its channels; running disk reads may finish in the
 detached worker. This is stale-result suppression, **not cancellation of an
