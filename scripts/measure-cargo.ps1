@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Checkout,
@@ -42,10 +43,38 @@ function Get-FreeBytes {
 }
 
 if ((Get-FreeBytes) -lt ($MinimumFreeGiB * 1GB)) { throw 'Insufficient free space for a safe measured run.' }
+function Get-InputStatus {
+    $status = @(& git -C $checkoutPath status --porcelain --untracked-files=all)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect source checkout.' }
+    $ignored = @(& git -C $checkoutPath ls-files --others --ignored --exclude-standard -- src examples tests benches assets .cargo Cargo.toml Cargo.lock build.rs rust-toolchain.toml)
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect ignored source inputs.' }
+    return [pscustomobject]@{ Dirty = [bool]$status.Count; IgnoredSource = [bool]$ignored.Count }
+}
+
 $head = (& git -C $checkoutPath rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0) { throw 'Cannot identify measured source commit.' }
-$dirty = [bool](& git -C $checkoutPath status --porcelain --untracked-files=no)
-$rust = (& rustc --version).Trim()
+$inputStatus = Get-InputStatus
+if ($inputStatus.Dirty -or $inputStatus.IgnoredSource) {
+    throw 'Controlled measurements require clean committed inputs, including untracked and ignored source files. Commit an explicit disposable edit probe first.'
+}
+$tree = (& git -C $checkoutPath rev-parse 'HEAD^{tree}').Trim()
+$lockHash = (Get-FileHash -LiteralPath (Join-Path $checkoutPath 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant()
+Push-Location $checkoutPath
+try {
+    $rust = (& rustc --version).Trim()
+    $cargoVersion = (& cargo --version).Trim()
+} finally { Pop-Location }
+$hostInfo = [ordered]@{
+    os = [Environment]::OSVersion.VersionString
+    architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    logical_processors = [Environment]::ProcessorCount
+    cpu = $null
+    physical_memory_bytes = $null
+}
+try {
+    $hostInfo.cpu = (Get-CimInstance Win32_Processor -Property Name | Select-Object -First 1).Name.Trim()
+    $hostInfo.physical_memory_bytes = [long](Get-CimInstance Win32_ComputerSystem -Property TotalPhysicalMemory).TotalPhysicalMemory
+} catch { throw 'Cannot record controlled Windows host inventory; check CIM read access.' }
 $runnerHash = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $beforeBytes = Get-TargetBytes
 $beforeFree = Get-FreeBytes
@@ -126,19 +155,33 @@ try {
 } finally {
     if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit() }
     $timer.Stop()
-    $stdout.GetAwaiter().GetResult()
-    $stderr.GetAwaiter().GetResult()
+    [void]$stdout.GetAwaiter().GetResult()
+    [void]$stderr.GetAwaiter().GetResult()
     $stdoutFile.Dispose()
     $stderrFile.Dispose()
     $afterHead = (& git -C $checkoutPath rev-parse HEAD).Trim()
+    $afterStatus = Get-InputStatus
+    $afterLockHash = (Get-FileHash -LiteralPath (Join-Path $checkoutPath 'Cargo.lock') -Algorithm SHA256).Hash.ToLowerInvariant()
+    $inputsUnchanged = ($head -eq $afterHead) -and ($lockHash -eq $afterLockHash) -and
+        -not $afterStatus.Dirty -and -not $afterStatus.IgnoredSource
     $receipt = [ordered]@{
         label = $Label
         measurement_script_sha256 = $runnerHash
         source_commit = $head
+        source_tree = $tree
+        source_commit_after = $afterHead
         source_commit_unchanged = ($head -eq $afterHead)
-        tracked_source_dirty = $dirty
+        controlled_inputs_clean_before = $true
+        controlled_inputs_clean_after = (-not $afterStatus.Dirty -and -not $afterStatus.IgnoredSource)
+        source_inputs_unchanged = $inputsUnchanged
+        lockfile_sha256_before = $lockHash
+        lockfile_sha256_after = $afterLockHash
         started_utc = $started.ToString('o')
         rust = $rust
+        cargo = $cargoVersion
+        powershell = $PSVersionTable.PSVersion.ToString()
+        dotnet = [Runtime.InteropServices.RuntimeInformation]::FrameworkDescription
+        host = $hostInfo
         arguments = $CargoArguments
         target_directory = $targetPath
         fresh_target_required = [bool]$RequireEmptyTarget
@@ -156,10 +199,12 @@ try {
         target_bytes_after = Get-TargetBytes
         free_bytes_before = $beforeFree
         free_bytes_after = Get-FreeBytes
+        stdout_sha256 = (Get-FileHash -LiteralPath (Join-Path $reportPath "$Label.stdout.log") -Algorithm SHA256).Hash.ToLowerInvariant()
+        stderr_sha256 = (Get-FileHash -LiteralPath (Join-Path $reportPath "$Label.stderr.log") -Algorithm SHA256).Hash.ToLowerInvariant()
         caveat = 'Approximate one-second process-tree samples; short-lived children may be missed. Working sets can double-count shared pages. Global registry/source and OS caches are not cleared. Raw local logs/paths require review before publication.'
     }
     $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath -Encoding utf8
     $process.Dispose()
 }
 Get-Content -LiteralPath $summaryPath -Raw
-if ($receipt.exit_code -ne 0 -or -not $receipt.source_commit_unchanged) { exit 1 }
+if ($receipt.exit_code -ne 0 -or -not $receipt.source_inputs_unchanged) { exit 1 }

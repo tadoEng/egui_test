@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-26",
+  "powershell": "7.6.5",
+  "script_sha256": "6cd4ff57782aa9197d7268e1b76c02fb7765a245fad4b62ee98c3ce1db659956",
+  "fixtures": "Authored disposable Git fixture only",
+  "cases": [
+    {
+      "case": "tracked-edit",
+      "rejected_before_cargo_launch": true
+    },
+    {
+      "case": "untracked-source",
+      "rejected_before_cargo_launch": true
+    },
+    {
+      "case": "ignored-source",
+      "rejected_before_cargo_launch": true
+    }
+  ]
+}

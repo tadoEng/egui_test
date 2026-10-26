@@ -38,7 +38,8 @@ cannot trim those dependencies. Lockfile package count is not compiled-crate cou
 
 ## Combined WebView constraint
 
-The integrated lockfile has 1056 cross-platform records, versus the pre-WebView backend's 967.
+The integrated lockfile has 1056 cross-platform records, versus the pre-WebView backend's 967
+and current main's 595. The old 464-record comparison describes the pre-WebView baseline.
 Wry 0.55.1's GTK/glib closure selects proc-macro-crate 2.0.2, which pins
 `toml_datetime = 0.6.3`. Retaining backend `toml` 0.8.23 requires datetime 0.6.11 and fails the
 resolver. The combined lock selects `toml` 0.8.2; it is also consumed by Typst on Windows.
@@ -91,6 +92,16 @@ fixture parity is not independent CLI/Tauri/engineering parity.
 collects `--timings`, elapsed time, target size/free disk and approximate one-second process-tree
 working/private memory. It stops only its own build tree if target-drive headroom falls below
 the threshold. It never deletes caches or follows target reparse points when counting bytes.
+It requires **PowerShell 7+**; Windows PowerShell 5.1 is unsupported. Receipts record
+PowerShell/.NET, Cargo/Rust and non-identifying Windows CPU/architecture/RAM inventory.
+Controlled runs reject all tracked edits and non-ignored untracked files, plus ignored files
+in compiled-input roots (`src`, `examples`, `tests`, `benches`, `assets`, `.cargo` and root
+Cargo/build/toolchain files). Edit measurements use explicit disposable commits. HEAD, Git
+tree and lockfile hashes identify the inputs; final clean status, HEAD and lockfile are checked
+again. This does not claim hermeticity over populated global registry/OS caches.
+Stdout/stderr are streamed to local files and hashed after exit; raw logs and local paths are
+not automatically published. OS process start/exit duration is separate from the runner's
+sampling overhead, avoiding one-second rounding of a fast no-op run.
 Raw local reports/logs require sanitization before publication. Fast no-op runs can exit before
 memory sampling; unavailable memory is null rather than a fabricated zero.
 
@@ -100,6 +111,29 @@ on the same drive/settings for cold comparison; do not use `cargo clean` on shar
 At least two no-op/edit repetitions are feasible; cold repetition depends on disk/time. Record
 single runs honestly. Startup must name its readiness event; process launch or cargo completion
 alone is not an interactive-host readiness measurement.
+
+## Reproduce the integrated source
+
+The measured integration is now published on draft
+[#18](https://github.com/tadoEng/egui_test/pull/18), retargeted to main. It is an experimental
+review candidate, **not production merge approval**. GitHub retrieval of the immutable
+[commit](https://github.com/tadoEng/egui_test/commit/cf4fbb218da1e62cf767a17a35e49f9c4f48e50e),
+[manifest](https://github.com/tadoEng/egui_test/blob/cf4fbb218da1e62cf767a17a35e49f9c4f48e50e/Cargo.toml)
+and [lockfile](https://github.com/tadoEng/egui_test/blob/cf4fbb218da1e62cf767a17a35e49f9c4f48e50e/Cargo.lock)
+provides the source missing at the first #21 review. The economics PR deliberately does not
+copy that runtime adapter. Use a disposable checkout and the measurement runner from this PR:
+
+```powershell
+git fetch origin codex/native-read-only-api
+git worktree add --detach <new-disposable-checkout> cf4fbb218da1e62cf767a17a35e49f9c4f48e50e
+./scripts/measure-cargo.ps1 -Checkout <new-disposable-checkout> -TargetDirectory <new-empty-target> `
+  -ReportDirectory <local-raw-reports> -Label backend-cold-check -RequireEmptyTarget `
+  -CargoArguments @('check','--locked','--offline','--all-targets','--all-features','--timings')
+```
+
+Offline replay requires a populated package cache. The original 93.7 s receipt records the
+historical harness at `6b26fca`; it includes its polling overhead and remains a warm graph-change
+observation. Revised runner semantics do not retroactively convert it into a controlled cold run.
 
 ## Evidence ledger
 
