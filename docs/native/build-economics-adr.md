@@ -199,7 +199,7 @@ The first two commits change the same egui heading; the next two append diagnost
 in the lab adapter. No authoritative `ext-api` source or domain rule was edited. This does not
 measure rebuilding an upstream backend crate. Reviewed draft implementation branches stay unchanged.
 
-### Release phase (comparison in progress)
+### Paired Release build and relink phase
 
 Both configurations build the same GUI binary and WebView example with
 `build --release --locked --offline --all-features --bin eframe_template
@@ -226,16 +226,58 @@ Release UI edit commits are reachable on the measurement-only
 `codex/perf19-baseline-release-probe` branch:
 [`e033bdda`](https://github.com/tadoEng/egui_test/commit/e033bddac2641fb8541668a9db07e07cad281a40)
 and [`014f576c`](https://github.com/tadoEng/egui_test/commit/014f576c3202df386b6b5b937b74a7cf0d163b40).
-No structural GUI was launched against persisted user state. Matching API Release build,
-executable iteration and defined startup/readiness samples are still pending. Do not infer
-a Release ratio or host-readiness result from the completed compiler-check comparison.
+No structural GUI was launched against persisted user state. The API-enabled phase now
+completes the same two-target command, profile and guard policy at the frozen `cf4fbb2` source.
+The comparison remains against `aa28552`, **not** the newer renderer merge `edab698` on main.
+
+| Release condition | Frozen baseline | API enabled |
+|---|---:|---:|
+| Fresh target, one run | 686.652 s | [3597.064 s](evidence/perf19/backend-cold-release-1.json) |
+| No-op, two runs | 0.841 / 0.766 s | [1.997](evidence/perf19/backend-noop-release-1.json) / [1.663 s](evidence/perf19/backend-noop-release-2.json) |
+| One widget-caption edit, actual build/relink | 17.421 / 17.058 s | [32.841](evidence/perf19/backend-ui-release-matched-1.json) / [32.475 s](evidence/perf19/backend-ui-release-matched-2.json) |
+| GUI executable bytes | 17,955,840 | 45,646,336 |
+| WebView example executable bytes | 18,573,824 | 19,971,072 |
+| Cold target logical file bytes | 1,475,051,408 | 5,075,178,197 |
+| Sampled cold peak summed working set, bytes | 1,837,096,960 | 2,994,036,736 |
+| Minimum sampled available system memory, bytes | 4,893,945,856 | 3,723,042,816 |
+
+The single cold Release observation was **5.24×** the baseline duration (about 60 versus
+11.4 minutes). Two matching caption edits used the same literal strings as the baseline.
+An additional earlier, differently worded caption probe measured
+[32.501 s](evidence/perf19/backend-ui-release-1.json); it is retained as **exploratory**,
+not substituted into the matching pair. All three are independent nonincremental root
+rebuilds on the same warm target; this extra observation is not a third cold repetition.
+No retry or failed run is hidden. These timings do not measure UI interaction, GPU frames,
+API project readiness, startup or a production Tauri comparison.
+
+Release edit sources are on **measurement-only, not-for-merge**
+`codex/perf19-backend-release-probe`: exploratory
+[`54ddd4c`](https://github.com/tadoEng/egui_test/commit/54ddd4c6ef73b105955b4c906fa2af5a55c6e25c),
+matching [`8e4f80b`](https://github.com/tadoEng/egui_test/commit/8e4f80b933cf793994948729941f339eedf26f08)
+and [`7229518`](https://github.com/tadoEng/egui_test/commit/7229518bd07399c939eb46a5f06705c5a5460c72).
+Each run includes a source/binary hash manifest, verified raw-log hashes and selected Cargo
+units CSV. The cold API build recorded 942 timing units, not 942 unique crates. Global
+registry/source/OS/native artifact caches were populated; user applications remained open.
+This is one serial Windows machine campaign, not a statistical or cache-wiped comparison.
+Neither resource guard stopped a run. Summed working sets may double-count shared pages and
+miss short children; they are not a precise RSS or packaged runtime-memory measurement.
+
+**CRT disposition: HOLD.** The cold API GUI executable link and actual caption rebuilds
+emit `LNK4098: defaultlib 'libcmt.lib' conflicts with use of other libs`. This now reproduces
+in an actual optimized executable, beyond prior debug/check evidence. No-op builds may replay
+cached warnings and are not independent link attempts. No warning was suppressed, no global
+CRT flag changed, and no upstream source modified. Successful exit and produced EXEs do not
+establish allocation/runtime safety or a safe package. The WebView example's smaller size is
+not proof of complete API linkage or project-workflow readiness. Keep #18 on packaging HOLD;
+defined startup/readiness and clean worker shutdown remain unverified.
 
 - Dependency roots and CRT directive chain: **PASS for inspected source/artifacts**.
 - Integrated first `check --all-targets --all-features --timings`: **PASS**, warm cache with
   graph changes; not cold or a matched comparison. Detailed measurements are collected separately.
 - Paired cold-target/no-op/UI-edit and lab-adapter-edit compiler checks: **PASS for the recorded runs**;
   one cold pair and two warm/edit repetitions, not a general performance guarantee.
-- Baseline Release cold/no-op/widget-rebuild and binary-size observations: **PASS for recorded runs**.
-- Matching API Release, startup/readiness and matched Tauri/CLI: **PENDING**.
+- Paired Release cold/no-op/widget-rebuild and binary-size observations: **PASS for recorded runs**;
+  optimized API executable still emits LNK4098, so package safety is not accepted.
+- Startup/readiness and matched Tauri/CLI: **PENDING**.
 - Runtime responsiveness, cancellation/join and packaged CRT policy: **NOT VERIFIED / HOLD**.
 - Overall PERF-02 and migration choice: **PARTIAL**. Do not close #19 or infer migration readiness.

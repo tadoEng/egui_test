@@ -1,0 +1,17 @@
+{
+  "source_commit": "cf4fbb218da1e62cf767a17a35e49f9c4f48e50e",
+  "measured_run": "backend-cold-release-1",
+  "artifacts": [
+    {
+      "artifact": "release/eframe_template.exe",
+      "bytes": 45646336,
+      "sha256": "90ed4987c2d61d2b07ead7cc8127ea3be3a2c386fd87f46b4050e0711150fd65"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 19971072,
+      "sha256": "560a3f82d09d611967c9c113f262acfaa83e01c175bb9fff6df4a3e366b16951"
+    }
+  ]
+}
+
