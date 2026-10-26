@@ -64,7 +64,7 @@ uses Depth24Plus, one sample, normal depth (clear 1, compare Less). This was a c
 no GPU execution time, presentation interval, FPS, or performance result was measured.
 
 `check.ps1 -Offline` passed: formatting, native all-target/all-feature check, strict Clippy,
-23 existing library tests plus 5 renderer CPU tests, doc tests and WASM all-target/all-feature
+23 existing library tests plus 7 renderer CPU tests and 11 merged WebView tests, doc tests and WASM all-target/all-feature
 check. The GPU probe is a separate explicit run (1 passed). The Windows release example built
 at the initial core revision `57c22da` with `--locked --offline` and produced a
 15,776,256-byte EXE. Cargo reported 4m 58s for this
@@ -93,6 +93,28 @@ derivation and real-model invalidation are still outside this slice.
 
 The implementing parent reran the CPU regressions and explicit GPU probe after this correction.
 These are reproduced test results, not an independent acceptance or Windows presented-frame test.
+
+The integration follow-up includes current main `aa28552a23da0e9983ed768ba3e1ccaee7937baa`
+(merged WebView #17) without rewriting the reviewed history. Both optional `native-renderer`
+and `webview` features share one lockfile and retain native target fences. A tilted shell with
+all three normal components nonzero demonstrates the shell winding convention; an intentionally
+inverted triangle must trigger the same winding assertion. The geometric dot-product threshold
+is `1e-6` for these nondegenerate authored fixtures. These focused cases add no model semantics.
+
+In addition to the full offline workflow, repeat the hardware capture and build both examples
+from this integrated source:
+
+```powershell
+$env:NATIVE_GPU_CAPTURE = Join-Path $PWD 'docs/native/depth-probe.png'
+cargo test --locked --offline --all-features --example native_renderer -- --ignored --nocapture
+Remove-Item Env:NATIVE_GPU_CAPTURE
+cargo build --release --locked --offline --all-features --example native_renderer --example webview_stage_a
+```
+
+Release size and timings at `57c22da` above remain historical; use the exact new commit and
+commands recorded in the PR follow-up for current integration evidence. Offscreen pixels do not
+verify actual OS focus/DPI or native presentation. Integration here composes dependencies and
+tests, not the two example windows into one application.
 
 ## Acceptance status for this slice
 

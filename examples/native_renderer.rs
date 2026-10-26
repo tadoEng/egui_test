@@ -666,7 +666,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 );
                 for vertex in vertices {
                     assert!(
-                        dot(geometric_normal, vertex.normal) > 0.0,
+                        dot(geometric_normal, vertex.normal) > 1e-6,
                         "triangle {triangle} winds against its declared normal: {vertices:?}"
                     );
                 }
@@ -676,6 +676,54 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         #[test]
         fn every_fixture_triangle_winds_with_its_declared_normal() {
             assert_triangle_winding_matches_normals(&synthetic_structure());
+        }
+
+        fn tilted_shell() -> MeshData {
+            let origin = [1.0, -2.0, 0.5];
+            let u = [2.0, 1.0, 0.5];
+            let v = [-0.5, 1.0, 2.0];
+            let normal = normalized(cross(u, v)).expect("nondegenerate tilted plane");
+            let mut builder = MeshBuilder::default();
+            builder.shell(
+                [
+                    origin,
+                    add(origin, u),
+                    add(add(origin, u), v),
+                    add(origin, v),
+                ],
+                normal,
+                [0.4, 0.6, 0.8],
+            );
+            builder.finish(3)
+        }
+
+        #[test]
+        fn tilted_shell_triangles_agree_with_their_non_axis_aligned_normal() {
+            let mesh = tilted_shell();
+            assert_eq!(mesh.indices.len(), 6);
+            assert!(
+                mesh.indices
+                    .iter()
+                    .all(|index| (*index as usize) < mesh.vertices.len())
+            );
+            assert!(mesh.vertices.iter().all(|vertex| {
+                vertex.position.into_iter().all(f32::is_finite)
+                    && vertex.normal.into_iter().all(f32::is_finite)
+                    && (dot(vertex.normal, vertex.normal) - 1.0).abs() < 1e-5
+                    && vertex
+                        .normal
+                        .into_iter()
+                        .all(|component| component.abs() > 0.1)
+            }));
+            assert_triangle_winding_matches_normals(&mesh);
+        }
+
+        #[test]
+        #[should_panic(expected = "winds against its declared normal")]
+        fn winding_assertion_rejects_an_inverted_shell_triangle() {
+            let mut mesh = tilted_shell();
+            mesh.indices.swap(0, 1);
+            assert_triangle_winding_matches_normals(&mesh);
         }
 
         #[test]
