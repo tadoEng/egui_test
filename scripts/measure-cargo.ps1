@@ -10,6 +10,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ($env:RUSTFLAGS -or $env:CARGO_ENCODED_RUSTFLAGS) {
+    throw 'Unset inherited Rust flags before a controlled measurement; do not change CRT policy.'
+}
 $checkoutPath = (Resolve-Path -LiteralPath $Checkout).Path
 $targetPath = [IO.Path]::GetFullPath($TargetDirectory)
 $reportPath = [IO.Path]::GetFullPath($ReportDirectory)
@@ -59,6 +62,10 @@ $settings = @{
     CARGO_BUILD_JOBS = '1'
     CARGO_PROFILE_DEV_DEBUG = '0'
     CARGO_PROFILE_TEST_DEBUG = '0'
+    CARGO_PROFILE_RELEASE_DEBUG = '0'
+    CARGO_PROFILE_RELEASE_OPT_LEVEL = '2'
+    CARGO_PROFILE_RELEASE_LTO = 'false'
+    CARGO_PROFILE_RELEASE_INCREMENTAL = 'false'
     RUST_MIN_STACK = '268435456'
 }
 foreach ($entry in $settings.GetEnumerator()) { $info.Environment[$entry.Key] = $entry.Value }

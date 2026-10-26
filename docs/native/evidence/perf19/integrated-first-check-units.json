@@ -1,0 +1,392 @@
+{
+  "source_commit": "cf4fbb218da1e62cf767a17a35e49f9c4f48e50e",
+  "run": "integrated-first-check",
+  "scope": "Warm target with graph changes, not a cold build",
+  "unit_count": 48,
+  "units": [
+    {
+      "name": "toml_datetime",
+      "version": "0.6.3",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 12.26,
+      "duration": 0.57
+    },
+    {
+      "name": "winnow",
+      "version": "0.5.40",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 12.88,
+      "duration": 1.44
+    },
+    {
+      "name": "toml_edit",
+      "version": "0.20.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 14.6,
+      "duration": 1.73
+    },
+    {
+      "name": "toml",
+      "version": "0.8.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 16.66,
+      "duration": 0.45
+    },
+    {
+      "name": "typst-syntax",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 17.21,
+      "duration": 1.59
+    },
+    {
+      "name": "typst-library",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 19.06,
+      "duration": 20.88
+    },
+    {
+      "name": "windows-strings",
+      "version": "0.4.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 40.57,
+      "duration": 0.18
+    },
+    {
+      "name": "windows-result",
+      "version": "0.3.4",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 40.75,
+      "duration": 0.15
+    },
+    {
+      "name": "typst-layout",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 41.03,
+      "duration": 2.72
+    },
+    {
+      "name": "windows-core",
+      "version": "0.61.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 43.75,
+      "duration": 0.47
+    },
+    {
+      "name": "winnow",
+      "version": "0.7.15",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 44.46,
+      "duration": 1.33
+    },
+    {
+      "name": "toml",
+      "version": "0.9.12+spec-1.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 45.79,
+      "duration": 1.11
+    },
+    {
+      "name": "typst-svg",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 46.9,
+      "duration": 0.53
+    },
+    {
+      "name": "windows-threading",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 47.48,
+      "duration": 0.09
+    },
+    {
+      "name": "windows-future",
+      "version": "0.2.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 47.6,
+      "duration": 0.38
+    },
+    {
+      "name": "ext-db",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 47.99,
+      "duration": 0.98
+    },
+    {
+      "name": "typst-html",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 48.97,
+      "duration": 1.15
+    },
+    {
+      "name": "windows-numerics",
+      "version": "0.2.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 50.12,
+      "duration": 0.13
+    },
+    {
+      "name": "windows-collections",
+      "version": "0.2.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 50.25,
+      "duration": 0.18
+    },
+    {
+      "name": "webview2-com-sys",
+      "version": "0.38.2",
+      "target": " build-script",
+      "mode": "todo",
+      "start": 50.43,
+      "duration": 0.32
+    },
+    {
+      "name": "webview2-com-sys",
+      "version": "0.38.2",
+      "target": " build-script (run)",
+      "mode": "run-custom-build",
+      "start": 50.79,
+      "duration": 0.09
+    },
+    {
+      "name": "windows",
+      "version": "0.61.3",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 50.87,
+      "duration": 12.44
+    },
+    {
+      "name": "typst-realize",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 63.32,
+      "duration": 0.37
+    },
+    {
+      "name": "ext-calc",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 63.69,
+      "duration": 3.38
+    },
+    {
+      "name": "typst-eval",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 67.07,
+      "duration": 0.77
+    },
+    {
+      "name": "cookie",
+      "version": "0.18.1",
+      "target": " build-script",
+      "mode": "todo",
+      "start": 67.84,
+      "duration": 0.24
+    },
+    {
+      "name": "typst-pdf",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 68.09,
+      "duration": 1.42
+    },
+    {
+      "name": "cookie",
+      "version": "0.18.1",
+      "target": " build-script (run)",
+      "mode": "run-custom-build",
+      "start": 69.5,
+      "duration": 0.12
+    },
+    {
+      "name": "typst",
+      "version": "0.15.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 69.62,
+      "duration": 0.23
+    },
+    {
+      "name": "ext-render",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 69.86,
+      "duration": 1.57
+    },
+    {
+      "name": "webview2-com-sys",
+      "version": "0.38.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 71.42,
+      "duration": 2.26
+    },
+    {
+      "name": "webview2-com-macros",
+      "version": "0.8.1",
+      "target": "",
+      "mode": "todo",
+      "start": 73.68,
+      "duration": 3.92
+    },
+    {
+      "name": "wry",
+      "version": "0.55.1",
+      "target": " build-script",
+      "mode": "todo",
+      "start": 77.6,
+      "duration": 0.51
+    },
+    {
+      "name": "wry",
+      "version": "0.55.1",
+      "target": " build-script (run)",
+      "mode": "run-custom-build",
+      "start": 78.11,
+      "duration": 0.06
+    },
+    {
+      "name": "webview2-com",
+      "version": "0.38.2",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 78.17,
+      "duration": 1.51
+    },
+    {
+      "name": "ext-report",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 79.68,
+      "duration": 1.19
+    },
+    {
+      "name": "cookie",
+      "version": "0.18.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 80.86,
+      "duration": 0.24
+    },
+    {
+      "name": "windows-version",
+      "version": "0.1.7",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 81.1,
+      "duration": 0.08
+    },
+    {
+      "name": "dunce",
+      "version": "1.0.5",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 81.19,
+      "duration": 0.1
+    },
+    {
+      "name": "wry",
+      "version": "0.55.1",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 81.28,
+      "duration": 0.42
+    },
+    {
+      "name": "ext-api",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 81.71,
+      "duration": 4.84
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " (check)",
+      "mode": "todo",
+      "start": 86.55,
+      "duration": 1.33
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " native_backend \"example\" (check)",
+      "mode": "todo",
+      "start": 87.88,
+      "duration": 0.4
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " eframe_template \"bin\" (check)",
+      "mode": "todo",
+      "start": 88.28,
+      "duration": 0.35
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " webview_stage_a \"example\" (check)",
+      "mode": "todo",
+      "start": 88.63,
+      "duration": 2.37
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " stress \"example\" (check)",
+      "mode": "todo",
+      "start": 91.0,
+      "duration": 0.37
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " eframe_template \"bin\" (check-test)",
+      "mode": "todo",
+      "start": 91.37,
+      "duration": 0.3
+    },
+    {
+      "name": "eframe_template",
+      "version": "0.1.0",
+      "target": " (check-test)",
+      "mode": "todo",
+      "start": 91.68,
+      "duration": 0.82
+    }
+  ]
+}
