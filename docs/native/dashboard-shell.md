@@ -31,6 +31,8 @@ The JS selection update changes only mark lines within the same generation, pres
 
 Use the [visible Windows interaction/compositor matrix](dashboard-windows-matrix.md) for the next owner-run input/DPI evidence. Its manual cells remain pending; separate unsupported popup/IME coverage is explicit. The companion report gate validates hidden-smoke reports only and does not replace these observations.
 
+An optional [Windows overlay/text-input probe](dashboard-input-probe.md) supplies a native-parent egui window, menu and text field for owner-run popup/IME tests. It is off by default and deliberately leaves the child chart visible; adding the fixture does not establish a manual or compositor PASS.
+
 Commands for the exact review head:
 
 ```powershell

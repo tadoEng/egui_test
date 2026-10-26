@@ -1,0 +1,13 @@
+{
+  "source_commit": "edc5799c2a348b99f14373c0015f402fe7eb5e74",
+  "base_commit": "daa0c9c1ae96f9d7de85c254a9ebde846b2b8dfa",
+  "command": "./check.ps1 -Offline",
+  "assessment": "PASS74 recorded CPU executions/fmt/native/strictClippy/docs0/WASM; PARTIAL manual Windows behavior",
+  "passed_executions": 74,
+  "original_release_source": "0dc88633d020706491d2515891a3354b6686655e",
+  "original_release_rebuilt": false,
+  "main_matrix_and_probe_paragraphs_preserved": true,
+  "log_sha256": "28208d9c31c79715aaf7f2ebe3ec71e16627c29d569b59ca2d20bde935b47235",
+  "manual_input_tested": false,
+  "original_evidence_ref": "codex/evidence-dashboard-input-9f1e27c"
+}

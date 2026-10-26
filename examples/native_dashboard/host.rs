@@ -2,6 +2,7 @@ use crate::{
     model::{self, Case, Config, Direction, Packet, State, Units},
     native_viewport::NativeViewport,
     webview_host::ChildWebView,
+    windows_probe::WindowsProbe,
 };
 use std::{
     path::PathBuf,
@@ -57,6 +58,7 @@ struct Dashboard {
     error: Option<String>,
     rejected: u64,
     smoke: Option<Smoke>,
+    windows_probe: WindowsProbe,
 }
 struct Smoke {
     path: PathBuf,
@@ -84,6 +86,7 @@ impl Dashboard {
             sent: None,
             error,
             rejected: 0,
+            windows_probe: WindowsProbe::default(),
             smoke: smoke.map(|path| Smoke {
                 path,
                 started: Instant::now(),
@@ -189,6 +192,7 @@ impl Dashboard {
                 if ui.button("Clear selection").clicked() {
                     self.select(None);
                 }
+                self.windows_probe.controls(ui);
                 let status = if self.error.is_some() {
                     "Error"
                 } else if self.chart.is_none() {
@@ -427,6 +431,8 @@ impl eframe::App for Dashboard {
             });
         });
         self.sync(chart_rect, ui.ctx());
+        // Intentionally keep the child visible while testing parent overlays.
+        self.windows_probe.show(ui.ctx(), chart_rect);
         self.run_smoke(ui.ctx(), frame);
     }
 }
