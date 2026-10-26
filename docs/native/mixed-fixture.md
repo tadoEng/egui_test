@@ -1,6 +1,6 @@
 # WB-01: authored mixed structural fixture
 
-Scope: [#23](https://github.com/tadoEng/egui_test/issues/23), under [#22](https://github.com/tadoEng/egui_test/issues/22). Starts from renderer-core merge `edab698616d4bee13971c50dcdb0811e26b3a458`. Assessment **PARTIAL** until exact-head tests and independent review. No rendering, loading, picking, visibility UI, Windows visual evidence or engineering-source fidelity is claimed by this data-only slice.
+Scope: [#23](https://github.com/tadoEng/egui_test/issues/23), under [#22](https://github.com/tadoEng/egui_test/issues/22). Starts from renderer-core merge `edab698616d4bee13971c50dcdb0811e26b3a458`. Assessment **PASS for recorded correctness checks; PARTIAL pending independent contract re-review**. No rendering, loading, picking, visibility UI, Windows visual evidence or engineering-source fidelity is claimed by this data-only slice.
 
 `crates/lab-fixture` is a std-only workspace crate; the application does not depend on it yet. No API/parser, window/GPU, random, I/O or serialization dependency. Existing Painter 48/50,000/100,000 fixtures and the standalone renderer example are unchanged. `check.ps1` already checks/tests all workspace members, including WASM compilation.
 
@@ -60,7 +60,7 @@ Openings are **unsupported**: any nonempty opening list produces `UnsupportedOpe
 
 ## Verification
 
-The original `126f30f` full Windows offline workflow completed successfully: 53 native tests (23 baseline + 7 renderer CPU + 11 WebView + 12 fixture), strict workspace Clippy, fmt, docs and all-target/all-feature WASM. That historical result predates the inclined-frame correction. The corrected source requires its own exact-head run:
+The corrected inclined-frame source `ebc29205d0867ff4460e7caf654eda3956a19a9c` passed the full Windows offline workflow: **56 tests (23 baseline + 7 renderer CPU + 11 WebView + 15 fixture)**, strict workspace Clippy, fmt, docs0 and all-target/all-feature WASM. The opt-in offscreen GPU test was ignored by this standard gate and was not re-executed. A Rust incremental-cache hard-link fallback-to-copy warning remains visible; no source lint suppression was added. The original `126f30f` full 53-test workflow also passed before this correction. Reproduction commands:
 
 ```powershell
 cargo test -p lab-fixture --locked --offline
