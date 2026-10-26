@@ -199,11 +199,43 @@ The first two commits change the same egui heading; the next two append diagnost
 in the lab adapter. No authoritative `ext-api` source or domain rule was edited. This does not
 measure rebuilding an upstream backend crate. Reviewed draft implementation branches stay unchanged.
 
+### Release phase (comparison in progress)
+
+Both configurations build the same GUI binary and WebView example with
+`build --release --locked --offline --all-features --bin eframe_template
+--example webview_stage_a --timings`, on separate fresh C: targets. This two-target
+lab workflow includes example dev-dependencies; it is not a minimal shipping-package build.
+The baseline uses the original `aa28552` source and Release harness `4b64083` with the recorded
+one-job/opt-level-2/no-debug/no-LTO/no-incremental profile and memory/disk guards.
+
+| Baseline Release condition | Cargo process duration | Evidence |
+|---|---:|---|
+| Fresh target, one run | 686.652 s | [receipt](evidence/perf19/baseline-cold-release-1.json), [units](evidence/perf19/baseline-cold-release-1.units.csv) |
+| No-op, two runs | 0.841 / 0.766 s | [run 1](evidence/perf19/baseline-noop-release-1.json), [run 2](evidence/perf19/baseline-noop-release-2.json) |
+| Committed widget edit, rebuild and link | 17.421 / 17.058 s | [run 1](evidence/perf19/baseline-ui-release-1.json), [run 2](evidence/perf19/baseline-ui-release-2.json) |
+
+The baseline GUI EXE is **17,955,840 bytes** and WebView example **18,573,824 bytes** in the
+[cold artifact manifest](evidence/perf19/baseline-cold-release-1.artifacts.json). Each run has
+its own source/binary hashes; widget edits can change a hash without changing file size.
+The cold Release target contains 1,475,051,408 logical file bytes; sampled peak summed working
+sets are 1,837,096,960 bytes, with minimum observed available system memory 4,893,945,856 bytes.
+Neither resource guard stopped the run. Logs, identity and artifact hashes were verified.
+
+These executable rebuild results are distinct from the earlier 2.2 s compiler-only UI checks.
+Release UI edit commits are reachable on the measurement-only
+`codex/perf19-baseline-release-probe` branch:
+[`e033bdda`](https://github.com/tadoEng/egui_test/commit/e033bddac2641fb8541668a9db07e07cad281a40)
+and [`014f576c`](https://github.com/tadoEng/egui_test/commit/014f576c3202df386b6b5b937b74a7cf0d163b40).
+No structural GUI was launched against persisted user state. Matching API Release build,
+executable iteration and defined startup/readiness samples are still pending. Do not infer
+a Release ratio or host-readiness result from the completed compiler-check comparison.
+
 - Dependency roots and CRT directive chain: **PASS for inspected source/artifacts**.
 - Integrated first `check --all-targets --all-features --timings`: **PASS**, warm cache with
   graph changes; not cold or a matched comparison. Detailed measurements are collected separately.
 - Paired cold-target/no-op/UI-edit and lab-adapter-edit compiler checks: **PASS for the recorded runs**;
   one cold pair and two warm/edit repetitions, not a general performance guarantee.
-- Cold Release builds, executable relinking/size/startup and matched Tauri/CLI: **PENDING**.
+- Baseline Release cold/no-op/widget-rebuild and binary-size observations: **PASS for recorded runs**.
+- Matching API Release, startup/readiness and matched Tauri/CLI: **PENDING**.
 - Runtime responsiveness, cancellation/join and packaged CRT policy: **NOT VERIFIED / HOLD**.
 - Overall PERF-02 and migration choice: **PARTIAL**. Do not close #19 or infer migration readiness.
