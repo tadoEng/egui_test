@@ -11,6 +11,9 @@ mod native_viewport;
 #[cfg(target_os = "windows")]
 #[path = "support/webview_host.rs"]
 mod webview_host;
+#[cfg(target_os = "windows")]
+#[path = "native_dashboard/windows_probe.rs"]
+mod windows_probe;
 
 #[cfg(target_os = "windows")]
 fn main() -> eframe::Result {

@@ -29,6 +29,8 @@ The JS selection update changes only mark lines within the same generation, pres
 
 ## Validation and remaining Windows evidence
 
+An optional [Windows overlay/text-input probe](dashboard-input-probe.md) supplies a native-parent egui window, menu and text field for owner-run popup/IME tests. It is off by default and deliberately leaves the child chart visible; adding the fixture does not establish a manual or compositor PASS.
+
 Commands for the exact review head:
 
 ```powershell
