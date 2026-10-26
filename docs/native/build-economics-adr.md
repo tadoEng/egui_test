@@ -269,7 +269,8 @@ cached warnings and are not independent link attempts. No warning was suppressed
 CRT flag changed, and no upstream source modified. Successful exit and produced EXEs do not
 establish allocation/runtime safety or a safe package. The WebView example's smaller size is
 not proof of complete API linkage or project-workflow readiness. Keep #18 on packaging HOLD;
-defined startup/readiness and clean worker shutdown remain unverified.
+API project/dashboard readiness and clean worker shutdown remain unverified; the narrower
+chart IPC observation is recorded below.
 
 - Dependency roots and CRT directive chain: **PASS for inspected source/artifacts**.
 - Integrated first `check --all-targets --all-features --timings`: **PASS**, warm cache with
@@ -278,6 +279,64 @@ defined startup/readiness and clean worker shutdown remain unverified.
   one cold pair and two warm/edit repetitions, not a general performance guarantee.
 - Paired Release cold/no-op/widget-rebuild and binary-size observations: **PASS for recorded runs**;
   optimized API executable still emits LNK4098, so package safety is not accepted.
-- Startup/readiness and matched Tauri/CLI: **PENDING**.
+- Full host/API project readiness, runtime RSS and matched Tauri/CLI: **PENDING**;
+  the scoped synthetic chart IPC observations below do not close those requirements.
 - Runtime responsiveness, cancellation/join and packaged CRT policy: **NOT VERIFIED / HOLD**.
 - Overall PERF-02 and migration choice: **PARTIAL**. Do not close #19 or infer migration readiness.
+
+### Defined synthetic chart readiness observation
+
+The measurement-only WebView example now records the first **Rust-validated typed
+`chart_ready` IPC** event. The identical telemetry source file has Git blob
+`984790f984d26c92ce65116dfb18e797b082b149` in baseline
+[`271adb4`](https://github.com/tadoEng/egui_test/commit/271adb4e4d4cfe77ef3d8629fe6f2e862af9594b)
+and API-enabled [`0895fe6`](https://github.com/tadoEng/egui_test/commit/0895fe6e746dfe2fb8d8f08cbcb3112226a12748).
+Both are **measurement-only probe refs, not merge candidates**. They were rebuilt serially
+on their existing Release caches with the same profile, then bound to exact source/binary
+hash manifests. The default structural GUI was never launched; only the hidden, authored
+six-story chart selfsmoke ran. No API project was opened and no backend worker was exercised.
+
+`scripts/measure-webview-ready.ps1` at `c6d9a67` measures OS process StartTime → first
+Rust-observed chart-ready UTC marker. Script SHA256 at execution:
+`31ce5ba302754e74676d3b3f50d892a0fce83949900c856f3b585202bf35213b`.
+This event is **not** first presented frame, completed 3D/dashboard construction, API project
+readiness, chart click latency or whole smoke duration. UTC millisecond marker precision and
+OS clock stability limit the measurement. Full smoke process duration is recorded separately.
+
+Same Windows/Rust/PS host as the build campaign, WebView2 **156.0.4314.42**. One warmup
+followed by three fresh processes per configuration, baseline first then API enabled.
+Incognito WebView configuration; OS/runtime caches were populated, not a cold browser-profile
+campaign. Samples are observations, not p95 estimates or evidence of a performance advantage.
+
+| Process → Rust-observed chart ready | Baseline | API feature enabled |
+|---|---:|---:|
+| Warmup (excluded) | 1906.671 ms | 1487.458 ms |
+| Fresh process 1 | 1351.261 ms | 1390.042 ms |
+| Fresh process 2 | 1365.137 ms | 1369.285 ms |
+| Fresh process 3 | 1374.340 ms | 1369.462 ms |
+
+All eight programmatic round trips reported PASS and the native host processes exited0.
+The helper requires clean before/after source, matching controlled-build receipt and EXE
+hash/size, a fixed WebView example path, fresh marker directory, typed ready event and successful
+smoke. Timeout cleanup is limited to the process tree it starts. Negative controls rejected
+old-source manifests, changed binary hashes, structural-GUI artifacts and reused marker labels
+**before launch**. Parser and four guard controls pass. Live timeout termination, process-tree
+cleanup after normal exit and low-memory failure are not tested by these observations.
+
+Original ready/smoke hashes and individual reports are retained with the
+[baseline summary](evidence/perf19/startup/baseline-ready-1/summary.json),
+[API-enabled summary](evidence/perf19/startup/backend-ready-1/summary.json) and
+[guard outcomes](evidence/perf19/startup/guard-checks.json). Telemetry build receipts and artifact
+manifests are adjacent; these preparation rebuilds are not additional cold benchmark samples.
+JSON object key order differs under dependency feature unification; typed report values match.
+
+**PASS for the defined chart-ready observations only.** Runtime RSS/steady/peak native plus
+WebView process-tree memory, API project/workflow startup, repeat-open/close20×, worker
+join/cancellation, manual Windows input/DPI/focus, network capture and matched Tauri remain
+**PENDING**. Build working-set samples are not substituted for runtime RSS. The CRT/package
+HOLD is unchanged. Source inspection also confirms the root GUI does not call the native API
+service; the public feature-gated adapter module is compiled into the same library. This is
+not yet a retained-symbol/link-map explanation of the executable-size increase. That needs a
+separate measured link-boundary investigation; proposed upstream feature separation or a typed
+process boundary must preserve authority, and a process split alone would not make the heavy
+child's CRT policy safe. No production boundary or shipping process is implemented here.

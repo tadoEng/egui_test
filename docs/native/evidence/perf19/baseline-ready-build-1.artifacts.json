@@ -1,0 +1,16 @@
+{
+  "source_commit": "271adb4e4d4cfe77ef3d8629fe6f2e862af9594b",
+  "measured_run": "baseline-ready-build-1",
+  "artifacts": [
+    {
+      "artifact": "release/eframe_template.exe",
+      "bytes": 17955840,
+      "sha256": "4c54ed19c38a70468f11d3d895e4b1e20aecc40eb700cf0dd58d3a74e75cee63"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 18576896,
+      "sha256": "0dbaa554b6e8d5757d8df0e9c663161604c66faecf5af95a04e6b3ffac1e2dbd"
+    }
+  ]
+}

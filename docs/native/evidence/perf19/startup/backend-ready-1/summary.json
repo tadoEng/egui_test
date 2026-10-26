@@ -1,0 +1,58 @@
+{
+  "label": "backend-ready-1",
+  "source_commit": "0895fe6e746dfe2fb8d8f08cbcb3112226a12748",
+  "binary_sha256": "89ff19ad93ac97de12a26772203074b8acda00c5c7d859c86a73e4a312dbfbeb",
+  "measurement_script_sha256": "31ce5ba302754e74676d3b3f50d892a0fce83949900c856f3b585202bf35213b",
+  "powershell": "7.6.5",
+  "dotnet": ".NET 10.0.11",
+  "os": "Microsoft Windows NT 10.0.26300.0",
+  "definition": "OS process start to first Rust-validated chart_ready IPC; not first presented frame, API project readiness or whole smoke duration",
+  "cache_policy": "One warmup then fresh processes; incognito WebView configuration, machine/OS/runtime caches not cleared; not a cold browser-profile claim",
+  "memory": "Not measured by this readiness helper; do not infer runtime RSS from build working sets",
+  "samples": [
+    {
+      "run": 0,
+      "warmup": true,
+      "process_to_rust_chart_ready_ms": 1487.458,
+      "whole_smoke_ms": 1762.1829,
+      "webview2": "156.0.4314.42",
+      "manual_input_tested": false,
+      "network_capture_performed": false,
+      "ready_sha256": "3309d2661389af34d08b0ef1c23cccc74e858e7038ff4adb22fdc90ebaaadf39",
+      "smoke_sha256": "ffd8c9e334eac409b6c5e006797c6c3572b782156f7c57de745ddb0cbca7b2eb"
+    },
+    {
+      "run": 1,
+      "warmup": false,
+      "process_to_rust_chart_ready_ms": 1390.0418,
+      "whole_smoke_ms": 1662.2861,
+      "webview2": "156.0.4314.42",
+      "manual_input_tested": false,
+      "network_capture_performed": false,
+      "ready_sha256": "3ebf11bac32cad2a293446ad16e10eb2f999369839dc5526d1072524824b3df1",
+      "smoke_sha256": "ffd8c9e334eac409b6c5e006797c6c3572b782156f7c57de745ddb0cbca7b2eb"
+    },
+    {
+      "run": 2,
+      "warmup": false,
+      "process_to_rust_chart_ready_ms": 1369.2848,
+      "whole_smoke_ms": 1624.6231,
+      "webview2": "156.0.4314.42",
+      "manual_input_tested": false,
+      "network_capture_performed": false,
+      "ready_sha256": "dfbeba0ff3e1e36e17d14f6bab92e98b3b99ff7bc9dbe3ec94ca27f47194464a",
+      "smoke_sha256": "ffd8c9e334eac409b6c5e006797c6c3572b782156f7c57de745ddb0cbca7b2eb"
+    },
+    {
+      "run": 3,
+      "warmup": false,
+      "process_to_rust_chart_ready_ms": 1369.4618,
+      "whole_smoke_ms": 1645.1025,
+      "webview2": "156.0.4314.42",
+      "manual_input_tested": false,
+      "network_capture_performed": false,
+      "ready_sha256": "8ade59850c0989b5abc32edfd41473b45213ec6af1ad263df3c3fbb0efac11eb",
+      "smoke_sha256": "ffd8c9e334eac409b6c5e006797c6c3572b782156f7c57de745ddb0cbca7b2eb"
+    }
+  ]
+}
