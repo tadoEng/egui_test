@@ -24,14 +24,25 @@ serde = { version = "1.0.229", features = ["derive"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.11"
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
+ext-api = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
+ext-error = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
+anyhow = { version = "1.0.102", optional = true }
+tokio = { version = "1.50.0", features = ["rt"], optional = true }
 
 [features]
 e2k = ["dep:ext-e2k"]
+native_backend = ["dep:anyhow", "dep:ext-api", "dep:ext-error", "dep:tokio"]
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 # Keep toolbar icons available without depending on installed system fonts in tests.
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
+serde_json = "1.0.148"
+tempfile = "3.27.0"
+
+[[example]]
+name = "native_backend"
+required-features = ["native_backend"]
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
