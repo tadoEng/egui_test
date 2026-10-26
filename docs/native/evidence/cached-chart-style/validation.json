@@ -1,0 +1,62 @@
+{
+  "browser_script_blob": "6970a23e267304ffc744e5eba10ce9d57c84eef9",
+  "analysis_freshness_or_ext_render_parity_verified": false,
+  "upstream_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "chart_blob": "daace89cd7464532a9efaf5cc67e85a0897c7234",
+  "native": {
+    "reason": "Serial build policy: prior reader Release verification still compiling. No style-head native app built or launched yet.",
+    "assessment": "PENDING"
+  },
+  "private_inputs_used": false,
+  "browser": {
+    "fixture": "LAB-CACHED-STYLE-01-r1",
+    "public_packet_fixture": "LAB-CACHED-DTO-01-gap-r1",
+    "owned_browser_exit_observed": true,
+    "browser_pixel_ratios": [
+      1,
+      1.25,
+      1.5
+    ],
+    "actual_public_native_packet_checked": true,
+    "resize_cases": 9,
+    "assessment": "PASS",
+    "public_packet_native_source": "57a3f3187a8438eb19f5f152aafa8251addb7939",
+    "owned_contexts_server_closed": true
+  },
+  "upstream_files": [
+    {
+      "path": "apps/desktop/src/components/analytics/charts/AnalysisChartPanel.tsx",
+      "blob": "9c8bf58fa5600575fb5f760c21c567a0afb2513e"
+    },
+    {
+      "path": "apps/desktop/src/components/analytics/charts/chartSpec.ts",
+      "blob": "4f4e20753ac91208b2008fa31f64ec9cedbbd48f"
+    },
+    {
+      "path": "apps/desktop/src/components/analytics/charts/calcOptions.ts",
+      "blob": "2236d519f98657b8f3d48cec9d7ee268c96e8884"
+    },
+    {
+      "path": "docs/chart-standards.md",
+      "blob": "7350cd74d757b8b198567d550f4822d4351cb7c7"
+    },
+    {
+      "path": "apps/desktop/src/index.css",
+      "blob": "b620e794069a1f5b7b4eee7c0434e34a2bbe1ca9"
+    },
+    {
+      "path": "LICENSE",
+      "blob": "57bc88a15a0ee8266c259b2667e64608d3f7e292"
+    }
+  ],
+  "physical_windows_input_dpi_or_compositor_verified": false,
+  "code_source": "2f45814f8e65b4032962cf734c11b3013e508874",
+  "assessment": "PARTIAL",
+  "scope": "Presentation reuse only; source-referenced public fixture checks, not engineering or migration readiness.",
+  "unchanged_from_reader": {
+    "stored_values_order_nulls_signs_and_units": true,
+    "selection_protocol": true,
+    "cargo_manifest_and_lock": true,
+    "rust_data_host_fixture": true
+  }
+}
