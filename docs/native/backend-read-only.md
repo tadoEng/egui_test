@@ -128,6 +128,28 @@ upstream patch or global CRT change was used to hide it. Release/packaged
 linkage and native dependency/runtime policy require a separate review before
 delivery acceptance.
 
+## Review follow-up
+
+The review at `67a9811` correctly identified pending execution evidence. It is
+superseded by the completed offline gate at `6336023c37777ee9c98fb086cbe78aad498063f9`,
+including the later branch-history request and worker-delivery tests. These
+checks were executed and inspected by the implementing parent agent on Windows;
+they are not a second independent acceptance review. The fixture's same-source
+API comparison does not establish CLI/Tauri end-to-end or engineering parity.
+
+The unconditional dependency closure is a **migration-economics risk**, not a
+reason to replace authoritative APIs. A production strategy still requires
+matched baseline measurements of Release size, startup, RSS and build cost.
+The observations above are not those matched measurements. Combined dependency
+graphs and feature checks with renderer PR #16 and WebView PR #17 remain open
+until an integration branch exists; separate branch gates cannot prove that
+combination. No backend feature split, pin change or upstream edit is implied.
+
+Cancellation, explicit worker join and shutdown remain open in
+[#8](https://github.com/tadoEng/egui_test/issues/8). No review comment or passing
+test closes that lifecycle requirement. INT-01 remains **PARTIAL** and this PR
+remains draft pending independent acceptance and explicit owner merge approval.
+
 Offline resolution initially lacked a newer non-yanked spin release in the
 local index; online locked resolution/cache population resolved that environment
 condition without changing the backend pin. Cross-platform manifests also needed
