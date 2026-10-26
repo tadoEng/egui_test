@@ -68,8 +68,8 @@ issues or acceptance of N/A items. No automatic continuation into real ETABS.
 
 | Draft PR | Exact implementation head | Current evidence / assessment |
 |---|---|---|
-| [#16: native GPU core](https://github.com/tadoEng/egui_test/pull/16) | `6856407b678ceda8f982f70c078760c8dd5f82b3` | PARTIAL: 23 baseline + 2 CPU tests and full offline gate pass; explicit RTX 3050 Ti depth/buffer-reuse probe passes; Windows release builds. No native-window interaction, picking or presentation performance acceptance. |
-| [#17: offline WebView child](https://github.com/tadoEng/egui_test/pull/17) | `2538ded312726a6eb2cfa13c3610fef18b2fdcd8` | PARTIAL: 23 baseline + 11 tests and full offline gate pass; release builds; three actual hidden WebView2 156.0.4314.42 two-way message smokes pass. Manual interaction, docking/DPI, network capture and performance remain unverified. |
+| [#16: native GPU core](https://github.com/tadoEng/egui_test/pull/16) | `57c22dabc3aabd6d4a8e864ff01de02d697329bc` | PARTIAL: 23 baseline + 3 CPU tests and full offline gate pass; explicit RTX 3050 Ti depth/buffer-reuse probe passes; Windows release builds. No native-window interaction, picking or presentation performance acceptance. |
+| [#17: offline WebView child](https://github.com/tadoEng/egui_test/pull/17) | `7e4a917c7483f2fc2c1ebfa3c1b47fce448f64c3` | PARTIAL: 23 baseline + 11 tests and full offline gate pass; release builds; three actual hidden WebView2 156.0.4314.42 two-way message smokes pass. Manual interaction, docking/DPI, network capture and performance remain unverified. |
 | [#18: read-only API adapter](https://github.com/tadoEng/egui_test/pull/18) | `67a9811332486d37a84cd44f2a72642af4d2d6cf` | PARTIAL: initial native compile and WASM fencing pass; final tests/Clippy pending. Unconditional backend closure adds 503 lockfile records; first partly cached library check 29m 22s. |
 
 Each draft links its source map, tests, measurements, limitations and remaining
