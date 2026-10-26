@@ -9,7 +9,7 @@ pub(crate) fn run() -> Result<(), String> {
         include_str!("../../assets/fixtures/real01.e2k"),
     )
     .map_err(|_private_error| "Cannot write owned public E2K fixture")?;
-    let observed = serde_json::json!({"schemaVersion":1,"isAnalyzed":false,"units":"kip-ft-F","collectedAt":"2025-12-31T00:00:00Z","stories":[{"name":"Roof","elevation":10.0},{"name":"L1","elevation":0.0}]});
+    let observed = serde_json::json!({"schemaVersion":2,"isAnalyzed":false,"units":"kip-ft-F","collectedAt":"2025-12-31T00:00:00Z","stories":[{"name":"Roof","elevation":10.0},{"name":"L1","elevation":0.0}]});
     std::fs::write(root.join("model-metadata.json"), observed.to_string())
         .map_err(|_private_error| "Cannot write owned public metadata fixture")?;
     let report = crate::preflight::inspect(&crate::preflight::Options {

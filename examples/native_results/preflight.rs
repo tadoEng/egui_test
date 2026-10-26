@@ -519,7 +519,8 @@ fn inspect_metadata(
     // Authoritative DTO only. No SidecarClient, process, transport or COM use.
     let observed: ModelMetadata = serde_json::from_slice(&metadata.bytes)
         .map_err(|_private_error| "metadata_schema_refused")?;
-    if observed.schema_version != 1 {
+    // Pinned commands.rs tests document legacy v0 and current v2 metadata.
+    if !matches!(observed.schema_version, 0 | 2) {
         return Err("metadata_schema_unsupported");
     }
     // Preserve omission separately from ModelMetadata's legacy false default.

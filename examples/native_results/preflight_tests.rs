@@ -20,7 +20,7 @@ fn fixture(with_e2k: bool) -> (tempfile::TempDir, Value) {
     write_json(
         root.path(),
         "model-metadata.json",
-        &json!({"schemaVersion":1,"isAnalyzed":false,"units":"kip-ft-F","collectedAt":"2025-12-31T00:00:00Z","stories":[{"name":"Roof","elevation":10.0},{"name":"L1","elevation":0.0}]}),
+        &json!({"schemaVersion":2,"isAnalyzed":false,"units":"kip-ft-F","collectedAt":"2025-12-31T00:00:00Z","stories":[{"name":"Roof","elevation":10.0},{"name":"L1","elevation":0.0}]}),
     );
     if with_e2k {
         fs::write(root.path().join("authored.e2k"), E2K).expect("authored E2K");
@@ -325,4 +325,22 @@ fn omitted_observation_is_unknown_and_duplicate_metadata_keys_are_refused() {
         inspect(&options_for(root.path())).refusal,
         Some("metadata_duplicate_story")
     );
+}
+#[test]
+fn source_documented_metadata_versions_are_supported_and_future_versions_refuse_linkage() {
+    for version in [0, 2, 3] {
+        let (root, _) = fixture(true);
+        let path = root.path().join("model-metadata.json");
+        let mut metadata: Value =
+            serde_json::from_slice(&fs::read(path).expect("authored metadata")).expect("JSON");
+        metadata["schemaVersion"] = json!(version);
+        write_json(root.path(), "model-metadata.json", &metadata);
+        let report = inspect(&options_for(root.path()));
+        assert!(report.result_dto_ready);
+        if version == 3 {
+            assert_eq!(report.refusal, Some("metadata_schema_unsupported"));
+        } else {
+            assert!(report.can_show_uncertified_preview());
+        }
+    }
 }
