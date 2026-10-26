@@ -137,9 +137,37 @@ observation. Revised runner semantics do not retroactively convert it into a con
 
 ## Evidence ledger
 
+### Controlled check campaign (in progress)
+
+The baseline phase completed on the frozen main/WebView source, before starting the matching
+backend phase. All commands use `check --locked --offline --all-targets --all-features --timings`
+and the same one-job/no-debug settings above, with separate fresh targets on C:. Only one owned
+build runs at a time. These are compiler checks, not executable builds or application startup.
+
+| Baseline condition | Cargo process duration | Source / evidence |
+|---|---:|---|
+| Fresh target, one run | 438.132 s | [`aa28552` receipt](evidence/perf19/baseline-cold-check-1.json), [Cargo units](evidence/perf19/baseline-cold-check-1.units.json) |
+| No-op, two runs | 0.752 / 0.708 s | [run 1](evidence/perf19/baseline-noop-check-1.json), [run 2](evidence/perf19/baseline-noop-check-2.json) |
+| One egui caption edit per committed run | 2.300 / 2.186 s | [run 1](evidence/perf19/baseline-ui-check-1.json), [run 2](evidence/perf19/baseline-ui-check-2.json) |
+
+The cold target grew from zero to 652,647,457 logical file bytes; its sampled peak sum of
+working sets was 1,732,202,496 bytes. This includes shared-page double counting and may miss
+short-lived processes; it is not an exact private RSS peak. Raw log hashes and input identity
+checks passed before sanitizing report paths. Global registry/source and OS caches were populated;
+user processes were left running. One fresh-target run is not a statistical capacity claim.
+
+Edit probes are reachable on the **measurement-only, not-for-merge** branch
+`codex/perf19-baseline-probe`: [first caption edit](https://github.com/tadoEng/egui_test/commit/1988f0cb5889c65f9a8f3cff5f57380dbc8e2edc)
+and [second caption edit](https://github.com/tadoEng/egui_test/commit/df35ba9799a4a41116dec8bc6abc866173975ce0).
+Only the single Model Explorer heading changes. Reviewed implementation branches are untouched.
+
+The matching backend cold/no-op check phase is running. No baseline/backend ratio, Release
+cost, startup/readiness or Tauri comparison is accepted from the baseline phase alone.
+
 - Dependency roots and CRT directive chain: **PASS for inspected source/artifacts**.
 - Integrated first `check --all-targets --all-features --timings`: **PASS**, warm cache with
   graph changes; not cold or a matched comparison. Detailed measurements are collected separately.
-- Cold/warm/UI-edit/backend-edit timings, Release size/startup, matched Tauri/CLI: **PENDING**.
+- Baseline cold-target/no-op/UI-edit compiler checks: **PASS for the recorded runs**, comparison incomplete.
+- Matching backend, Release size/startup, matched Tauri/CLI: **PENDING**.
 - Runtime responsiveness, cancellation/join and packaged CRT policy: **NOT VERIFIED / HOLD**.
 - Overall PERF-02 and migration choice: **PARTIAL**. Do not close #19 or infer migration readiness.
