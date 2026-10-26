@@ -2,7 +2,9 @@
 
 Assessment: **PARTIAL**. This slice adds a native-only optional adapter and
 explicit CLI probe, not a frontend migration or a complete native workbench.
-Base: PR #3 head `61f6b74adbbd38255a5736fb0de7f432a3e82cd4`.
+Original base: PR #3 head `61f6b74adbbd38255a5736fb0de7f432a3e82cd4`.
+The review integration includes current main `aa28552a23da0e9983ed768ba3e1ccaee7937baa`
+and its merged WebView #17, preserving both optional features in one lockfile.
 Backend source remains read-only at
 `9eb1c8792a1d41f3f81c60428afe89f1655782ba`.
 
@@ -90,7 +92,7 @@ broader criteria.
 
 ## Dependency and Windows build evidence
 
-All EtabExtension git records use **one SHA** and Cargo.lock. The current
+All EtabExtension git records use **one SHA** and Cargo.lock. The original
 cross-platform lockfile contains **967 package records**, versus **464** in the
 PR #3 baseline: **503 additional records**. Existing baseline name/version
 records remain present; this is an integration closure, not a blanket upgrade.
@@ -141,14 +143,38 @@ The unconditional dependency closure is a **migration-economics risk**, not a
 reason to replace authoritative APIs. A production strategy still requires
 matched baseline measurements of Release size, startup, RSS and build cost.
 The observations above are not those matched measurements. Combined dependency
-graphs and feature checks with renderer PR #16 and WebView PR #17 remain open
-until an integration branch exists; separate branch gates cannot prove that
-combination. No backend feature split, pin change or upstream edit is implied.
+graphs and feature checks cannot be inferred from separate green branches.
+The current-main integration now includes WebView PR #17 and both
+`native_backend` / `webview` features; the exact-head follow-up result belongs
+in this PR's review record. Renderer PR #16 remains a separate integration.
+No backend feature split, pin change or upstream edit is implied.
 
 Cancellation, explicit worker join and shutdown remain open in
 [#8](https://github.com/tadoEng/egui_test/issues/8). No review comment or passing
 test closes that lifecycle requirement. INT-01 remains **PARTIAL** and this PR
 remains draft pending independent acceptance and explicit owner merge approval.
+
+The original verification JSON and dependency graph describe the pre-main
+`6336023` implementation/lockfile. Keep that historical evidence distinct from
+the integrated lockfile. Resolving the WebView closure retained the backend pin
+and existing runtime code, added its target-specific dependencies and selected
+older `toml` 0.8 / `toml_datetime` 0.6 records for cross-platform resolution.
+Wry's Linux GTK/glib macro closure pins `toml_datetime = 0.6.3` through
+`proc-macro-crate` 2.0.2, conflicting with the previous `toml` 0.8.23 requirement
+for 0.6.11. The single resolution selects `toml` 0.8.2, which also participates
+in Typst's native Windows graph. This is an actual integration change requiring
+the combined checks, not an isolated Linux-only record change. A precise offline
+request to retain 0.8.23 reproduced the conflicting constraints. Windows plus
+WASM tests do not certify Linux/macOS support.
+
+The dependency-cost/CRT investigation and interface-choice ADR belong in the
+separate [PERF-02 #19](https://github.com/tadoEng/egui_test/issues/19) draft. The
+cached V8 native archive requests `libcmt.lib`, whereas other MSVC native archives
+request `MSVCRT`; the source V8 build script additionally requests `msvcprt` in
+the current feature configuration. This establishes a concrete conflicting
+directive chain, not a validated allocator/CRT packaging policy. No warning is
+suppressed; packaged Release acceptance stays on hold pending compatible native
+artifacts and reviewed boundary/lifecycle evidence.
 
 Offline resolution initially lacked a newer non-yanked spin release in the
 local index; online locked resolution/cache population resolved that environment

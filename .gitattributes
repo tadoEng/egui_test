@@ -1,0 +1,2 @@
+# Preserve the exact verified Apache distribution bytes on Windows checkouts.
+assets/vendor/echarts/echarts.min.js -text

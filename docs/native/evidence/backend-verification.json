@@ -1,4 +1,5 @@
 {
+  "evidence_scope": "Original pre-main integration at runtime commit 6336023c37777ee9c98fb086cbe78aad498063f9; source and lockfile hashes below are historical, not the later WebView-integrated lockfile",
   "date_local": "2026-10-26",
   "baseline": "61f6b74adbbd38255a5736fb0de7f432a3e82cd4",
   "backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
