@@ -1,0 +1,56 @@
+{
+  "assessment": "PASS",
+  "fixture": "LAB-CACHED-STYLE-01-r1",
+  "cases": [
+    {
+      "width": 1320,
+      "browser_pixel_ratio": 1,
+      "assessment": "PASS"
+    },
+    {
+      "width": 760,
+      "browser_pixel_ratio": 1,
+      "assessment": "PASS"
+    },
+    {
+      "width": 420,
+      "browser_pixel_ratio": 1,
+      "assessment": "PASS"
+    },
+    {
+      "width": 1320,
+      "browser_pixel_ratio": 1.25,
+      "assessment": "PASS"
+    },
+    {
+      "width": 760,
+      "browser_pixel_ratio": 1.25,
+      "assessment": "PASS"
+    },
+    {
+      "width": 420,
+      "browser_pixel_ratio": 1.25,
+      "assessment": "PASS"
+    },
+    {
+      "width": 1320,
+      "browser_pixel_ratio": 1.5,
+      "assessment": "PASS"
+    },
+    {
+      "width": 760,
+      "browser_pixel_ratio": 1.5,
+      "assessment": "PASS"
+    },
+    {
+      "width": 420,
+      "browser_pixel_ratio": 1.5,
+      "assessment": "PASS"
+    }
+  ],
+  "scope": "Owned headless Chromium presentation/semantic events only; no private input, physical Windows DPI/input, native WebView, analysis parity or SDK lifecycle claim",
+  "values_order_null_signs_unchanged": true,
+  "selected_story_retains_zoom_legend_limit": true,
+  "headless_point_selection_message_checked": true,
+  "owned_browser_exit_observed": true
+}

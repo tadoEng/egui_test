@@ -47,7 +47,7 @@ if (publicArg) {
         await page.setViewportSize({ width, height: 700 });
         await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
         const value = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth,
-          drift: charts.drift.getOption().series.map(s => s.data), shear: charts.shear.getOption().series[0].data,
+          drift: charts.drift.getOption().series.filter(s => s.id !== 'stored-reference').map(s => s.data), shear: charts.shear.getOption().series[0].data,
           inverse: charts.drift.getOption().yAxis[0].inverse,
           drift_axis_extent: charts.drift.getModel().getComponent('xAxis').axis.scale.getExtent(),
           canvas: Object.values(charts).map(c => c.getWidth()) }));

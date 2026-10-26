@@ -1,0 +1,22 @@
+{
+  "assessment": "PASS",
+  "scope": "Independently authored cached-packet HTML only; no private input, native window, analysis or SDK lifecycle claim",
+  "native_public_packet_consumed": true,
+  "cases": [
+    {
+      "width": 1000,
+      "assessment": "PASS"
+    },
+    {
+      "width": 420,
+      "assessment": "PASS"
+    },
+    {
+      "width": 832,
+      "assessment": "PASS"
+    }
+  ],
+  "signed_values_and_nulls_preserved": true,
+  "stale_packet_refused": true,
+  "owned_browser_exit_observed": true
+}
