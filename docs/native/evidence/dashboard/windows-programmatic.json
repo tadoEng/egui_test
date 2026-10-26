@@ -1,0 +1,37 @@
+{
+  "source_commit": "26d6e7e4ac0f41a6492e99f720f3eda4fc334c39",
+  "profile": "dev root unoptimized; dependencies opt-level2; debug0; jobs1",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "powershell": "7.6.5",
+  "os": "Microsoft Windows NT 10.0.26300.0",
+  "test_executions": 58,
+  "new_distinct_dashboard_tests": 7,
+  "shared_regression_duplicate_executions": 10,
+  "ignored_optin_gpu_tests": 2,
+  "explicit_offscreen_gpu_probe": "PASS: NVIDIA GeForce RTX 3050 Ti Laptop GPU / Vulkan / driver591.74",
+  "offscreen_png_sha256": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2",
+  "gate_log_sha256": "64fe2f1d2e1d130fb96a077777c59b489f5bea9fc09ce377956dece06d7a422b",
+  "dashboard_report_sha256": "f3ee614368ddd5c66b13ae871da99617aa412f867c2d4651f07b4b1821542282",
+  "stage_a_report_sha256": "af8af229be9e68a84bf701f2b63ea9d9ad6a7d29624d6f0bc6c02617f1632f9e",
+  "artifacts": [
+    {
+      "artifact": "debug/examples/native_dashboard.exe",
+      "bytes": 25111040,
+      "sha256": "7fb6c358c6c2d4f3e379c7a2174b18650701c24be16ee9b9b0e160b0e4e351b2"
+    },
+    {
+      "artifact": "debug/examples/native_renderer.exe",
+      "bytes": 21032960,
+      "sha256": "5d616509701eebda1de819daab6e73c743e0cc674295defec524d88b3643bfb7"
+    },
+    {
+      "artifact": "debug/examples/webview_stage_a.exe",
+      "bytes": 24455680,
+      "sha256": "728ed99c2f331dd447e141f5aedab5e2b88abc9809a0b3b3fc5d21dd727a512c"
+    }
+  ],
+  "assessment": "PASS recorded programmatic checks; PARTIAL manual/native presentation/lifecycle/performance/engineering acceptance",
+  "manual_input_tested": false,
+  "network_capture_performed": false
+}

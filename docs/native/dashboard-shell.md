@@ -1,6 +1,6 @@
 # DASH-01 first composite host
 
-Issue [#28](https://github.com/tadoEng/egui_test/issues/28), base renderer-main `edab698616d4bee13971c50dcdb0811e26b3a458`. **PARTIAL experiment**, not a migration decision. No backend, project opening, persistence or ETABS/COM is used. The default run opens a visible Windows host; test mode is an internally hidden, authored fixture selfsmoke. Computer Use is not part of this work.
+Issue [#28](https://github.com/tadoEng/egui_test/issues/28), base renderer-main `edab698616d4bee13971c50dcdb0811e26b3a458`. **PARTIAL experiment**, not a migration decision. No backend, project opening, persistence or ETABS automation is used. The default run opens a visible Windows host; test mode is an internally hidden, authored fixture selfsmoke. Computer Use is not part of this work.
 
 ```powershell
 cargo run --release --locked --offline --features native-renderer,webview --example native_dashboard
@@ -40,4 +40,10 @@ The optional GPU probe validates the shared depth/buffer implementation offscree
 
 Manual owner checks once the visible build is reviewable: move/resize splitters and window; hover/legend/wheel/pan both charts; switch A/B/X/Y/units/range and compare table/plots/KPIs; select stories both directions; Escape/keyboard focus; hide/destroy/reopen charts; minimize/restore; repeat at100/125/150% DPI and across monitors; open overlapping native UI and record child-HWND occlusion. Record failures as limitations. No automatic script or screenshot is a substitute for these observations.
 
-Dense1/4/12-chart modes, 10k/100k chart points, real docking/float, 20× lifecycle/RSS measurements, device recovery, latency quantiles, runtime HTTP capture, Tauri comparisons and all migration gates remain open. Initial source/compile/tests and Windows evidence will be attached to the draft PR; no acceptance inferred from this document.
+Child creation/recreation uses the existing synchronous Wry UI-thread SDK boundary; no nonblocking startup or native responsiveness claim is made. There is one native parent window plus normal WebView2 runtime subprocesses, not one total OS process.
+
+Code source `26d6e7e` passed full `check.ps1 -Offline`: fmt, strict Clippy, native tests/docs and all-feature WASM. **58 test executions** include 10 duplicated shared regressions across the two example binaries; there are **7 distinct new dashboard tests** (six fixture/protocol cases and one embedded-template case). Both opt-in GPU tests are ignored by the standard workflow; one native-renderer offscreen test was explicitly executed and PASS on RTX3050Ti/Vulkan driver591.74. Fresh64×64 depth readback was inspected (near red square, black background), SHA256 `e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2`; it is not a dashboard screenshot.
+
+The owned hidden dashboard selfsmoke PASS covers two actual ECharts instances, 69→3 rows/units/case/direction update, selected-story59 Rust→chart readback, one rejected stale generation, current chart IPC selection11 and one WebView destroy/recreate restoring state. Refactored Stage A selfsmoke also PASS. WebView2=156.0.4314.42. Reports/source/binary identities are in [the programmatic evidence](evidence/dashboard/windows-programmatic.json); no raw local paths/logs were uploaded. These executions used Debug binaries with optimized dependencies and are not Release performance observations. A guarded Release build is a separate pending verification. Filesystem incremental-cache hard-link fallback warnings remain visible; no source lint or CRT warning suppressions.
+
+Dense1/4/12-chart modes, 10k/100k chart points, real docking/float, 20× lifecycle/RSS measurements, device recovery, latency quantiles, runtime HTTP capture, Tauri comparisons and all migration gates remain open. **PASS for recorded programmatic checks; PARTIAL for DASH-01**, pending independent review and actual Windows input/presentation evidence.
