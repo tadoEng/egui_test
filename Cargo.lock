@@ -1189,12 +1189,15 @@ name = "eframe_template"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "bytemuck",
  "eframe",
  "egui",
  "egui_kittest",
  "env_logger",
  "ext-e2k",
+ "image",
  "log",
+ "pollster",
  "serde",
  "serde_json",
  "wasm-bindgen-futures",

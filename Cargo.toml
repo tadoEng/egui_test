@@ -23,8 +23,10 @@ serde_json = { version = "1.0.145", optional = true }
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+bytemuck = { version = "1.25.2", features = ["derive"], optional = true }
 env_logger = "0.11.11"
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
+pollster = { version = "1.0.0", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 base64 = { version = "0.22.1", optional = true }
@@ -32,6 +34,7 @@ wry = { version = "=0.55.1", optional = true }
 
 [features]
 e2k = ["dep:ext-e2k"]
+native-renderer = ["dep:bytemuck", "dep:pollster"]
 webview = ["dep:base64", "dep:serde_json", "dep:wry"]
 
 [[example]]
@@ -42,6 +45,11 @@ required-features = ["webview"]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 # Keep toolbar icons available without depending on installed system fonts in tests.
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+[[example]]
+name = "native_renderer"
+required-features = ["native-renderer"]
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]
