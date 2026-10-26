@@ -1,0 +1,512 @@
+{
+  "assessment": "PASS",
+  "scope": "Headless Chromium HTML resize/layout only; not native WebView2/physical input/DPI proof",
+  "baseline": "9f1e27c92a1d31c7f069331a65f588f8aa6c97ef",
+  "source_commit": "f0946d6142b718ef5ab912ba2d44d6816e4714d3",
+  "html_sha256": "42fbe83e469daadd56e4198da052de13be22a66ca7cf300ae37218bdeed255b7",
+  "playwright": "1.62.1",
+  "browser": "151.0.7922.34",
+  "before": {
+    "scale": 1,
+    "layouts": [
+      {
+        "width": 1100,
+        "height": 676,
+        "document_width": 1100,
+        "document_height": 677,
+        "plots": [
+          {
+            "kind": "drift",
+            "dom": {
+              "x": 0,
+              "y": 31,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          },
+          {
+            "kind": "shear",
+            "dom": {
+              "x": 0,
+              "y": 353.5,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          }
+        ]
+      },
+      {
+        "width": 832,
+        "height": 676,
+        "document_width": 1100,
+        "document_height": 677,
+        "plots": [
+          {
+            "kind": "drift",
+            "dom": {
+              "x": 0,
+              "y": 31,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          },
+          {
+            "kind": "shear",
+            "dom": {
+              "x": 0,
+              "y": 353.5,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          }
+        ]
+      },
+      {
+        "width": 420,
+        "height": 440,
+        "document_width": 1100,
+        "document_height": 441,
+        "plots": [
+          {
+            "kind": "drift",
+            "dom": {
+              "x": 0,
+              "y": 31,
+              "width": 1100,
+              "height": 204.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          },
+          {
+            "kind": "shear",
+            "dom": {
+              "x": 0,
+              "y": 235.5,
+              "width": 1100,
+              "height": 204.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          }
+        ]
+      },
+      {
+        "width": 900,
+        "height": 676,
+        "document_width": 1100,
+        "document_height": 677,
+        "plots": [
+          {
+            "kind": "drift",
+            "dom": {
+              "x": 0,
+              "y": 31,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          },
+          {
+            "kind": "shear",
+            "dom": {
+              "x": 0,
+              "y": 353.5,
+              "width": 1100,
+              "height": 322.5
+            },
+            "canvas_width": 1100,
+            "title_story_overlap": true
+          }
+        ]
+      }
+    ]
+  },
+  "after": [
+    {
+      "scale": 1,
+      "layouts": [
+        {
+          "width": 1100,
+          "height": 676,
+          "document_width": 1100,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 832,
+          "height": 676,
+          "document_width": 832,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 420,
+          "height": 440,
+          "document_width": 420,
+          "document_height": 440,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 235.5,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 900,
+          "height": 676,
+          "document_width": 900,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scale": 1.25,
+      "layouts": [
+        {
+          "width": 1100,
+          "height": 676,
+          "document_width": 1100,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 832,
+          "height": 676,
+          "document_width": 832,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 420,
+          "height": 440,
+          "document_width": 420,
+          "document_height": 440,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 235.5,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 900,
+          "height": 676,
+          "document_width": 900,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scale": 1.5,
+      "layouts": [
+        {
+          "width": 1100,
+          "height": 676,
+          "document_width": 1100,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 1100,
+                "height": 322.5
+              },
+              "canvas_width": 1100,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 832,
+          "height": 676,
+          "document_width": 832,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 832,
+                "height": 322.5
+              },
+              "canvas_width": 832,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 420,
+          "height": 440,
+          "document_width": 420,
+          "document_height": 440,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 235.5,
+                "width": 420,
+                "height": 204.5
+              },
+              "canvas_width": 420,
+              "title_story_overlap": false
+            }
+          ]
+        },
+        {
+          "width": 900,
+          "height": 676,
+          "document_width": 900,
+          "document_height": 676,
+          "plots": [
+            {
+              "kind": "drift",
+              "dom": {
+                "x": 0,
+                "y": 31,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            },
+            {
+              "kind": "shear",
+              "dom": {
+                "x": 0,
+                "y": 353.5,
+                "width": 900,
+                "height": 322.5
+              },
+              "canvas_width": 900,
+              "title_story_overlap": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "owned_browser_exit_observed": true
+}
