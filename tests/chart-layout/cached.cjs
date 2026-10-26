@@ -16,7 +16,9 @@ const publicArg = process.argv.find(arg => arg.startsWith('--public-probe='));
 if (publicArg) {
   const directory = publicArg.slice('--public-probe='.length);
   const status = JSON.parse(fs.readFileSync(path.join(directory, 'status.json'), 'utf8'));
-  assert.equal(status.fixture, 'LAB-CACHED-DTO-01-r1');
+  assert.equal(status.fixture, 'LAB-CACHED-DTO-01-gap-r1');
+  assert.equal(status.assessment, 'PASS');
+  assert.equal(status.analysis_freshness_verified, false);
   assert.equal(status.inputs_unchanged, true);
   packet = JSON.parse(fs.readFileSync(path.join(directory, 'packet.json'), 'utf8'));
   assert.equal(packet.source, status.source);
@@ -50,7 +52,7 @@ if (publicArg) {
           drift_axis_extent: charts.drift.getModel().getComponent('xAxis').axis.scale.getExtent(),
           canvas: Object.values(charts).map(c => c.getWidth()) }));
         assert.ok(value.scroll <= width && value.canvas.every(w => w <= width));
-        assert.deepEqual(value.drift, [[[0.002, 'Roof'], [0.001, 'L1']], [[-0.0025, 'Roof'], [null, 'L1']]]);
+        assert.deepEqual(value.drift, [[[0.002, 'Roof'], [publicArg ? null : 0.001, 'L1']], [[-0.0025, 'Roof'], [null, 'L1']]]);
         assert.deepEqual(value.shear, [[7, 'Roof'], [-2, 'L1']]);
         assert.equal(value.inverse, true);
         assert.ok(value.drift_axis_extent[1] >= packet.drift.reference, 'stored reference clipped outside the visible domain');

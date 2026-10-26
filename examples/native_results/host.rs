@@ -30,7 +30,15 @@ fn failure(msg: impl Into<String>) -> eframe::Error {
 // This mode accepts NO source path: only the embedded independently authored
 // fixture can enter its reports. Private artifacts have no export mode.
 fn public_fixture_probe() -> Result<(), String> {
-    let (input, _) = crate::fixture::fixture().map_err(|e| e.to_string())?;
+    let (input, mut calc) = crate::fixture::fixture().map_err(|e| e.to_string())?;
+    // Authored gap variant: omit L1's drift row before reading the fixture.
+    // Both drift series must retain that story as a gap; shear stays signed.
+    calc["driftWind"]["x"]["rows"] = serde_json::json!([calc["driftWind"]["x"]["rows"][1].clone()]);
+    std::fs::write(
+        input.path().join("results/calc_output.json"),
+        serde_json::to_vec(&calc).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
     let paths = [
         "manifest.json",
         "results/calc_output.json",
@@ -61,7 +69,7 @@ fn public_fixture_probe() -> Result<(), String> {
         serde_json::to_vec_pretty(&packet).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    let status = serde_json::json!({"assessment":"PASS","fixture":"LAB-CACHED-DTO-01-r1","inputs_unchanged":true,"source":snapshot.fingerprint,"analysis_freshness_verified":false,"scope":"Owned authored fixture -> authoritative DTOs -> native Rust chart packet; no GUI or private input"});
+    let status = serde_json::json!({"assessment":"PASS","fixture":"LAB-CACHED-DTO-01-gap-r1","inputs_unchanged":true,"source":snapshot.fingerprint,"analysis_freshness_verified":false,"scope":"Owned authored gap fixture -> authoritative DTOs -> native Rust chart packet; no GUI or private input"});
     std::fs::write(
         report.path().join("status.json"),
         serde_json::to_vec_pretty(&status).map_err(|e| e.to_string())?,
