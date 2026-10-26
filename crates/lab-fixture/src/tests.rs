@@ -344,7 +344,7 @@ fn malformed_shells_and_unsupported_openings_are_refused() {
                 if let Geometry::Shell { normal, .. } = g {
                     *normal = normal.map(|v| -v);
                 }
-            })
+            });
         },
         FixtureError::IncorrectNormal(key),
     );
@@ -354,7 +354,7 @@ fn malformed_shells_and_unsupported_openings_are_refused() {
                 if let Geometry::Shell { boundary, .. } = g {
                     boundary[1] = boundary[0];
                 }
-            })
+            });
         },
         FixtureError::DegenerateGeometry(key),
     );
@@ -364,7 +364,7 @@ fn malformed_shells_and_unsupported_openings_are_refused() {
                 if let Geometry::Shell { boundary, .. } = g {
                     boundary[3][1] += 0.2;
                 }
-            })
+            });
         },
         FixtureError::NonPlanarOrConcave(key),
     );
@@ -374,7 +374,7 @@ fn malformed_shells_and_unsupported_openings_are_refused() {
                 if let Geometry::Shell { openings, .. } = g {
                     openings.push(vec![[2.5, 2.0, 1.0], [3.5, 2.0, 1.0], [3.5, 2.0, 2.0]]);
                 }
-            })
+            });
         },
         FixtureError::UnsupportedOpening(key),
     );
@@ -384,8 +384,8 @@ fn malformed_shells_and_unsupported_openings_are_refused() {
                 *g = Geometry::Prism(Bounds {
                     min: [0.0; 3],
                     max: [1.0; 3],
-                })
-            })
+                });
+            });
         },
         FixtureError::KindGeometryMismatch(key),
     );

@@ -149,26 +149,30 @@ pub(crate) fn fixture(preset: Preset) -> Result<Fixture, FixtureError> {
             false,
             3.0,
         ));
-        Some(OcclusionOracle {
-            ray_origin: [0.0, -10.0, 1.5],
-            ray_direction: [0.0, 1.0, 0.0],
-            near: LabId {
-                kind: Kind::Column,
-                story: StoryId(1),
-                slot: 0,
-            },
-            far: LabId {
-                kind: Kind::Column,
-                story: StoryId(1),
-                slot: 2,
-            },
-            near_position: [0.0, -0.2, 1.5],
-            far_position: [0.0, 3.8, 1.5],
-        })
+        Some(truth_occlusion())
     } else {
         None
     };
     validate(preset, entities, stories, occlusion)
+}
+
+fn truth_occlusion() -> OcclusionOracle {
+    OcclusionOracle {
+        ray_origin: [0.0, -10.0, 1.5],
+        ray_direction: [0.0, 1.0, 0.0],
+        near: LabId {
+            kind: Kind::Column,
+            story: StoryId(1),
+            slot: 0,
+        },
+        far: LabId {
+            kind: Kind::Column,
+            story: StoryId(1),
+            slot: 2,
+        },
+        near_position: [0.0, -0.2, 1.5],
+        far_position: [0.0, 3.8, 1.5],
+    }
 }
 
 fn grid(nx: u16, ny: u16, levels: u16) -> (Vec<Entity>, Vec<Story>) {
