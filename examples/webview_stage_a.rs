@@ -346,7 +346,23 @@ mod windows {
                 })
                 .with_ipc_handler(move |request| {
                     if is_chart_ready(request.body()) {
-                        load_signal.store(true, Ordering::Release);
+                        // Measurement-only probe: timestamp the first validated ready IPC,
+                        // independently of the later selection round trips and shutdown.
+                        if !load_signal.swap(true, Ordering::AcqRel)
+                            && let Some(path) = std::env::var_os("WEBVIEW_READY_REPORT")
+                            && let Ok(elapsed) =
+                                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+                        {
+                            let marker = serde_json::json!({
+                                "version": 1,
+                                "fixture": "stage-a-synthetic",
+                                "event": "rust_observed_chart_ready",
+                                "ready_at_unix_ms": elapsed.as_millis(),
+                            });
+                            if std::fs::write(path, marker.to_string()).is_err() {
+                                log::error!("startup readiness marker could not be written");
+                            }
+                        }
                     } else if request.body().len() <= 1024 {
                         drop(sender.try_send(request.body().clone()));
                     }
