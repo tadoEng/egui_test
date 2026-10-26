@@ -7,7 +7,8 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[a-z0-9-]+$')][string]$Label,
     [Parameter(Mandatory)][string[]]$CargoArguments,
     [switch]$RequireEmptyTarget,
-    [int]$MinimumFreeGiB = 6
+    [int]$MinimumFreeGiB = 6,
+    [ValidateRange(0, 1048576)][int]$MinimumAvailableMemoryMiB = 2048
 )
 
 $ErrorActionPreference = 'Stop'
@@ -75,6 +76,10 @@ try {
     $hostInfo.cpu = (Get-CimInstance Win32_Processor -Property Name | Select-Object -First 1).Name.Trim()
     $hostInfo.physical_memory_bytes = [long](Get-CimInstance Win32_ComputerSystem -Property TotalPhysicalMemory).TotalPhysicalMemory
 } catch { throw 'Cannot record controlled Windows host inventory; check CIM read access.' }
+$initialAvailableMemory = [long](Get-CimInstance Win32_OperatingSystem -Property FreePhysicalMemory).FreePhysicalMemory * 1KB
+if ($initialAvailableMemory -lt ($MinimumAvailableMemoryMiB * 1MB)) {
+    throw 'Insufficient available system memory for a safe measured run.'
+}
 $runnerHash = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $beforeBytes = Get-TargetBytes
 $beforeFree = Get-FreeBytes
@@ -115,6 +120,7 @@ $stderr = $process.StandardError.BaseStream.CopyToAsync($stderrFile)
 [int]$samples = 0
 $samplingError = $null
 $stoppedForDisk = $false
+$stoppedForMemory = $false
 try {
     while (-not $process.HasExited) {
         if ((Get-FreeBytes) -lt ($MinimumFreeGiB * 1GB)) {
@@ -146,8 +152,14 @@ try {
             $peakSumWorkingSet = [Math]::Max($peakSumWorkingSet, $working)
             $peakSumPrivate = [Math]::Max($peakSumPrivate, $private)
             $os = Get-CimInstance Win32_OperatingSystem -Property FreePhysicalMemory
-            $minimumAvailableMemory = [Math]::Min($minimumAvailableMemory, [long]$os.FreePhysicalMemory * 1KB)
+            $availableMemory = [long]$os.FreePhysicalMemory * 1KB
+            $minimumAvailableMemory = [Math]::Min($minimumAvailableMemory, $availableMemory)
             $samples++
+            if ($availableMemory -lt ($MinimumAvailableMemoryMiB * 1MB) -and -not $process.HasExited) {
+                $stoppedForMemory = $true
+                $process.Kill($true) # Only the owned build tree, never user applications.
+                break
+            }
         } catch { $samplingError = $_.Exception.Message }
         Start-Sleep -Milliseconds 1000
     }
@@ -190,6 +202,11 @@ try {
         runner_observed_seconds = $timer.Elapsed.TotalSeconds
         exit_code = $process.ExitCode
         stopped_for_disk = $stoppedForDisk
+        stopped_for_memory = $stoppedForMemory
+        resource_policy = @{
+            minimum_free_disk_bytes = $MinimumFreeGiB * 1GB
+            minimum_available_system_memory_bytes = $MinimumAvailableMemoryMiB * 1MB
+        }
         process_tree_samples = $samples
         sampled_peak_sum_working_set_bytes = $(if ($peakSumWorkingSet) { $peakSumWorkingSet } else { $null })
         sampled_peak_sum_private_bytes = $(if ($peakSumPrivate) { $peakSumPrivate } else { $null })
@@ -207,4 +224,5 @@ try {
     $process.Dispose()
 }
 Get-Content -LiteralPath $summaryPath -Raw
-if ($receipt.exit_code -ne 0 -or -not $receipt.source_inputs_unchanged) { exit 1 }
+if ($receipt.exit_code -ne 0 -or -not $receipt.source_inputs_unchanged -or
+    $receipt.stopped_for_disk -or $receipt.stopped_for_memory) { exit 1 }

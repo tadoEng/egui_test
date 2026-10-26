@@ -91,7 +91,11 @@ fixture parity is not independent CLI/Tauri/engineering parity.
 `scripts/measure-cargo.ps1` launches only its own Cargo process with argument-list escaping,
 collects `--timings`, elapsed time, target size/free disk and approximate one-second process-tree
 working/private memory. It stops only its own build tree if target-drive headroom falls below
-the threshold. It never deletes caches or follows target reparse points when counting bytes.
+the threshold. For the upcoming Release phase, it additionally enforces a 2 GiB system-memory
+headroom guard at launch and during sampling, with a distinct stopped-for-memory outcome.
+It never closes user applications, deletes caches or follows target reparse points when counting bytes.
+The completed compiler-check phase used the prior harness without that added guard; both
+Release configurations use the revised harness and record its hash/resource thresholds.
 It requires **PowerShell 7+**; Windows PowerShell 5.1 is unsupported. Receipts record
 PowerShell/.NET, Cargo/Rust and non-identifying Windows CPU/architecture/RAM inventory.
 Controlled runs reject all tracked edits and non-ignored untracked files, plus ignored files

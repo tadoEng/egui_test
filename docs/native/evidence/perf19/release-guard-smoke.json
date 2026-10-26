@@ -1,0 +1,72 @@
+{
+  "label": "release-guard-metadata-smoke",
+  "measurement_script_sha256": "efbec387209165f18d4232dc77385f569e031bbf0cc4c6196191e4f14675140c",
+  "source_commit": "cf4fbb218da1e62cf767a17a35e49f9c4f48e50e",
+  "source_tree": "46f48d4276af04f8f465373227dacdd1be0c1d19",
+  "source_commit_after": "cf4fbb218da1e62cf767a17a35e49f9c4f48e50e",
+  "source_commit_unchanged": true,
+  "controlled_inputs_clean_before": true,
+  "controlled_inputs_clean_after": true,
+  "source_inputs_unchanged": true,
+  "lockfile_sha256_before": "7ff743f3151d9fbffc540b342dfbbab2068bab77a26a1e766acf35815be1a75f",
+  "lockfile_sha256_after": "7ff743f3151d9fbffc540b342dfbbab2068bab77a26a1e766acf35815be1a75f",
+  "started_utc": "2026-10-26T14:50:40.3847498+07:00",
+  "rust": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "cargo": "cargo 1.99.1 (5f94df478 2026-08-27)",
+  "powershell": "7.6.5",
+  "dotnet": ".NET 10.0.11",
+  "host": {
+    "os": "Microsoft Windows NT 10.0.26300.0",
+    "architecture": "X64",
+    "logical_processors": 12,
+    "cpu": "AMD Ryzen 5 6600H with Radeon Graphics",
+    "physical_memory_bytes": 16312721408
+  },
+  "arguments": [
+    "metadata",
+    "--locked",
+    "--offline",
+    "--no-deps",
+    "--format-version",
+    "1"
+  ],
+  "target_directory": "<workspace>/target/backend-build",
+  "fresh_target_required": false,
+  "settings": {
+    "CARGO_TARGET_DIR": "<workspace>/target/backend-build",
+    "CARGO_PROFILE_RELEASE_OPT_LEVEL": "2",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_PROFILE_RELEASE_LTO": "false",
+    "RUST_MIN_STACK": "268435456",
+    "CARGO_PROFILE_RELEASE_INCREMENTAL": "false",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_BUILD_JOBS": "1"
+  },
+  "elapsed_seconds": 0.0832365,
+  "runner_observed_seconds": 1.1724426,
+  "exit_code": 0,
+  "stopped_for_disk": false,
+  "stopped_for_memory": false,
+  "resource_policy": {
+    "minimum_available_system_memory_bytes": 2147483648.0,
+    "minimum_free_disk_bytes": 6442450944.0
+  },
+  "process_tree_samples": 1,
+  "sampled_peak_sum_working_set_bytes": null,
+  "sampled_peak_sum_private_bytes": null,
+  "minimum_available_system_memory_bytes": 6781759488,
+  "sampling_error": null,
+  "target_bytes_before": 8146295244,
+  "target_bytes_after": 8146295244,
+  "free_bytes_before": 6880882688,
+  "free_bytes_after": 6880874496,
+  "stdout_sha256": "670d0deeb5fad19d15a63dddc1d73d813ffe1cfbbbe024d9bfb57b84fe2a1595",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "caveat": "Approximate one-second process-tree samples; short-lived children may be missed. Working sets can double-count shared pages. Global registry/source and OS caches are not cleared. Raw local logs/paths require review before publication.",
+  "memory_preflight_check": {
+    "requested_headroom_mib": 1048576,
+    "rejected_before_cargo": true,
+    "no_memory_pressure_created": true
+  }
+}
