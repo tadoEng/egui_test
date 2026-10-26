@@ -936,12 +936,15 @@ dependencies = [
 name = "eframe_template"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "eframe",
  "egui",
  "egui_kittest",
  "env_logger",
  "ext-e2k",
+ "image",
  "log",
+ "pollster",
  "serde",
  "wasm-bindgen-futures",
  "web-sys",
