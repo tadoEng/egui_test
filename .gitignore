@@ -19,3 +19,5 @@ output/playwright/
 *.E2K
 *.edb
 *.EDB
+# Independently authored public REAL-01 fixture; all other model exports stay ignored.
+!assets/fixtures/real01.e2k
