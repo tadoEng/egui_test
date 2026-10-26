@@ -1,4 +1,8 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
 mod app;
-pub use app::TemplateApp;
+#[cfg(all(feature = "e2k", not(target_arch = "wasm32")))]
+mod e2k_import;
+mod scene;
+pub use app::{SceneStats, TemplateApp};
+pub use scene::SyntheticPreset;

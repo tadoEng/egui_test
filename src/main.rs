@@ -6,8 +6,35 @@
 fn main() -> eframe::Result {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
+    let arguments: Vec<_> = std::env::args().skip(1).collect();
+    let invalid =
+        |message: String| eframe::Error::AppCreation(std::io::Error::other(message).into());
+    let startup = match arguments.as_slice() {
+        [] => None,
+        [flag, count] if flag == "--members" => {
+            let preset = match count.as_str() {
+                "48" => eframe_template::SyntheticPreset::Demo,
+                "50000" => eframe_template::SyntheticPreset::FiftyThousand,
+                "100000" => eframe_template::SyntheticPreset::HundredThousand,
+                _ => return Err(invalid("Supported counts: 48, 50000, 100000".into())),
+            };
+            Some(eframe_template::TemplateApp::with_preset(preset))
+        }
+        #[cfg(feature = "e2k")]
+        [flag, path] if flag == "--e2k" => {
+            Some(eframe_template::TemplateApp::from_e2k(path).map_err(invalid)?)
+        }
+        _ => {
+            return Err(invalid(
+                "Usage: --members 50000|100000, or --e2k <file> with --features e2k".into(),
+            ));
+        }
+    };
+
     let native_options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Wgpu,
         viewport: egui::ViewportBuilder::default()
+            .with_app_id("talos-egui-structural-lab")
             .with_inner_size([1200.0, 760.0])
             .with_min_inner_size([780.0, 520.0])
             .with_icon(
@@ -22,7 +49,12 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "TALOS | egui Structural Lab",
         native_options,
-        Box::new(|cc| Ok(Box::new(eframe_template::TemplateApp::new(cc)))),
+        Box::new(move |cc| {
+            cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            Ok(Box::new(
+                startup.unwrap_or_else(|| eframe_template::TemplateApp::new(cc)),
+            ))
+        }),
     )
 }
 

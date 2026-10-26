@@ -11,3 +11,9 @@ target_wasm
 
 # https://github.com/lycheeverse/lychee
 .lycheecache
+
+# Private structural model exports stay outside source control.
+*.e2k
+*.E2K
+*.edb
+*.EDB
