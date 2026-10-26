@@ -2103,6 +2103,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "bytemuck",
  "eframe",
  "egui",
  "egui_kittest",
@@ -2110,7 +2111,9 @@ dependencies = [
  "ext-api",
  "ext-e2k",
  "ext-error",
+ "image",
  "log",
+ "pollster",
  "serde",
  "serde_json",
  "tempfile",

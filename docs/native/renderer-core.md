@@ -1,0 +1,133 @@
+# Native wgpu renderer core
+
+This slice is an independently runnable proof of real GPU 3D rendering hosted by egui. It does
+not replace the existing Painter experiment.
+
+Run it on native Windows with:
+
+```powershell
+cargo run --release --locked --offline --example native_renderer --features native-renderer
+```
+
+The example uses stock eframe/egui-wgpu 0.37 and the already locked wgpu 30.0.1. It creates one
+cached native vertex buffer, index buffer, camera uniform, depth-tested render pipeline and egui
+paint callback. Orbit and wheel zoom update only the uniform. Fit derives the camera target,
+radius and distance from geometry bounds and the limiting horizontal/vertical field of view.
+A vertex-projection regression test covers tall and wide viewports. Eframe owns the native surface and recreates its
+24-bit depth attachment when the window size changes; the callback derives projection aspect
+from its current rectangle.
+
+## Geometry truth table
+
+| Item | Core status | Fidelity statement |
+|---|---|---|
+| Beam | Implemented | Synthetic rectangular prism between endpoints, with flat face normals. It is not an authoritative section shape. |
+| Column | Implemented | Synthetic rectangular prism between endpoints, with flat face normals. It is not an authoritative section shape. |
+| Shell | Implemented | One zero-thickness quadrilateral face with a supplied normal. |
+| World transform | Implemented | Geometry is baked in world coordinates; no per-object transform buffer yet. |
+| Local axes/orientation | Unsupported for source models | Synthetic prism cross axes are derived deterministically from the member line. No ETABS local-axis metadata is consumed. |
+| Story elevation | Synthetic only | Coordinates are authored directly in the deterministic fixture. |
+| Real section dimensions | Unsupported | No section catalogue/profile geometry is consumed. |
+| Insertion/cardinal offsets | Unsupported | No source metadata is consumed or inferred. |
+| End offsets/releases | Unsupported | No source metadata is consumed or inferred. |
+| Shell openings | Unsupported | The shell is a single unperforated quad. |
+
+These limitations are also visible in the example. No result from this fixture is evidence of E2K
+or ETABS geometry fidelity.
+
+## Verification
+
+```powershell
+cargo fmt --check --all
+cargo test --locked --offline --example native_renderer --features native-renderer
+cargo test --locked --offline --example native_renderer --features native-renderer -- --ignored --nocapture
+cargo clippy --locked --offline --example native_renderer --features native-renderer -- -D warnings
+cargo check --locked --offline --all-targets --all-features --target wasm32-unknown-unknown
+```
+
+The example tests verify deterministic vertex/index topology, finite unit normals, valid indices,
+and **every triangle's geometric cross product agrees with every supplied vertex normal**.
+The outward-normal regression covers the complete frame/shell fixture and isolated axis-aligned,
+reversed and skewed prisms, including both sides of the local helper-axis threshold.
+Camera limit/resize math and a native offscreen GPU readback verify that a nearer red face occludes
+a later-drawn blue face. The GPU test also checks that a changed camera/aspect reuses the resident
+vertex buffer, while a changed geometry revision replaces both GPU buffers and its draw count.
+It is ignored by default and must be explicitly invoked; absence of a GPU then
+fails rather than silently passing. It prints the adapter. It is GPU pixel/depth evidence, not a
+native-window capture or Windows interaction test.
+
+The explicit Windows probe passed on **NVIDIA GeForce RTX 3050 Ti Laptop GPU**,
+reported by wgpu as **DiscreteGpu / Vulkan / NVIDIA driver 591.74**, on 2026-10-26.
+The machine has a Ryzen 5 6600H (6 cores/12 logical processors), 16,312,721,408 bytes physical
+RAM, Windows 11 build 26300, and NVIDIA driver 32.0.15.9174. The 64×64 RGBA8 offscreen target
+uses Depth24Plus, one sample, normal depth (clear 1, compare Less). This was a correctness probe;
+no GPU execution time, presentation interval, FPS, or performance result was measured.
+
+`check.ps1 -Offline` passed: formatting, native all-target/all-feature check, strict Clippy,
+23 existing library tests plus 7 renderer CPU tests and 11 merged WebView tests, doc tests and WASM all-target/all-feature
+check. The GPU probe is a separate explicit run (1 passed). The Windows release example built
+at the initial core revision `57c22da` with `--locked --offline` and produced a
+15,776,256-byte EXE. Cargo reported 4m 58s for this
+partly cached build while other tracks were compiling; it is not a controlled clean build-time
+benchmark or a size comparison with another host.
+
+![Synthetic offscreen depth probe: the nearer red face hides the later blue face](depth-probe.png)
+
+To reproduce the optional image, set `NATIVE_GPU_CAPTURE` to a `.png` path before the explicit
+GPU test. This writes synthetic test pixels only. The capture is not a screenshot of a native
+window or of the structural frame example.
+
+## Winding review correction
+
+Review at `57c22da` identified prism triangles winding opposite to their outward normals.
+The new cross-product regression failed on the original implementation, then passed after
+reversing the two cap and four side-face orders. The standalone shell's existing winding
+already agrees with its normal. Rendering remains two-sided for the zero-thickness shell;
+disabling culling does not substitute for geometric orientation correctness.
+
+`MeshData.key` is an explicit **geometry revision**, not an entity ID. This immutable synthetic
+example has one fixed revision. The hardware probe now exercises a second revision with changed
+geometry and index count, verifying replacement rather than camera-only reuse. A future model
+adapter must assign a different revision for each changed immutable mesh; automatic version/key
+derivation and real-model invalidation are still outside this slice.
+
+The implementing parent reran the CPU regressions and explicit GPU probe after this correction.
+These are reproduced test results, not an independent acceptance or Windows presented-frame test.
+
+The integration follow-up includes current main `aa28552a23da0e9983ed768ba3e1ccaee7937baa`
+(merged WebView #17) without rewriting the reviewed history. Both optional `native-renderer`
+and `webview` features share one lockfile and retain native target fences. A tilted shell with
+all three normal components nonzero demonstrates the shell winding convention; an intentionally
+inverted triangle must trigger the same winding assertion. The geometric dot-product threshold
+is `1e-6` for these nondegenerate authored fixtures. These focused cases add no model semantics.
+
+In addition to the full offline workflow, repeat the hardware capture and build both examples
+from this integrated source:
+
+```powershell
+$env:NATIVE_GPU_CAPTURE = Join-Path $PWD 'docs/native/depth-probe.png'
+cargo test --locked --offline --all-features --example native_renderer -- --ignored --nocapture
+Remove-Item Env:NATIVE_GPU_CAPTURE
+cargo build --release --locked --offline --all-features --example native_renderer --example webview_stage_a
+```
+
+Release size and timings at `57c22da` above remain historical; use the exact new commit and
+commands recorded in the PR follow-up for current integration evidence. Offscreen pixels do not
+verify actual OS focus/DPI or native presentation. Integration here composes dependencies and
+tests, not the two example windows into one application.
+
+## Acceptance status for this slice
+
+- **PASS (CPU tests and explicit hardware probe):** synthetic topology/normals/index bounds,
+  camera math at zoom/pitch/aspect limits, native buffer reuse and depth occlusion.
+- **PARTIAL (implemented, Windows interaction NOT TESTED):** callback-hosted structural example,
+  orbit/fit/zoom and resize. These are not accepted from compilation alone.
+- **PARTIAL:** GPU depth/occlusion is covered by offscreen readback. A visible native window is
+  runnable, but Windows capture and manual driver interaction remain separate evidence.
+- **BLOCKED in stock callback scope:** robust device-loss recovery. Stock egui-wgpu 0.37 performs
+  its own queue uploads before custom callbacks and exposes no SolidCraft-style loss state. The
+  vendor patch was intentionally not copied.
+- **NOT TESTED / deferred:** stable entity picking, hidden/filter/behind-camera negative cases,
+  selection highlighting, story isolation, section/clipping planes, production Three.js
+  comparison, GPU timestamps, presented-frame pacing, memory/VRAM and click latency.
+
