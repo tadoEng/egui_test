@@ -1,0 +1,15 @@
+[package]
+name = "lab-e2k-mesh"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+description = "Experimental immutable E2K connectivity to bounded display mesh adapter"
+
+[dependencies]
+ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false }
+lab-fixture = { path = "../lab-fixture" }
+sha2 = "0.10.9"
+
+[lints]
+workspace = true
