@@ -1,8 +1,8 @@
 use crate::{
-    data::{Config, Direction, Packet, Snapshot},
+    data::{Choices, Config, Direction, Packet, Snapshot},
     webview_host::ChildWebView,
 };
-use std::path::PathBuf;
+use std::{io::Write as _, path::PathBuf};
 
 const MARKER: &str = "/*__ECHARTS_RUNTIME__*/";
 #[expect(
@@ -27,9 +27,64 @@ fn failure(msg: impl Into<String>) -> eframe::Error {
     eframe::Error::AppCreation(Box::new(std::io::Error::other(msg.into())))
 }
 
+// This mode accepts NO source path: only the embedded independently authored
+// fixture can enter its reports. Private artifacts have no export mode.
+fn public_fixture_probe() -> Result<(), String> {
+    let (input, _) = crate::fixture::fixture().map_err(|e| e.to_string())?;
+    let paths = [
+        "manifest.json",
+        "results/calc_output.json",
+        "results/source-units.json",
+    ];
+    let before = paths
+        .iter()
+        .map(|p| std::fs::read(input.path().join(p)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    let snapshot = Snapshot::load(input.path())?;
+    let config = snapshot.initial_config(Direction::X)?;
+    let packet = snapshot.packet(&config, 2, Some("Roof".into()))?;
+    let after = paths
+        .iter()
+        .map(|p| std::fs::read(input.path().join(p)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    if before != after {
+        return Err("Public fixture was modified".into());
+    }
+    let report = tempfile::Builder::new()
+        .prefix("egui-cached-public-probe-")
+        .tempdir()
+        .map_err(|e| e.to_string())?;
+    std::fs::write(
+        report.path().join("packet.json"),
+        serde_json::to_vec_pretty(&packet).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let status = serde_json::json!({"assessment":"PASS","fixture":"LAB-CACHED-DTO-01-r1","inputs_unchanged":true,"source":snapshot.fingerprint,"analysis_freshness_verified":false,"scope":"Owned authored fixture -> authoritative DTOs -> native Rust chart packet; no GUI or private input"});
+    std::fs::write(
+        report.path().join("status.json"),
+        serde_json::to_vec_pretty(&status).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let receipt = serde_json::json!({"assessment":"PASS","report_dir":report.path(),"owned_input_dir":input.path()});
+    let mut out = std::io::stdout().lock();
+    out.write_all(receipt.to_string().as_bytes())
+        .and_then(|()| out.write_all(b"\n"))
+        .and_then(|()| out.flush())
+        .map_err(|e| e.to_string())?;
+    let _kept = report.keep();
+    // Input TempDir is removed on return; the caller verifies disappearance and
+    // keeps/copies only the public report before deleting that owned directory.
+    Ok(())
+}
+
 pub(crate) fn run() -> eframe::Result {
     // Explicit artifact input only; no persistence, default project or API context.
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if args.len() == 1 && args[0] == "--public-fixture-probe" {
+        return public_fixture_probe().map_err(failure);
+    }
     let check_only = args.iter().any(|a| a == "--check-only");
     let paths = args
         .iter()
@@ -48,11 +103,16 @@ pub(crate) fn run() -> eframe::Result {
     }
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
+        persist_window: false,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("talos-read-only-cached-results")
             .with_inner_size([1380.0, 900.0]),
         ..Default::default()
     };
+    let choices = [
+        snapshot.choices(Direction::X),
+        snapshot.choices(Direction::Y),
+    ];
     eframe::run_native(
         "TALOS | read-only cached results",
         options,
@@ -67,6 +127,7 @@ pub(crate) fn run() -> eframe::Result {
                 last_sent: None,
                 error: None,
                 rejected: 0,
+                choices,
             }))
         }),
     )
@@ -79,6 +140,7 @@ struct Viewer {
     last_sent: Option<(u64, Option<String>)>,
     error: Option<String>,
     rejected: u64,
+    choices: [Result<Choices, String>; 2],
 }
 impl Viewer {
     fn select(&mut self, story: Option<String>) {
@@ -112,6 +174,9 @@ fn choose(ui: &mut egui::Ui, label: &str, value: &mut String, choices: &[String]
         });
 }
 impl eframe::App for Viewer {
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         for message in self.chart.pending_messages() {
             match self.packet.accept(&message) {
@@ -128,7 +193,7 @@ impl eframe::App for Viewer {
             ui.horizontal_wrapped(|ui|{
                 ui.selectable_value(&mut config.direction,Direction::X,"X");ui.selectable_value(&mut config.direction,Direction::Y,"Y");
                 if config.direction!=self.config.direction && let Ok(initial)=self.snapshot.initial_config(config.direction){config=initial;}
-                if let Ok(choices)=self.snapshot.choices(config.direction){
+                if let Ok(choices)=&self.choices[usize::from(config.direction!=Direction::X)]{
                     choose(ui,"Drift group",&mut config.drift_group,&choices.groups);choose(ui,"Drift case",&mut config.drift_case,&choices.cases);choose(ui,"Shear case",&mut config.shear_case,&choices.forces);
                 }
                 if ui.button("Clear selection").clicked(){self.select(None);}

@@ -58,6 +58,7 @@ egui_kittest = { version = "0.37.0", features = ["eframe"] }
 # Keep toolbar icons available without depending on installed system fonts in tests.
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+tempfile = "3.27.0"
 
 [[example]]
 name = "native_renderer"

@@ -3,6 +3,9 @@
 #[path = "native_results/data.rs"]
 mod data;
 #[cfg(target_os = "windows")]
+#[path = "native_results/fixture.rs"]
+mod fixture;
+#[cfg(target_os = "windows")]
 #[path = "native_results/host.rs"]
 mod host;
 #[cfg(target_os = "windows")]

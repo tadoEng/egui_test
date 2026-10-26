@@ -78,6 +78,9 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
 }
 impl Snapshot {
     pub(crate) fn load(root: &Path) -> Result<Self, String> {
+        let root = root
+            .canonicalize()
+            .map_err(|e| format!("Resolve version directory: {e}"))?;
         if root.join(".partial").exists() {
             return Err("Refusing an incomplete version (.partial)".into());
         }
@@ -86,6 +89,15 @@ impl Snapshot {
             "results/calc_output.json",
             "results/source-units.json",
         ];
+        for relative in paths {
+            let resolved = root
+                .join(relative)
+                .canonicalize()
+                .map_err(|e| format!("Resolve artifact: {e}"))?;
+            if !resolved.starts_with(&root) {
+                return Err("Cached artifact resolves outside the selected directory".into());
+            }
+        }
         let bytes = paths
             .iter()
             .map(|p| read_bounded(&root.join(p)))

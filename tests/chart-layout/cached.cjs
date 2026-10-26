@@ -5,13 +5,24 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(__dirname, '../..');
 const output = path.join(root, 'output/playwright/cached-layout');
-const packet = {
+let packet = {
   version: 1, source: '0'.repeat(64), generation: 2, selected_story: 'Roof',
   drift: { title: 'Cached synthetic wind drift · G · W', unit: 'ratio', stories: ['Roof', 'L1'], reference: 0.01,
     series: [{ name: 'Stored positive envelope', values: [0.002, 0.001] }, { name: 'Stored negative envelope', values: [-0.0025, null] }] },
   shear: { title: 'Cached signed synthetic shear · FX', unit: 'kip', stories: ['Roof', 'L1'], reference: null,
     series: [{ name: 'FX', values: [7, -2] }] }
 };
+const publicArg = process.argv.find(arg => arg.startsWith('--public-probe='));
+if (publicArg) {
+  const directory = publicArg.slice('--public-probe='.length);
+  const status = JSON.parse(fs.readFileSync(path.join(directory, 'status.json'), 'utf8'));
+  assert.equal(status.fixture, 'LAB-CACHED-DTO-01-r1');
+  assert.equal(status.inputs_unchanged, true);
+  packet = JSON.parse(fs.readFileSync(path.join(directory, 'packet.json'), 'utf8'));
+  assert.equal(packet.source, status.source);
+  assert.equal(packet.drift.title, 'Cached wind drift X · G · W');
+  assert.equal(packet.shear.title, 'Cached signed shear X · FX');
+}
 (async () => {
   fs.mkdirSync(output, { recursive: true });
   const template = fs.readFileSync(path.join(root, 'examples/native_results/chart.html'), 'utf8');
@@ -57,7 +68,7 @@ const packet = {
     try { if (browser) await browser.close(); } finally { await server.close(); }
   }
   assert.ok(owned.exitCode !== null || owned.signalCode !== null);
-  const result = { assessment: 'PASS', scope: 'Independently authored cached-packet HTML only; no private input, native window, analysis or SDK lifecycle claim', cases, signed_values_and_nulls_preserved: true, stale_packet_refused: true, owned_browser_exit_observed: true };
+  const result = { assessment: 'PASS', scope: 'Independently authored cached-packet HTML only; no private input, native window, analysis or SDK lifecycle claim', native_public_packet_consumed: !!publicArg, cases, signed_values_and_nulls_preserved: true, stale_packet_refused: true, owned_browser_exit_observed: true };
   fs.writeFileSync(path.join(output, 'results.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 })().catch(e => { console.error(e); process.exitCode = 1; });

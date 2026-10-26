@@ -25,6 +25,24 @@ Reject `.partial`, branch/version mismatch, missing/conflicting unit provenance,
 
 Initial loading is synchronous before creating the native window; there is no async/cancel/responsiveness claim. Normal tests use independently authored small DTO files in owned temporary directories. Private inputs, source hashes, counts, warnings, plots and timings must stay local; no public private-derived evidence or automatic smoke export is provided. The default synthetic dashboard remains separate.
 
+Native window/egui persistence is explicitly disabled and case/group choices are cached once per input snapshot. Artifact paths resolving outside the selected directory are refused. The freshness warning is visible in both native controls and the chart page.
+
+## Owned public fixture probe
+
+```powershell
+& '<native_results-executable>' --public-fixture-probe
+```
+
+This mode accepts **no input path**. It constructs only the embedded independently authored fixture in an owned TempDir, reads it through the same authoritative DTO adapter, verifies unchanged bytes and emits `packet.json`/`status.json` in a fresh owned temporary report directory. Its data-free stdout receipt identifies that report directory and the input directory, which has been removed when the process exits. There is no export mode for user-selected artifacts.
+
+An external test can feed that emitted public packet into the HTML regression:
+
+```powershell
+node tests/chart-layout/cached.cjs --public-probe='<owned-public-report-directory>'
+```
+
+The test requires the known public fixture identity/titles and exact authored values, order/nulls/signs before declaring PASS. It creates/closes only its headless browser, verifies process exit, and does not certify native physical interaction. Copy public evidence before cleaning the specific owned report directory; never delete a supplied version or shared browser profile. The separate `--check-only` path only validates locally and never emits plots/data.
+
 ## Resource and validation status
 
 No ETABS/process worker is created. Native window teardown uses the existing shared Wry transport's controller-close path. This is not SDK-confirmed browser-group termination or a20-cycle lifecycle proof; those remain open under #8/#28. Test code releases its owned temporary directories; chart HTML regression tests close their owned browser/server and verify browser process exit. Never kill owner/shared WebView processes or clean shared/private Cargo artifacts.
