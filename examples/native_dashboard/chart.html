@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
-<style>html,body{height:100%;margin:0;background:#121923;color:#d4dde8;font:13px sans-serif}body{display:flex;flex-direction:column}#status{padding:8px}#plots{display:grid;grid-template-rows:1fr 1fr;flex:1;min-height:0}.plot{min-height:0} .plot:focus{outline:1px solid #64dfc5}</style></head>
+<style>*{box-sizing:border-box}html,body{width:100%;height:100%;min-width:0;min-height:0;margin:0;overflow:hidden;background:#121923;color:#d4dde8;font:13px sans-serif}body{display:flex;flex-direction:column}#status{padding:8px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#plots{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(2,minmax(0,1fr));flex:1;min-width:0;min-height:0;overflow:hidden}.plot{min-width:0;min-height:0;overflow:hidden}.plot:focus{outline:1px solid #64dfc5;outline-offset:-1px}</style></head>
 <body><div id="status">Synthetic dashboard: waiting for Rust fixture</div><div id="plots"><div class="plot" id="drift" tabindex="0" aria-label="Synthetic story drift chart"></div><div class="plot" id="shear" tabindex="0" aria-label="Synthetic story shear chart"></div></div>
 <script>/*__ECHARTS_RUNTIME__*/</script><script>
 "use strict";
@@ -8,12 +8,12 @@ const charts={drift:echarts.init(document.getElementById('drift'),'dark'),shear:
 let active=null;
 function send(plot,type,story){if(!active)return;window.ipc.postMessage(JSON.stringify({version:2,type,dataset:active.dataset,revision:active.revision,generation:active.generation,plot,story}));}
 function option(packet,kind){const drift=kind==='drift',unit=drift?packet.drift_unit:packet.shear_unit;return {
- animation:false,backgroundColor:'#121923',title:{text:(drift?'Synthetic story drift':'Synthetic story shear')+' ('+unit+')',left:12,textStyle:{fontSize:13}},
- legend:{data:[kind],right:12},tooltip:{trigger:'axis'},grid:{left:64,right:56,top:48,bottom:40},
- xAxis:{type:'value',name:unit},yAxis:{type:'value',name:'Story',min:packet.first-0.5,max:packet.last+0.5,minInterval:1},
- dataZoom:[{type:'inside',yAxisIndex:0,filterMode:'none'},{type:'slider',yAxisIndex:0,right:4,filterMode:'none'}],
+ animation:false,backgroundColor:'#121923',title:{text:(drift?'Synthetic story drift':'Synthetic story shear')+' ('+unit+')',left:12,top:8,textStyle:{fontSize:13}},
+ legend:{data:[kind],left:'center',bottom:4},tooltip:{trigger:'axis',confine:true},grid:{left:72,right:64,top:48,bottom:58},
+ xAxis:{type:'value'},yAxis:{type:'value',name:'Story',nameLocation:'middle',nameRotate:90,nameGap:46,min:packet.first-0.5,max:packet.last+0.5,minInterval:1},
+ dataZoom:[{type:'inside',yAxisIndex:0,filterMode:'none'},{type:'slider',yAxisIndex:0,right:12,width:12,filterMode:'none'}],
  series:[{name:kind,type:'line',symbolSize:6,data:packet.rows.map(row=>[drift?row.drift:row.shear,row.story]),
- markLine:{silent:true,symbol:'none',label:{fontSize:10},data:[{name:'Synthetic reference',xAxis:drift?packet.drift_reference:packet.shear_reference},...(packet.selected_story===null?[]:[{name:'Selected story',yAxis:packet.selected_story,lineStyle:{color:'#64dfc5',width:2}}])]}}]};}
+ markLine:{silent:true,symbol:'none',label:{fontSize:10,position:'insideEndTop'},data:[{name:'Synthetic reference',xAxis:drift?packet.drift_reference:packet.shear_reference},...(packet.selected_story===null?[]:[{name:'Selected story',yAxis:packet.selected_story,lineStyle:{color:'#64dfc5',width:2}}])]}}]};}
 window.dashboardBridge=Object.freeze({
  apply(packet){if(packet.version!==2||packet.dataset!=='LAB-DASH-01'||packet.revision!==1||!Array.isArray(packet.rows))throw Error('Unsupported fixture');if(active&&packet.generation<active.generation)return;const sameGeneration=active&&packet.generation===active.generation;active=packet;
  document.getElementById('status').textContent=packet.dataset+' / r'+packet.revision+' / generation '+packet.generation+' · '+packet.case+' · '+packet.direction+' · '+packet.rows.length+' stories · 2 charts';
