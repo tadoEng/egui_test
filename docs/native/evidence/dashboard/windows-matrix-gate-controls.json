@@ -1,0 +1,228 @@
+{
+  "assessment": "PASS offline validator controls; PARTIAL dashboard acceptance",
+  "source_commit": "c8ab02ca23b86f456938172a1f161c83f9be63c2",
+  "parent_dashboard_head": "84d4a2a05d3e111c558a0f2806576c9adb0f66ba",
+  "checked_utc": "2026-10-26T13:01:34.6548055+00:00",
+  "powershell": "7.6.5",
+  "dotnet": ".NET 10.0.11",
+  "windows": "Microsoft Windows NT 10.0.26300.0",
+  "fixture": "docs/native/evidence/dashboard/release-dashboard.json",
+  "fixture_sha256": "6a4ce45b27da7c362eceb8f665a6476f7bb84d6752083d37bfefd79923589a3c",
+  "scripts": [
+    {
+      "path": "scripts/assert-dashboard-smoke.ps1",
+      "working_file_sha256": "e3470c97423320c1173672b013ece62790e349a27fb250db20345196853cbc0b",
+      "git_blob": "b79a8e0a33ea988cd9ea5345dbfa544b83b0be42"
+    },
+    {
+      "path": "scripts/test-dashboard-smoke-gate.ps1",
+      "working_file_sha256": "bf92d37dfa8c8821749c2025fe94819afb2423dc633e9f1754a0c739d32ccb06",
+      "git_blob": "868db98ba0e594a4fb67333087b93385593c4329"
+    }
+  ],
+  "controls": {
+    "assessment": "PASS",
+    "cases": [
+      {
+        "case": "valid-copy",
+        "expected_accept": true,
+        "accepted": true,
+        "assessment": "PASS"
+      },
+      {
+        "case": "missing",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "malformed",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "empty",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "oversized",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "stale",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "exit-failure",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "reversed-interval",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "future-interval",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "explicit-fail",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "error",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "missing-error",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "manual-overclaim",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "network-overclaim",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "present-overclaim",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-phase",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-selected",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "zero-callbacks",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "no-stale-refusal",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "numeric-string",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "numeric-boolean",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "flag-string",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "missing-runtime",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "missing-snapshot",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-dataset",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "stale-generation",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "one-chart",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-count",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-unit-value",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-story-order",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "missing-points",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      },
+      {
+        "case": "wrong-geometry",
+        "expected_accept": false,
+        "accepted": false,
+        "assessment": "PASS"
+      }
+    ],
+    "scope": "Offline copies/mutations of public synthetic report; no app launched and no new Windows interaction evidence"
+  },
+  "new_app_execution": false,
+  "manual_input_tested": false,
+  "network_capture_performed": false,
+  "runtime_memory_measured": false,
+  "no_compiled_inputs_changed": true,
+  "rust_gate": "Not rerun: scripts/docs only. Prior PR31 accepted evidence remains at its original heads, not claimed as new validation.",
+  "limitation": "No owned isolated launcher, process cleanup or report producer authenticity established; supplied timestamps only consistency guards."
+}

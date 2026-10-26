@@ -29,6 +29,8 @@ The JS selection update changes only mark lines within the same generation, pres
 
 ## Validation and remaining Windows evidence
 
+Use the [visible Windows interaction/compositor matrix](dashboard-windows-matrix.md) for the next owner-run input/DPI evidence. Its manual cells remain pending; separate unsupported popup/IME coverage is explicit. The companion report gate validates hidden-smoke reports only and does not replace these observations.
+
 Commands for the exact review head:
 
 ```powershell
