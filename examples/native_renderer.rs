@@ -67,6 +67,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     #[derive(Clone, Debug)]
     struct MeshData {
+        // A geometry revision, not an entity ID. Immutable meshes with different geometry
+        // must use different keys; camera changes retain the key and resident buffers.
         key: u64,
         vertices: Vec<Vertex>,
         indices: Vec<u32>,
@@ -162,25 +164,27 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             };
             let a = ring(start);
             let b = ring(end);
-            self.quad([a[3], a[2], a[1], a[0]], scale(axis, -1.0), color);
-            self.quad([b[0], b[1], b[2], b[3]], axis, color);
+            // The ring winds against the member axis; reverse the end cap and each
+            // side's previous order so every triangle agrees with its outward normal.
+            self.quad([a[0], a[1], a[2], a[3]], scale(axis, -1.0), color);
+            self.quad([b[3], b[2], b[1], b[0]], axis, color);
             self.quad(
-                [a[0], a[1], b[1], b[0]],
+                [a[0], b[0], b[1], a[1]],
                 normalized(up).unwrap_or(up),
                 color,
             );
             self.quad(
-                [a[2], a[3], b[3], b[2]],
+                [a[2], b[2], b[3], a[3]],
                 scale(normalized(up).unwrap_or(up), -1.0),
                 color,
             );
             self.quad(
-                [a[3], a[0], b[0], b[3]],
+                [a[3], b[3], b[0], a[0]],
                 normalized(side).unwrap_or(side),
                 color,
             );
             self.quad(
-                [a[1], a[2], b[2], b[1]],
+                [a[1], b[1], b[2], a[2]],
                 scale(normalized(side).unwrap_or(side), -1.0),
                 color,
             );
@@ -652,6 +656,57 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             assert!(mesh.bounds.radius().is_finite() && mesh.bounds.radius() > 0.0);
         }
 
+        fn assert_triangle_winding_matches_normals(mesh: &MeshData) {
+            for (triangle, indices) in mesh.indices.chunks_exact(3).enumerate() {
+                let vertices: [Vertex; 3] =
+                    std::array::from_fn(|index| mesh.vertices[indices[index] as usize]);
+                let geometric_normal = cross(
+                    sub(vertices[1].position, vertices[0].position),
+                    sub(vertices[2].position, vertices[0].position),
+                );
+                for vertex in vertices {
+                    assert!(
+                        dot(geometric_normal, vertex.normal) > 0.0,
+                        "triangle {triangle} winds against its declared normal: {vertices:?}"
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn every_fixture_triangle_winds_with_its_declared_normal() {
+            assert_triangle_winding_matches_normals(&synthetic_structure());
+        }
+
+        #[test]
+        fn rotated_skewed_and_reversed_prisms_have_outward_winding_and_normals() {
+            let start = [1.25, -0.75, 2.5];
+            for delta in [
+                [4.0, 0.0, 0.0],
+                [0.0, 4.0, 0.0],
+                [0.0, 0.0, 4.0],
+                [0.0, 0.0, -4.0],
+                [-3.0, 2.0, 5.0],
+                [2.0, -4.0, -3.0],
+                [0.437, 0.0, 0.899],
+                [0.435, 0.0, 0.901],
+            ] {
+                let end = add(start, delta);
+                let mut builder = MeshBuilder::default();
+                builder.box_between(start, end, 0.36, 0.56, [0.3, 0.5, 0.7]);
+                let mesh = builder.finish(2);
+                assert_eq!(mesh.indices.len(), 12 * 3);
+                assert_triangle_winding_matches_normals(&mesh);
+                let center = scale(add(start, end), 0.5);
+                for vertex in &mesh.vertices {
+                    assert!(
+                        dot(sub(vertex.position, center), vertex.normal) > 0.0,
+                        "prism normal must point away from its center for axis {delta:?}"
+                    );
+                }
+            }
+        }
+
         #[test]
         fn camera_remains_finite_at_zoom_pitch_and_resize_limits() {
             let mesh = synthetic_structure();
@@ -847,6 +902,27 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 image::save_buffer(path, &data, size, size, image::ColorType::Rgba8)
                     .expect("save synthetic offscreen capture");
             }
+
+            let resident_index = renderer.mesh.as_ref().expect("resident mesh").index.clone();
+            let mut replacement = mesh.clone();
+            replacement.key += 1;
+            replacement.vertices[0].position[0] += 0.25;
+            replacement.indices.truncate(3);
+            renderer.prepare(&device, &queue, &replacement, &camera.view_projection(1.0));
+            let uploaded = renderer.mesh.as_ref().expect("replacement mesh");
+            assert_eq!(renderer.uploaded_key, Some(replacement.key));
+            assert_ne!(
+                uploaded.vertex, resident_vertex,
+                "new revision replaces vertices"
+            );
+            assert_ne!(
+                uploaded.index, resident_index,
+                "new revision replaces indices"
+            );
+            assert_eq!(
+                uploaded.index_count, 3,
+                "new revision replaces the draw count"
+            );
         }
 
         fn open_test_device() -> Option<(wgpu::Device, wgpu::Queue, String)> {

@@ -46,9 +46,13 @@ cargo check --locked --offline --all-targets --all-features --target wasm32-unkn
 ```
 
 The example tests verify deterministic vertex/index topology, finite unit normals, valid indices,
-camera limit/resize math and a native offscreen GPU readback where a nearer red face must occlude a
-later-drawn blue face. The GPU test also checks that a changed camera/aspect reuses the resident
-vertex buffer. It is ignored by default and must be explicitly invoked; absence of a GPU then
+and **every triangle's geometric cross product agrees with every supplied vertex normal**.
+The outward-normal regression covers the complete frame/shell fixture and isolated axis-aligned,
+reversed and skewed prisms, including both sides of the local helper-axis threshold.
+Camera limit/resize math and a native offscreen GPU readback verify that a nearer red face occludes
+a later-drawn blue face. The GPU test also checks that a changed camera/aspect reuses the resident
+vertex buffer, while a changed geometry revision replaces both GPU buffers and its draw count.
+It is ignored by default and must be explicitly invoked; absence of a GPU then
 fails rather than silently passing. It prints the adapter. It is GPU pixel/depth evidence, not a
 native-window capture or Windows interaction test.
 
@@ -60,9 +64,10 @@ uses Depth24Plus, one sample, normal depth (clear 1, compare Less). This was a c
 no GPU execution time, presentation interval, FPS, or performance result was measured.
 
 `check.ps1 -Offline` passed: formatting, native all-target/all-feature check, strict Clippy,
-23 existing library tests plus 3 renderer CPU tests, doc tests and WASM all-target/all-feature
+23 existing library tests plus 5 renderer CPU tests, doc tests and WASM all-target/all-feature
 check. The GPU probe is a separate explicit run (1 passed). The Windows release example built
-with `--locked --offline` and produced a 15,776,256-byte EXE. Cargo reported 4m 58s for this
+at the initial core revision `57c22da` with `--locked --offline` and produced a
+15,776,256-byte EXE. Cargo reported 4m 58s for this
 partly cached build while other tracks were compiling; it is not a controlled clean build-time
 benchmark or a size comparison with another host.
 
@@ -71,6 +76,23 @@ benchmark or a size comparison with another host.
 To reproduce the optional image, set `NATIVE_GPU_CAPTURE` to a `.png` path before the explicit
 GPU test. This writes synthetic test pixels only. The capture is not a screenshot of a native
 window or of the structural frame example.
+
+## Winding review correction
+
+Review at `57c22da` identified prism triangles winding opposite to their outward normals.
+The new cross-product regression failed on the original implementation, then passed after
+reversing the two cap and four side-face orders. The standalone shell's existing winding
+already agrees with its normal. Rendering remains two-sided for the zero-thickness shell;
+disabling culling does not substitute for geometric orientation correctness.
+
+`MeshData.key` is an explicit **geometry revision**, not an entity ID. This immutable synthetic
+example has one fixed revision. The hardware probe now exercises a second revision with changed
+geometry and index count, verifying replacement rather than camera-only reuse. A future model
+adapter must assign a different revision for each changed immutable mesh; automatic version/key
+derivation and real-model invalidation are still outside this slice.
+
+The implementing parent reran the CPU regressions and explicit GPU probe after this correction.
+These are reproduced test results, not an independent acceptance or Windows presented-frame test.
 
 ## Acceptance status for this slice
 
