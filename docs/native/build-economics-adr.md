@@ -137,7 +137,7 @@ observation. Revised runner semantics do not retroactively convert it into a con
 
 ## Evidence ledger
 
-### Controlled check campaign (in progress)
+### Controlled check campaign
 
 The baseline phase completed on the frozen main/WebView source, before starting the matching
 backend phase. All commands use `check --locked --offline --all-targets --all-features --timings`
@@ -146,7 +146,7 @@ build runs at a time. These are compiler checks, not executable builds or applic
 
 | Baseline condition | Cargo process duration | Source / evidence |
 |---|---:|---|
-| Fresh target, one run | 438.132 s | [`aa28552` receipt](evidence/perf19/baseline-cold-check-1.json), [Cargo units](evidence/perf19/baseline-cold-check-1.units.json) |
+| Fresh target, one run | 438.132 s | [`aa28552` receipt](evidence/perf19/baseline-cold-check-1.json), [Cargo units](evidence/perf19/baseline-cold-check-1.units.csv) |
 | No-op, two runs | 0.752 / 0.708 s | [run 1](evidence/perf19/baseline-noop-check-1.json), [run 2](evidence/perf19/baseline-noop-check-2.json) |
 | One egui caption edit per committed run | 2.300 / 2.186 s | [run 1](evidence/perf19/baseline-ui-check-1.json), [run 2](evidence/perf19/baseline-ui-check-2.json) |
 
@@ -161,13 +161,45 @@ Edit probes are reachable on the **measurement-only, not-for-merge** branch
 and [second caption edit](https://github.com/tadoEng/egui_test/commit/df35ba9799a4a41116dec8bc6abc866173975ce0).
 Only the single Model Explorer heading changes. Reviewed implementation branches are untouched.
 
-The matching backend cold/no-op check phase is running. No baseline/backend ratio, Release
-cost, startup/readiness or Tauri comparison is accepted from the baseline phase alone.
+The matching backend phase completed with the same command and settings. Its all-target scope
+also includes the adapter's additional CLI example, as declared by that configuration.
+
+| Condition | Main + WebView | Main + WebView + read-only API |
+|---|---:|---:|
+| Fresh target, one run per configuration | 438.132 s | [1323.492 s](evidence/perf19/backend-cold-check-1.json) |
+| No-op, two runs | 0.752 / 0.708 s | [1.581](evidence/perf19/backend-noop-check-1.json) / [1.497 s](evidence/perf19/backend-noop-check-2.json) |
+| One egui heading edit, two committed runs | 2.300 / 2.186 s | [4.305](evidence/perf19/backend-ui-check-1.json) / [4.275 s](evidence/perf19/backend-ui-check-2.json) |
+| One lab adapter diagnostic-text edit, two committed runs | No adapter | [4.198](evidence/perf19/backend-adapter-check-1.json) / [4.152 s](evidence/perf19/backend-adapter-check-2.json) |
+| Cold target logical file bytes | 652,647,457 | 2,017,834,545 |
+| Sampled cold peak sum of working sets | 1,732,202,496 bytes | 2,813,399,040 bytes |
+
+The cold check was **3.02 times longer in this one paired observation**. That is not a
+statistical/general ratio, a Release build comparison or a production Tauri comparison.
+Cached UI checks took seconds in both configurations; this supports retaining the existing
+feature fence for lab development, but says nothing yet about executable relinking or startup.
+
+The [backend Cargo units](evidence/perf19/backend-cold-check-1.units.csv) contain 943 unit
+records versus the baseline's 321; repeated host/target/build-script units are not unique crates.
+The largest individual recorded unit is `deno_ops` at 55.38 s, followed by macro/bindgen units.
+The cost is spread across the dependency closure; it is not attributed to one guessed bottleneck.
+Per-run CSVs export every selected name/version/target/mode/start/duration row from Cargo's
+timing data. Row counts and floating-point values were round-tripped before publication; raw
+HTML/JSON remain local. Receipts keep original log hashes. Checkout raw lockfile SHA-256 may
+differ with Git LF/CRLF conversion; Git commit/tree identity and before/after raw hashes are
+recorded separately, with no lock semantics changed during measurement.
+
+Backend edit source is reachable on the **measurement-only, not-for-merge** branch
+`codex/perf19-backend-probe`, ending at
+[`c5a96e2`](https://github.com/tadoEng/egui_test/commit/c5a96e26ea0206efff93f7408885017fda24bd49).
+The first two commits change the same egui heading; the next two append diagnostic display text
+in the lab adapter. No authoritative `ext-api` source or domain rule was edited. This does not
+measure rebuilding an upstream backend crate. Reviewed draft implementation branches stay unchanged.
 
 - Dependency roots and CRT directive chain: **PASS for inspected source/artifacts**.
 - Integrated first `check --all-targets --all-features --timings`: **PASS**, warm cache with
   graph changes; not cold or a matched comparison. Detailed measurements are collected separately.
-- Baseline cold-target/no-op/UI-edit compiler checks: **PASS for the recorded runs**, comparison incomplete.
-- Matching backend, Release size/startup, matched Tauri/CLI: **PENDING**.
+- Paired cold-target/no-op/UI-edit and lab-adapter-edit compiler checks: **PASS for the recorded runs**;
+  one cold pair and two warm/edit repetitions, not a general performance guarantee.
+- Cold Release builds, executable relinking/size/startup and matched Tauri/CLI: **PENDING**.
 - Runtime responsiveness, cancellation/join and packaged CRT policy: **NOT VERIFIED / HOLD**.
 - Overall PERF-02 and migration choice: **PARTIAL**. Do not close #19 or infer migration readiness.
