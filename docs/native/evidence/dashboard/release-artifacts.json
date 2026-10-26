@@ -1,0 +1,21 @@
+{
+  "source_commit": "a21ba7983ce34a3b97815056d43ecd92b205985c",
+  "measured_run": "dashboard-release-build-1",
+  "artifacts": [
+    {
+      "artifact": "release/examples/native_dashboard.exe",
+      "bytes": 19067392,
+      "sha256": "71fd13fe1d8692f749ed4f569369e4160398b506084beb3c0f55d61590b3a6e6"
+    },
+    {
+      "artifact": "release/examples/native_renderer.exe",
+      "bytes": 15787008,
+      "sha256": "b69da7a0345a2a3e424fbf1a9030eae8170a27f848ec9ad6c46c3853fc952863"
+    },
+    {
+      "artifact": "release/examples/webview_stage_a.exe",
+      "bytes": 18569216,
+      "sha256": "c1348454ff02ac8b4f8057ba3a8c195283d8be04eb1e36e7902f74f8010870b2"
+    }
+  ]
+}

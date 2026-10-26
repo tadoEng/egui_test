@@ -41,6 +41,10 @@ webview = ["dep:base64", "dep:serde_json", "dep:wry"]
 name = "webview_stage_a"
 required-features = ["webview"]
 
+[[example]]
+name = "native_dashboard"
+required-features = ["native-renderer", "webview"]
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 # Keep toolbar icons available without depending on installed system fonts in tests.

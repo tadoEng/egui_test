@@ -1,24 +1,23 @@
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
+#[cfg(target_os = "windows")]
+#[path = "support/webview_host.rs"]
+mod webview_host;
+
 #[path = "webview_stage_a/protocol.rs"]
 mod protocol;
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver},
-    };
+    use std::sync::mpsc::{self, Receiver};
 
     use crate::protocol::{
         SelectionState, Story, host_selection_script, is_chart_ready, parse_chart_selection,
     };
-    use base64::Engine as _;
+
     use eframe::egui;
-    use wry::dpi::{PhysicalPosition, PhysicalSize};
+
     use wry::raw_window_handle::HasWindowHandle;
-    use wry::{NewWindowResponse, Rect, WebView, WebViewBuilder};
 
     const CHART_TEMPLATE: &str = include_str!("webview_stage_a/chart.html");
     #[expect(
@@ -104,7 +103,7 @@ mod windows {
                 && let Some(webview) = &self.webview
             {
                 let (sender, receiver) = mpsc::channel();
-                if webview.webview.evaluate_script_with_callback("JSON.stringify({scheme:location.protocol,state:document.readyState,bridge:typeof window.hostBridge,echarts:typeof window.echarts,scripts:document.scripts.length,error:window.__stageError,marker:window.__stageMarker})", move |value| { drop(sender.send(value)); }).is_ok() {
+                if webview.host.webview.evaluate_script_with_callback("JSON.stringify({scheme:location.protocol,state:document.readyState,bridge:typeof window.hostBridge,echarts:typeof window.echarts,scripts:document.scripts.length,error:window.__stageError,marker:window.__stageMarker})", move |value| { drop(sender.send(value)); }).is_ok() {
                         smoke.diagnostic = Some(receiver);
                     }
             }
@@ -118,7 +117,7 @@ mod windows {
             if smoke.started.elapsed() > std::time::Duration::from_secs(30) {
                 finished = Some(false);
             } else if let Some(webview) = &mut self.webview {
-                if webview.loaded.load(Ordering::Acquire) {
+                if webview.host.is_ready() {
                     match smoke.phase {
                         0 => {
                             if let Ok(story) = Story::try_from(5) {
@@ -129,6 +128,7 @@ mod windows {
                         1 if webview.sent_story == Story::try_from(5).ok() => {
                             let (sender, receiver) = mpsc::channel();
                             if webview
+                                .host
                                 .webview
                                 .evaluate_script_with_callback(
                                     "window.hostBridge.selectedStory()",
@@ -151,7 +151,7 @@ mod windows {
                                 smoke.query_value = Some(result.clone());
                                 if result.trim() != "5" {
                                     finished = Some(false);
-                                } else if webview.webview.evaluate_script("window.ipc.postMessage(JSON.stringify({version:1,type:'select_story',story:2}));").is_ok() {
+                                } else if webview.host.webview.evaluate_script("window.ipc.postMessage(JSON.stringify({version:1,type:'select_story',story:2}));").is_ok() {
                                     smoke.phase = 3;
                                 }
                             }
@@ -178,7 +178,7 @@ mod windows {
                     "manual_input_tested": false,
                     "network_capture_performed": false,
                     "error": self.last_error,
-                    "navigation_attempts": self.webview.as_ref().and_then(|webview| webview.navigation.lock().ok().map(|items| items.clone())),
+                    "navigation_attempts": self.webview.as_ref().and_then(|webview| webview.host.navigation.lock().ok().map(|items| items.clone())),
                 });
                 if let Err(error) = std::fs::write(&smoke.path, report.to_string()) {
                     log::error!("write smoke report: {error}");
@@ -298,163 +298,46 @@ mod windows {
     }
 
     struct StandaloneWebView {
-        webview: WebView,
-        messages: Receiver<String>,
-        last_bounds: Option<PhysicalBounds>,
-        last_visible: bool,
+        host: crate::webview_host::ChildWebView,
         sent_story: Option<Story>,
-        loaded: Arc<AtomicBool>,
-        navigation: Arc<Mutex<Vec<&'static str>>>,
     }
-
     impl StandaloneWebView {
         fn new(parent: &impl HasWindowHandle, context: &egui::Context) -> Result<Self, String> {
-            let (sender, messages) = mpsc::sync_channel(16);
-            let repaint = context.clone();
-            let loaded = Arc::new(AtomicBool::new(false));
-            let load_signal = Arc::clone(&loaded);
-            let navigation = Arc::new(Mutex::new(Vec::new()));
-            let navigation_log = Arc::clone(&navigation);
-            let html = chart_html()?;
-            let navigation_policy = NavigationPolicy::new(&html);
-            let webview = WebViewBuilder::new()
-                .with_html(html)
-                .with_bounds(PhysicalBounds::hidden().into())
-                .with_visible(false)
-                .with_focused(false)
-                .with_incognito(true)
-                .with_clipboard(false)
-                .with_autoplay(false)
-                .with_hotkeys_zoom(false)
-                .with_devtools(false)
-                .with_general_autofill_enabled(false)
-                .with_back_forward_navigation_gestures(false)
-                .with_drag_drop_handler(|_| true)
-                .with_download_started_handler(|_, _| false)
-                .with_new_window_req_handler(|_, _| NewWindowResponse::Deny)
-                .with_navigation_handler(move |url| {
-                    if let Ok(mut entries) = navigation_log.lock()
-                        && entries.len() < 16
-                    {
-                        entries.push(if navigation_policy.allows(&url) {
-                            "allowed bootstrap"
-                        } else {
-                            "denied navigation"
-                        });
-                    }
-                    navigation_policy.allows(&url)
-                })
-                .with_ipc_handler(move |request| {
-                    if is_chart_ready(request.body()) {
-                        load_signal.store(true, Ordering::Release);
-                    } else if request.body().len() <= 1024 {
-                        drop(sender.try_send(request.body().clone()));
-                    }
-                    repaint.request_repaint();
-                })
-                .build_as_child(parent)
-                .map_err(|error| format!("create WebView2 child: {error}"))?;
             Ok(Self {
-                webview,
-                messages,
-                last_bounds: None,
-                last_visible: false,
+                host: crate::webview_host::ChildWebView::new(
+                    parent,
+                    context,
+                    chart_html()?,
+                    is_chart_ready,
+                )?,
                 sent_story: None,
-                loaded,
-                navigation,
             })
         }
-
         fn pending_messages(&self) -> Vec<String> {
-            self.messages.try_iter().collect()
+            self.host.pending_messages()
         }
-
         fn sync_selection(&mut self, story: Story) -> Result<(), String> {
-            // Do not mark a selection sent before the document's bridge exists.
-            if !self.loaded.load(Ordering::Acquire) || self.sent_story == Some(story) {
+            if !self.host.is_ready() || self.sent_story == Some(story) {
                 return Ok(());
             }
             let script = host_selection_script(story)
                 .map_err(|error| format!("serialize host selection: {error}"))?;
-            self.webview
+            self.host
+                .webview
                 .evaluate_script(&script)
                 .map_err(|error| format!("send selection to chart: {error}"))?;
             self.sent_story = Some(story);
             Ok(())
         }
-
         fn place(
             &mut self,
             rect: Option<egui::Rect>,
-            pixels_per_point: f32,
+            scale: f32,
             visible: bool,
         ) -> Result<(), String> {
-            let bounds = rect.and_then(|rect| PhysicalBounds::from_egui(rect, pixels_per_point));
-            let should_show = visible && bounds.is_some();
-            if let Some(bounds) = bounds
-                && self.last_bounds != Some(bounds)
-            {
-                self.webview
-                    .set_bounds(bounds.into())
-                    .map_err(|error| format!("resize WebView2 child: {error}"))?;
-                self.last_bounds = Some(bounds);
-            }
-            if self.last_visible != should_show {
-                self.webview
-                    .set_visible(should_show)
-                    .map_err(|error| format!("change WebView2 visibility: {error}"))?;
-                self.last_visible = should_show;
-            }
-            Ok(())
+            self.host.place(rect, scale, visible)
         }
     }
-
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    struct PhysicalBounds {
-        x: i32,
-        y: i32,
-        width: u32,
-        height: u32,
-    }
-
-    impl PhysicalBounds {
-        const fn hidden() -> Self {
-            Self {
-                x: 0,
-                y: 0,
-                width: 1,
-                height: 1,
-            }
-        }
-
-        #[expect(clippy::cast_possible_truncation)]
-        fn from_egui(rect: egui::Rect, pixels_per_point: f32) -> Option<Self> {
-            if !rect.is_finite() || !pixels_per_point.is_finite() || pixels_per_point <= 0.0 {
-                return None;
-            }
-            let min = rect.min * pixels_per_point;
-            let size = rect.size() * pixels_per_point;
-            if size.x < 1.0 || size.y < 1.0 {
-                return None;
-            }
-            Some(Self {
-                x: min.x.round() as i32,
-                y: min.y.round() as i32,
-                width: size.x.round() as u32,
-                height: size.y.round() as u32,
-            })
-        }
-    }
-
-    impl From<PhysicalBounds> for Rect {
-        fn from(bounds: PhysicalBounds) -> Self {
-            Self {
-                position: PhysicalPosition::new(bounds.x, bounds.y).into(),
-                size: PhysicalSize::new(bounds.width, bounds.height).into(),
-            }
-        }
-    }
-
     fn chart_html() -> Result<String, String> {
         if CHART_TEMPLATE.matches(ECHARTS_MARKER).count() != 1 {
             return Err("chart template must contain one ECharts runtime marker".to_owned());
@@ -462,29 +345,9 @@ mod windows {
         Ok(CHART_TEMPLATE.replacen(ECHARTS_MARKER, ECHARTS_RUNTIME, 1))
     }
 
-    struct NavigationPolicy {
-        bootstrap_url: String,
-    }
-
-    impl NavigationPolicy {
-        fn new(html: &str) -> Self {
-            Self {
-                bootstrap_url: format!(
-                    "data:text/html;charset=utf-8;base64,{}",
-                    base64::engine::general_purpose::STANDARD.encode(html.as_bytes())
-                ),
-            }
-        }
-
-        fn allows(&self, url: &str) -> bool {
-            url == "about:blank" || url == self.bootstrap_url
-        }
-    }
-
     #[cfg(test)]
     mod tests {
         use super::*;
-
         #[test]
         fn chart_is_fully_embedded_and_csp_denies_network() {
             let html = chart_html().expect("static chart template is valid");
@@ -492,48 +355,6 @@ mod windows {
             assert!(!html.contains(ECHARTS_MARKER));
             assert!(html.contains("connect-src 'none'"));
             assert!(html.contains("SYNTH_DBE_X"));
-        }
-
-        #[test]
-        fn navigation_policy_allows_only_internal_bootstrap_page() {
-            let policy = NavigationPolicy::new("<p>authored bootstrap</p>");
-            assert!(policy.allows("about:blank"));
-            assert!(policy.allows(&policy.bootstrap_url));
-            assert!(!policy.allows(&NavigationPolicy::new("<p>different bytes</p>").bootstrap_url));
-            assert!(!policy.allows("https://example.com"));
-            assert!(!policy.allows("file:///untrusted-input"));
-            assert!(!policy.allows("javascript:alert(1)"));
-        }
-
-        #[test]
-        fn egui_points_are_converted_to_physical_child_pixels() {
-            let rect = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(300.0, 200.0));
-            for (scale, x, y, width, height) in [
-                (1.0, 10, 20, 300, 200),
-                (1.25, 13, 25, 375, 250),
-                (1.5, 15, 30, 450, 300),
-            ] {
-                assert_eq!(
-                    PhysicalBounds::from_egui(rect, scale),
-                    Some(PhysicalBounds {
-                        x,
-                        y,
-                        width,
-                        height
-                    })
-                );
-            }
-        }
-
-        #[test]
-        fn invalid_or_empty_bounds_hide_the_child() {
-            let empty = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::ZERO);
-            assert_eq!(PhysicalBounds::from_egui(empty, 1.0), None);
-            assert_eq!(PhysicalBounds::from_egui(egui::Rect::NAN, 1.0), None);
-            assert_eq!(
-                PhysicalBounds::from_egui(egui::Rect::EVERYTHING, f32::NAN),
-                None
-            );
         }
     }
 }
