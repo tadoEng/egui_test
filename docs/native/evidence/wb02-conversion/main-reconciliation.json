@@ -1,0 +1,62 @@
+{
+  "assessment": "PARTIAL",
+  "review": 5664454409,
+  "integration_commit": "39ffabea80bcec62058991ef88f16412b72b4d23",
+  "merged_main": "c3ab8b7be8f5fa634a614ba204abd53ecc844433",
+  "previous_head": "11dcf8bf552825fda026d0ceb253ada3c658261a",
+  "main_lock_records": 843,
+  "integrated_lock_records": 844,
+  "all_main_package_blocks_unchanged": true,
+  "only_added_package": "lab-fixture-mesh",
+  "workspace_members": [
+    "lab-fixture",
+    "lab-e2k-mesh",
+    "lab-fixture-mesh"
+  ],
+  "retained_app_features": [
+    "cached-results",
+    "e2k",
+    "native-renderer",
+    "snapshot-preflight",
+    "webview"
+  ],
+  "backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "converter_inputs": [
+    {
+      "path": "crates/lab-fixture-mesh/Cargo.toml",
+      "before_git_blob": "418880ad138a040818481f2d6ed0abdb5961fe74",
+      "after_git_blob": "418880ad138a040818481f2d6ed0abdb5961fe74",
+      "unchanged": true
+    },
+    {
+      "path": "crates/lab-fixture-mesh/examples/fixture_mesh_manifest.rs",
+      "before_git_blob": "3b375a319e107eb9346608335df0d12d0fa8f44c",
+      "after_git_blob": "3b375a319e107eb9346608335df0d12d0fa8f44c",
+      "unchanged": true
+    },
+    {
+      "path": "crates/lab-fixture-mesh/src/lib.rs",
+      "before_git_blob": "f6a3585555698c18d9e24ce2dd4dd565132ece3f",
+      "after_git_blob": "f6a3585555698c18d9e24ce2dd4dd565132ece3f",
+      "unchanged": true
+    },
+    {
+      "path": "crates/lab-fixture-mesh/src/tests.rs",
+      "before_git_blob": "768f855b5cffd56e0e4ecf0dd8b4400afb96469b",
+      "after_git_blob": "768f855b5cffd56e0e4ecf0dd8b4400afb96469b",
+      "unchanged": true
+    }
+  ],
+  "upstream_license_bytes_preserved": true,
+  "source_checks": [
+    "cargo fmt --all -- --check",
+    "cargo metadata --locked --offline --no-deps",
+    "Git blob identity",
+    "actual PR diff whitespace vs merged main"
+  ],
+  "native_tests_executed": false,
+  "wasm_gate_completed": false,
+  "manifest_utility_executed": false,
+  "gpu_or_stress_claim": false,
+  "scope": "Source-only reconciliation; historical focused tests retain their exact code attribution; no migration/engineering authority"
+}
