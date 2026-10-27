@@ -7,7 +7,7 @@ fn main() -> io::Result<()> {
     let mut out = io::BufWriter::new(io::stdout().lock());
     write!(
         out,
-        "preset,formula_version,entities,vertices,triangles,logical_buffer_bytes,planned_batches"
+        "preset,formula_version,entities,vertices,triangles,logical_buffer_bytes,planned_batches,stories,world_min_x,world_min_y,world_min_z,world_max_x,world_max_y,world_max_z,geometry_sha256"
     )?;
     for kind in Kind::ALL {
         write!(
@@ -21,14 +21,24 @@ fn main() -> io::Result<()> {
         let mesh = build(&fixture, Config::default()).map_err(io::Error::other)?;
         write!(
             out,
-            "{preset:?},{},{},{},{},{},{}",
+            "{preset:?},{},{},{},{},{},{},{},{},{},{},{},{},{},",
             mesh.revision().formula_version,
             mesh.entities().len(),
             mesh.vertices().len(),
             mesh.indices().len() / 3,
             mesh.buffer_bytes(),
-            mesh.planned_batches().len()
+            mesh.planned_batches().len(),
+            fixture.stories().len(),
+            fixture.bounds().min[0],
+            fixture.bounds().min[1],
+            fixture.bounds().min[2],
+            fixture.bounds().max[0],
+            fixture.bounds().max[1],
+            fixture.bounds().max[2]
         )?;
+        for byte in mesh.geometry_sha256() {
+            write!(out, "{byte:02x}")?;
+        }
         for kind in Kind::ALL {
             let count = mesh.by_kind()[&kind];
             write!(

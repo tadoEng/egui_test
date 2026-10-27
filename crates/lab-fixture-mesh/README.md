@@ -1,5 +1,20 @@
 # WB-02 fixture mesh conversion
 
+## Final certification preparation — 2026-10-27
+
+PR42 now incorporates owner-merged main `6f622918791c2703ace42dd28e15c117eafef13d` through history-preserving merge `79aa3fa`. Compared with that main, Cargo.toml only adds this workspace member and Cargo.lock only adds this package record; the authoritative backend pin remains `9eb1c8792a1d41f3f81c60428afe89f1655782ba`. Main's inherited public-host JSON EOF blank line is preserved. The earlier reconciliation and partial receipts below remain historical.
+
+Final-head execution is **pending the serialized build lease and resource guards**. Source preparation alone does not update previous PASS/PARTIAL results. The manifest example now also emits authored story count, world bounds and exact buffer SHA256. Tests independently check each bulk kind's entity/vertex/triangle formula, authored shell normals and the actual inclined beam's swept corners. No fixtures were regenerated from private data.
+
+Two separate public utilities are provided:
+
+```powershell
+cargo run -p lab-fixture-mesh --example fixture_mesh_manifest --locked --offline --target-dir .codex-target
+cargo run -p lab-fixture-mesh --example fixture_mesh_cpu_budget --release --locked --offline --target-dir .codex-target
+```
+
+The first emits deterministic CSV. The second emits three serial CPU samples per preset after one warmup: fixture generation **including validation**, then mesh conversion **including validation and SHA256 hashing**. These are wall-clock CPU-pipeline observations; they exclude GPU upload and presentation. Release opt-level remains the repository's existing 2. Neither utility accepts model paths. Logical stream bytes do not measure fixture/index-map memory, allocator capacity, resident/staging GPU resources or process RSS. Future loader acceptance must budget those simultaneous allocations separately.
+
 First independent WB-02 #24 slice, originating at main955661a and the accepted WB-01 `lab-fixture` contract, now reconciled with owner-merged mainc3ab8b7. This library consumes only a validated immutable authored Fixture. It creates CPU arrays and planned batch ranges; no GPU resource, app dependency, UI, source parser, result integration or worker is introduced. Sharing the workspace with the merged snapshot/E2K crates does not attach authoritative engineering meaning to this synthetic converter.
 
 ## Current-main reconciliation — review5664454409

@@ -67,6 +67,24 @@ fn every_scale_matches_all_four_kinds_manifest_bounds_and_planned_batch_limits()
                 fixture.counts().by_kind[&kind]
             );
         }
+        let (nx, ny) = preset.grid().expect("bulk grid");
+        let (nx, ny) = (usize::from(nx), usize::from(ny));
+        for (kind, entities, vertices, triangles) in [
+            (Kind::Beam, (nx * (ny + 1) + ny * (nx + 1)) * 69, 24, 12),
+            (Kind::Column, (nx + 1) * (ny + 1) * 69, 24, 12),
+            (Kind::Wall, 6 * 69, 4, 2),
+            (Kind::Slab, nx * ny * 69, 4, 2),
+        ] {
+            assert_eq!(
+                mesh.by_kind[&kind],
+                Counts {
+                    entities,
+                    vertices: entities * vertices,
+                    triangles: entities * triangles,
+                },
+                "independent authored grid/topology formula for {kind:?}"
+            );
+        }
         assert!(
             mesh.indices
                 .iter()
@@ -111,6 +129,9 @@ fn every_truth_triangle_has_unit_normal_consistent_winding_and_outward_prism_ori
             assert!((dot(n, n) - 1.0).abs() < 1.0e-6);
             assert!(dot(cross(sub(p[1], p[0]), sub(p[2], p[0])), n) > 0.0);
             assert!(v.iter().all(|vertex| vertex.normal == v[0].normal));
+            if let Geometry::Shell { normal, .. } = entity.geometry() {
+                assert!(dot(n, *normal) > 1.0 - 1.0e-6, "authored shell front side");
+            }
             if !matches!(entity.geometry(), Geometry::Shell { .. }) {
                 let world: Point = std::array::from_fn(|i| p[0][i] + mesh.origin_m[i]);
                 assert!(
@@ -120,6 +141,42 @@ fn every_truth_triangle_has_unit_normal_consistent_winding_and_outward_prism_ori
                 );
             }
         }
+    }
+}
+
+#[test]
+fn actual_inclined_beam_keeps_swept_corners_instead_of_an_axis_aligned_proxy() {
+    let fixture = Fixture::generate(Preset::TruthTable).expect("fixture");
+    let mesh = build(&fixture, Config::default()).expect("mesh");
+    let entity = fixture
+        .entities()
+        .iter()
+        .find(|entity| {
+            entity.id().kind == Kind::Beam && entity.id().story.0 == 2 && entity.id().slot == 4
+        })
+        .expect("authored inclined beam");
+    let Geometry::OrientedPrism { start, end, .. } = entity.geometry() else {
+        panic!("inclined beam must remain oriented");
+    };
+    assert_eq!((*start, *end), ([8.0, 1.0, 3.5], [11.0, 3.0, 5.5]));
+    let range = mesh
+        .entities()
+        .iter()
+        .find(|range| range.id == entity.id())
+        .expect("beam range");
+    assert_eq!(range.indices.len(), 36);
+    for point in entity.geometry().control_points() {
+        assert!(
+            mesh.indices[range.indices.start as usize..range.indices.end as usize]
+                .iter()
+                .any(|&index| {
+                    let actual = mesh.vertices[index as usize].position;
+                    (0..3).all(|axis| {
+                        (f64::from(actual[axis]) + mesh.origin_m[axis] - point[axis]).abs() < 1.0e-5
+                    })
+                }),
+            "each swept corner survives recentered conversion"
+        );
     }
 }
 
