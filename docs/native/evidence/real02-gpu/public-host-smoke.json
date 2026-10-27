@@ -1,0 +1,2 @@
+{"assessment":"PASS","buffer_creation_cpu_ns":14800,"callback_records":3,"draw_indexed_records":3,"fixture":"LAB-REAL02-GPU-01-r1","index_bytes":312,"mesh_uploads":1,"physical_input_verified":false,"presented_frame_or_fps_verified":false,"private_input_used":false,"resident_mesh_buffers":2,"scope":"Owned hidden public E2K GPU callback smoke only; no presentation, real-model fidelity or lifecycle gate acceptance","source_entities":3,"triangles":26,"vertex_bytes":1872,"vertices":52}
+
