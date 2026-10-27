@@ -26,7 +26,7 @@ The vertex layout is36 bytes (position/normal/colour), indices areu32 and each s
 
 Public authored two-story E2K fixtures test typed source keys,3.048m conversion, source story order, known buffer counts, winding/unit normals/outward normals, an inclined projected frame, unknown units/version, source/config/geometry identity, holes/unknown flags/concavity/nonplanarity, bad connectivity, budgets and large-origin precision. No private model or derived measurement is used. `cargo test -p lab-e2k-mesh --locked --offline` and strict crate Clippy are the focused checks; the exact whole-workspace gate must be recorded separately.
 
-Next separately reviewed slice: adapt these arrays into the already merged RendererCore/ViewportCallback with a full geometry digest cache key, upload/buffer/draw counters and visible public E2K fixture. Then async last-good/cancel/stale suppression, #37 checked snapshot/result attachment and version-scoped story selection. Actual GPU loading,100k rendering, presented timings, picking and the one real model+results workbench are still pending. No ext-api/CalcOutput dependency or production edit is introduced here; no migration gate is closed.
+The separately reviewed optional [native E2K GPU preview](../../docs/native/e2k-gpu-preview.md) now adapts these arrays into the existing RendererCore/ViewportCallback using an ownership transfer, full geometry digest key and distinct buffer/draw counters. The library remains CPU-only. Async last-good/cancel/stale suppression, #37 checked snapshot/result attachment, version-scoped story selection,100k rendering and presented timings remain pending. No ext-api/CalcOutput dependency or production edit is introduced here; no migration gate is closed.
 
 ## Exact-source verification
 

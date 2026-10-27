@@ -1,0 +1,20 @@
+{
+  "assessment": "PASS",
+  "source": "d5f7b8e358da6c40f74d43a16a067229a5b761d1",
+  "artifact_sha256": "6df00df05853125bbcd02d60446bdd4d411b21a59bb48d36fed39b45c3f842c3",
+  "artifact_bytes": 22014464,
+  "profile": "Debug; dev debug=0; not a performance benchmark",
+  "public_smoke_exit": 0,
+  "public_process_exit_observed": true,
+  "cli": {
+    "public_check_only": 0,
+    "no_args": 1,
+    "edb": 1,
+    "public_smoke_plus_path": 1
+  },
+  "public_fixture_bytes_and_mtime_unchanged": true,
+  "owned_fixture_removed": true,
+  "gui_manual_verified": false,
+  "public_fixture_only": true,
+  "cleanup_scope": "Owned public native root exit observed; no browser/worker lifecycle claim"
+}

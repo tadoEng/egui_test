@@ -10,6 +10,7 @@ use std::{collections::BTreeSet, fmt, ops::Range};
 const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 const CONTRACT_VERSION: u32 = 1;
 const EPS: f64 = 1.0e-7;
+pub mod public_fixture;
 /// Fixed limitations, never inferred model-specific engineering status.
 pub const FIDELITY_LIMITATIONS: [&str; 4] = [
     "project_scene_geometry_assumptions_not_certified",
@@ -41,6 +42,7 @@ pub struct Revision {
     pub proxy_bits: [u64; 2],
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "render-layout", derive(bytemuck::Pod, bytemuck::Zeroable))]
 #[repr(C)]
 pub struct Vertex {
     pub position: [f32; 3],
@@ -97,7 +99,24 @@ pub struct Mesh {
     source_map: SourceMap,
     projection_skips: Vec<ext_e2k::SkippedEntity>,
 }
+/// Ownership transfer for a renderer; the original arrays are moved, not copied.
+pub struct RenderParts {
+    pub revision: Revision,
+    pub origin_m: Point,
+    pub bounds: Bounds,
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
 impl Mesh {
+    pub fn into_render_parts(self) -> RenderParts {
+        RenderParts {
+            revision: self.revision,
+            origin_m: self.origin_m,
+            bounds: self.bounds,
+            vertices: self.vertices,
+            indices: self.indices,
+        }
+    }
     pub fn revision(&self) -> Revision {
         self.revision
     }
