@@ -45,6 +45,11 @@ real-geometry = ["native-renderer", "dep:lab-e2k-mesh", "dep:serde_json"]
 webview = ["dep:base64", "dep:serde_json", "dep:wry"]
 cached-results = ["dep:ext-calc", "dep:ext-core", "dep:sha2"]
 snapshot-preflight = ["cached-results", "e2k", "dep:ext-sidecar", "dep:chrono"]
+real-workbench = ["real-geometry", "snapshot-preflight", "webview"]
+
+[[example]]
+name = "native_workbench"
+required-features = ["real-workbench"]
 
 [[example]]
 name = "webview_stage_a"

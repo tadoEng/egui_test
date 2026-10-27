@@ -419,7 +419,7 @@ impl eframe::App for Dashboard {
                     ui.small(format!(
                         "{v} vertices / {t} triangles · boxes + zero-thickness shell"
                     ));
-                    self.viewport.show(ui);
+                    self.viewport.show(ui, None);
                 });
                 cols[1].vertical(|ui| {
                     let (rect, _) =

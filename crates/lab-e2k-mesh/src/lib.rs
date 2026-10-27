@@ -106,6 +106,9 @@ pub struct RenderParts {
     pub bounds: Bounds,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    /// Source identity/story/index ranges are moved with the arrays. They are
+    /// display attribution, never inferred member engineering results.
+    pub entities: Vec<EntityMesh>,
 }
 impl Mesh {
     pub fn into_render_parts(self) -> RenderParts {
@@ -115,6 +118,7 @@ impl Mesh {
             bounds: self.bounds,
             vertices: self.vertices,
             indices: self.indices,
+            entities: self.entities,
         }
     }
     pub fn revision(&self) -> Revision {
