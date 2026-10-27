@@ -251,7 +251,7 @@ mod host {
                             "Cannot write public GPU smoke receipt"
                         ));
                     }
-                    drop(smoke.result.try_send(pass && written));
+                    let _delivery = smoke.result.try_send(pass && written);
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 } else {
                     ui.ctx().request_repaint_after(Duration::from_millis(10));
