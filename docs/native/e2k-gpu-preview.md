@@ -14,6 +14,20 @@ Frame bodies are0.1m rectangular display proxies; supported planar convex shells
 
 The explicit ignored `public_e2k_upload_readback_and_geometry_cache` test renders that same public fixture offscreen, checks nonclear GPU readback and resident buffer reuse/replacement, and optionally saves a public image to `E2K_PUBLIC_GPU_CAPTURE`. It never accepts private input. `offscreen_gpu_depth_keeps_the_nearer_face` retains the prior independent depth oracle. These are GPU tests, not engineering-source parity or physical Windows UX evidence.
 
+### Smoke exit contract — review follow-up
+
+The callback now sends its completed verdict through an owned bounded channel, and `run()` checks it after native-window teardown. Only a passing GPU counter verdict **and** successfully serialized/flushed stdout receipt can return success. FAIL, timeout, early close/missing verdict and receipt-write failure return an error from `main`, producing a nonzero process exit. Timeout cannot pass merely because draw records arrived after the deadline. This fixes the earlier behavior in which an external caller had to catch a FAIL receipt despite exit0; prior published PASS receipts already required both JSON PASS and exit0.
+
+Two explicit negative controls accept **no input path** and use only the same authored fixture:
+
+```powershell
+native_e2k.exe --public-smoke                    # require JSON PASS + exit0
+native_e2k.exe --public-smoke-force-fail         # require JSON FAIL + nonzero exit
+native_e2k.exe --public-smoke-missing-receipt    # require no receipt + nonzero exit
+```
+
+The latter two exercise actual post-window failure propagation; they do not alter GPU counters, source geometry or production inputs. Extra arguments/private source paths are refused for every public mode. Unit controls cover false/missing/true verdicts and a broken stdout flush. **These new controls are implemented but not compiled/executed yet:** disk headroom remains below the unchanged6GiB guard. Formatting, locked offline metadata and whitespace checks only are verified for this follow-up. Historical GPU/native receipts below remain tied to their original source and do not validate the new integrated head. After headroom recovers, repeat the exact-head canonical native/WASM/Clippy/plain-Cargo checks and public GPU/CLI/positive/negative smoke controls before requesting acceptance. No merge or native-migration readiness is implied.
+
 Counters distinguish buffer-creation host CPU time from GPU completion. `draw_indexed_records` counts encoded draw calls, not presented frames/FPS; vertex/index byte counters are logical resident buffer sizes, not total VRAM or process RSS. No Debug timing is a throughput benchmark.100k loading, selection, async lifetime/cancel, runtime network capture and manual DPI/focus remain pending. All six migration gates stay open, #18 CRT/package HOLD remains separate, and Tauri remains production.
 
 ## Owner manual check
