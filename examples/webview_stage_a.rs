@@ -1,6 +1,10 @@
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
 #[cfg(target_os = "windows")]
+#[path = "support/smoke_receipt.rs"]
+mod smoke_receipt;
+
+#[cfg(target_os = "windows")]
 #[path = "support/webview_host.rs"]
 mod webview_host;
 
@@ -9,6 +13,7 @@ mod protocol;
 
 #[cfg(target_os = "windows")]
 mod windows {
+    use crate::smoke_receipt::{self, Control, Receipt};
     use std::sync::mpsc::{self, Receiver};
 
     use crate::protocol::{
@@ -26,10 +31,24 @@ mod windows {
     )]
     const ECHARTS_RUNTIME: &str = include_str!("../assets/vendor/echarts/echarts.min.js");
     const ECHARTS_MARKER: &str = "/*__ECHARTS_RUNTIME__*/";
+    fn failure(message: impl Into<String>) -> eframe::Error {
+        eframe::Error::AppCreation(Box::new(std::io::Error::other(message.into())))
+    }
 
     pub fn run() -> eframe::Result {
         env_logger::init();
         let smoke_report = std::env::var_os("WEBVIEW_SMOKE_REPORT").map(std::path::PathBuf::from);
+        let public = smoke_report.is_some();
+        let control = Control::parse(
+            std::env::var_os("TALOS_PUBLIC_SMOKE_CONTROL").as_deref(),
+            public,
+        )
+        .map_err(failure)?;
+        let (sender, verdict) = mpsc::sync_channel(1);
+        let smoke_report = smoke_report
+            .map(|path| Receipt::create(&path, control, sender))
+            .transpose()
+            .map_err(|error| failure(error.to_string()))?;
         let options = eframe::NativeOptions {
             renderer: eframe::Renderer::Wgpu,
             viewport: egui::ViewportBuilder::default()
@@ -43,7 +62,11 @@ mod windows {
             "TALOS | offline WebView Stage A",
             options,
             Box::new(move |context| Ok(Box::new(WebviewStageA::new(context, smoke_report)))),
-        )
+        )?;
+        if public {
+            smoke_receipt::require_pass(verdict.try_recv().ok()).map_err(failure)?;
+        }
+        Ok(())
     }
 
     struct WebviewStageA {
@@ -56,7 +79,7 @@ mod windows {
     }
 
     struct Smoke {
-        path: std::path::PathBuf,
+        receipt: Receipt,
         started: std::time::Instant,
         phase: u8,
         query: Option<Receiver<String>>,
@@ -66,10 +89,7 @@ mod windows {
     }
 
     impl WebviewStageA {
-        fn new(
-            context: &eframe::CreationContext<'_>,
-            smoke_report: Option<std::path::PathBuf>,
-        ) -> Self {
+        fn new(context: &eframe::CreationContext<'_>, smoke_report: Option<Receipt>) -> Self {
             context.egui_ctx.set_visuals(egui::Visuals::dark());
             let (webview, last_error) = match StandaloneWebView::new(context, &context.egui_ctx) {
                 Ok(webview) => (Some(webview), None),
@@ -81,8 +101,8 @@ mod windows {
                 chart_visible: true,
                 last_error,
                 rejected_messages: 0,
-                smoke: smoke_report.map(|path| Smoke {
-                    path,
+                smoke: smoke_report.map(|receipt| Smoke {
+                    receipt,
                     started: std::time::Instant::now(),
                     phase: 0,
                     query: None,
@@ -94,7 +114,7 @@ mod windows {
         }
 
         fn run_smoke(&mut self, context: &egui::Context) {
-            let Some(smoke) = &mut self.smoke else {
+            let Some(mut smoke) = self.smoke.take() else {
                 return;
             };
             let mut finished = None;
@@ -166,6 +186,9 @@ mod windows {
                 finished = Some(false);
             }
             if let Some(passed) = finished {
+                let passed = smoke
+                    .receipt
+                    .qualify_pass(passed && self.last_error.is_none());
                 let report = serde_json::json!({
                     "assessment": if passed { "PASS" } else { "FAIL" },
                     "scope": "programmatic native-to-JS selection readback and JS-to-Rust IPC only",
@@ -178,14 +201,15 @@ mod windows {
                     "manual_input_tested": false,
                     "network_capture_performed": false,
                     "error": self.last_error,
+                    "controlled_failure": smoke.receipt.forced_failure(),
                     "navigation_attempts": self.webview.as_ref().and_then(|webview| webview.host.navigation.lock().ok().map(|items| items.clone())),
                 });
-                if let Err(error) = std::fs::write(&smoke.path, report.to_string()) {
+                if let Err(error) = smoke.receipt.finish(report.to_string().as_bytes(), passed) {
                     log::error!("write smoke report: {error}");
                 }
-                self.smoke = None;
                 context.send_viewport_cmd(egui::ViewportCommand::Close);
             } else {
+                self.smoke = Some(smoke);
                 context.request_repaint_after(std::time::Duration::from_millis(10));
             }
         }
