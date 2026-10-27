@@ -1,0 +1,117 @@
+{
+  "assessment": "PASS",
+  "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+  "artifact": {
+    "name": "native_workbench",
+    "sha256": "fa98fbb173afd2089205c9f008e17838527c3222c757248cbc2b9e61adfa6edb",
+    "bytes": 26541568,
+    "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+    "profile": "Debug debug0; jobs1; verification only"
+  },
+  "controls": [
+    {
+      "exit": 0,
+      "self_exit": true,
+      "stdout_sha256": "a5f1efb3c3f8dd5319b14fd657dbd424761083e1549fbca0785f1814866f509e",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "public-smoke",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "exit": 0,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "check-only",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "no-args",
+      "stderr_sha256": "987552d93185ac532782bce7210ccad3300409e575ee2fddb4249a05ee622e36"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "bad-directory",
+      "stderr_sha256": "acebb4e0e87f17a0fd6d00b45123accfbe94fe790e5e35ee7cf75f2e152f21f0"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "public-plus-path",
+      "stderr_sha256": "987552d93185ac532782bce7210ccad3300409e575ee2fddb4249a05ee622e36"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "edb-refusal",
+      "stderr_sha256": "acebb4e0e87f17a0fd6d00b45123accfbe94fe790e5e35ee7cf75f2e152f21f0"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "missing-e2k",
+      "stderr_sha256": "f8ba44888f1176c8c4c62e7d07a68d79bfb645b8810adbc955ba1c23d93a9184"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "ambiguous-e2k",
+      "stderr_sha256": "f8ba44888f1176c8c4c62e7d07a68d79bfb645b8810adbc955ba1c23d93a9184"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "partial-version",
+      "stderr_sha256": "259d5d7328695de72cfc38c6fd29ad61aad811a77d7a48b26a86127efe41cb00"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "version-mismatch",
+      "stderr_sha256": "a0c2de7366ee18b2294bf21b334f507ca1332edc7e52f2d064e522bd6ae9006f"
+    },
+    {
+      "exit": 1,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "malformed-result",
+      "stderr_sha256": "a0c2de7366ee18b2294bf21b334f507ca1332edc7e52f2d064e522bd6ae9006f"
+    },
+    {
+      "exit": 0,
+      "self_exit": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "authored_input_bytes_and_mtime_unchanged": true,
+      "label": "restored-explicit-load",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "owned_fixture_removed": true,
+  "private_input_used": false,
+  "physical_input_verified": false,
+  "browser_child_cleanup_verified": false,
+  "source_freshness_certified": false,
+  "analysis_freshness_certified": false,
+  "harness_sha256": "65d3755764c9a96c35f84a7e379e6bf22fa9b520486efcbbb0d4a364b8230415",
+  "scope": "Main-based same-version authored native workbench smoke and readonly CLI refusal controls; not engineering provenance/Windows manual/lifecycle acceptance"
+}
