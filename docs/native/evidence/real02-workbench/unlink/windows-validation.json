@@ -1,0 +1,254 @@
+{
+  "assessment": "PASS scoped authored same-version composite verification; programme PARTIAL",
+  "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+  "base": {
+    "source": "aaa05d8dad5229d3aef0a4221b6edfd468fad42a",
+    "lock_git_blob": "d4556b89f5fdd4132c86c3186083390a8d3bef2c",
+    "retarget_verified": true,
+    "authoritative_backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+    "branch": "main",
+    "lock_identical_to_main": true,
+    "owner_merged45": true,
+    "agent_github_merges": false,
+    "new_packages_or_pin_changes": false,
+    "owner_merged_parent41": "2283a86c05bbca782f9773dc98daffe7b5c2bef2"
+  },
+  "changes": [
+    "Extend public-only owned-TempDir smoke through failed recheck and persistent unlink with actual DOM readback",
+    "Refuse current-generation IPC after unlink, retain last-good values and resident geometry",
+    "Two controls prove original artifacts unchanged and existing marker not clobbered",
+    "Split smoke advancement/finish methods for strict linting; no normal-version write path"
+  ],
+  "checks": {
+    "strict_clippy": "PASS",
+    "controlled_marker_only_in_generated_public_tempdir": true,
+    "native_all_targets_all_features": "PASS",
+    "plain_cargo_cpu_executions": 189,
+    "original_artifact_bytes_mtime_unchanged": true,
+    "new_owned_control_tests": 2,
+    "gpu": "Three explicit public highlight/cache/depth tests PASS; all three images inspected",
+    "doc_tests": 0,
+    "mandatory_wasm": "Identical required WASM command PASS with process-local RUSTC_WRAPPER unset due demonstrated Windows sccache os206",
+    "nextest": "189PASS/12skip/201listed; test and ignored-name multiset parity",
+    "native_public_workbench": "JSON PASS+self-exit0; actual DOM UNLINKED/pointer-disabled/cleared markers; restored inputs still require reopen; current-generation IPC refused; last-good data retained",
+    "native_canonical": "check.ps1 -Offline -SkipWeb PASS",
+    "new_workbench_model_tests": 9,
+    "cli_controls": 12,
+    "doc_test_suites": 3,
+    "fmt": "PASS",
+    "authored_input_bytes_mtime_unchanged": true,
+    "ignored_gpu_instances": 12,
+    "owned_input_removed": true
+  },
+  "artifact": {
+    "name": "native_workbench",
+    "sha256": "fa98fbb173afd2089205c9f008e17838527c3222c757248cbc2b9e61adfa6edb",
+    "bytes": 26541568,
+    "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+    "profile": "Debug debug0; jobs1; verification only"
+  },
+  "tools": {
+    "sccache": "0.19.0",
+    "jobs": 1,
+    "nextest": "0.9.150",
+    "test_threads": 1,
+    "rust": "1.99.1",
+    "downloads": false,
+    "rust_min_stack": 268435456,
+    "cache_speedup_claim": false,
+    "dev_test_debug": 0,
+    "warnings_suppressed": false,
+    "worktree_target": ".codex-target; same physical worktree; never borrowed",
+    "powershell": "7.6.5",
+    "cache": "Private D-backed PID/start/port/reported-directory verified"
+  },
+  "gpu": {
+    "images": [
+      {
+        "name": "public-highlight.png",
+        "sha256": "bfca60482acec85e7849c8ed6ff6212d6e849c6c3406b3931c7892cb8a9ebf8f",
+        "inspected": true
+      },
+      {
+        "name": "public-e2k.png",
+        "sha256": "c8835b5472cd03ff32c0db73b43376fe3c32aa79347baef7979e397aeacc9fec",
+        "inspected": true
+      },
+      {
+        "name": "public-depth.png",
+        "sha256": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2",
+        "inspected": true
+      }
+    ],
+    "vertex_bytes": 1872,
+    "highlight_uploads": 1,
+    "adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+    "highlight_and_clear_keep_geometry_resident": true,
+    "backend": "Vulkan",
+    "index_bytes": 312,
+    "driver": "591.74",
+    "presented_frames_or_fps_measured": false,
+    "resident_geometry_uploads": 1
+  },
+  "guards": {
+    "runtime_ram_floor_bytes": 2147483648,
+    "sampling_fail_closed": true,
+    "minimum_launch_available_ram_bytes": 6442450944,
+    "minimum_disk_bytes": 6442450944
+  },
+  "runs": [
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "pr44-canonical-native-5",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "91ad8be4c4383db4abe02c1b7a626789365cce5150a33fcf0daf088825595e15",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "0c4fd4dacdff4ff6762381a3e5a8b4dea29c7789e27e76007840c315893257d7",
+      "stdout_sha256": "5586e5a9d29718e780fc90610ee4720ac6bfc5eaa1105bfbd829b41ae5ec0a20",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "wasm-direct-1",
+      "rustc_wrapper_used": false,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "b925dc6c1c48c839766da7189f7e20dae0a02ec2048d55432873411d14f085fa",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "plain-test-list",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "6832f47a7af9f64e4529212c7562d97ad5f260b7a5b6a7be0f40b66c112ed6f8",
+      "stdout_sha256": "89157224573808b4b4c581f3f0156b047721398534af5158056e87abcab78cdb",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "nextest-list",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "c2c4cf415a337c6e4af07cb2d5c4c5494798a13fd80599106b409dbb0a3bf945",
+      "stdout_sha256": "87ca44c209ae2d427fad513ce2c85388122edc85adc6542f81285c936fc8cfae",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "nextest-run",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "063824f77120dc768cfc4194e63c605da7fd24ecbb7aa5bb399f73d122bfadab",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "gpu-highlight",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "b718facba7a3de873674d160e4f539f0fa9c15d2193da28d75635b2de085f1c0",
+      "stdout_sha256": "727c0d349668443466a7bf1a2d54e8c4c09856f3f0b4281a4eeba4f560e6b75d",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "gpu-cache",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "f0927d50e0aa0316ea217743d47aa7ece9d062d11d4928eb2ac940ee3654d5e9",
+      "stdout_sha256": "2c77f60b28fde86bb8f833ccb32f6c8ef25256aaabb649ebc384dd5a4f9aa0e1",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "gpu-depth",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "026745dc606b9729943d1b7102b9361f088a6427ef76a5853c08e95dd8d1c305",
+      "stdout_sha256": "590de3c5ca228e681d44c96ef716698dfbad897a15dbaaa308a3e28a724c023c",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    },
+    {
+      "source": "b9fc0f36ea193bfc9dedebd878e7ccf6fda478ad",
+      "memory_guard_triggered": false,
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41",
+      "label": "build-hosts",
+      "rustc_wrapper_used": true,
+      "disk_guard_triggered": false,
+      "exit": 0,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "source_clean_and_unchanged": true,
+      "stderr_sha256": "ff3bd630883873838e10916fed7786d9caf468f2d6d72ca5b9d32dbdb8d378d0",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "31b65ebf46e80178e68ce5b98d1a6c524629fd4f"
+    }
+  ],
+  "cleanup": {
+    "useful_entries_logs_preserved": true,
+    "webview_process_cleanup_or_worker_join_proven": false,
+    "owned_cache_servers_stopped": true,
+    "owned_public_input_removed": true,
+    "owned_root_self_exit": true,
+    "shared_servers_owner_apps_untouched": true
+  },
+  "scope_limits": [
+    "Only authored public inputs in this published suite",
+    "Common checked bytes and unit coherence do not certify cached results were computed from shown E2K",
+    "Engineering source/analysis freshness and fidelity remain unverified",
+    "Frame display proxies and zero-thickness/withheld surfaces retain their stated limits",
+    "No physical Windows/DPI/focus/zorder, network capture, presented frame/RSS or lifecycle acceptance",
+    "WASM checks cfg stubs; native workbench UX is Windows-only",
+    "No Release/installer, real-model public proof, merge or migration-readiness claim",
+    "Six migration gates open; Tauri production; PR18 CRT hold"
+  ],
+  "optional_parameterized_replay": {
+    "assessment": "STOPPED at unchanged launch-headroom guard before fourth child",
+    "accepted_as_full_suite": false,
+    "completed_case_log_pairs": 3,
+    "original_required_primary_suite": "PASS;12cases",
+    "wrapper_published": false,
+    "new_child_started_after_guard": false,
+    "owned_fixture_cleanup_verified": true
+  }
+}
