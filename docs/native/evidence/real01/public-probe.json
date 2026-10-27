@@ -1,0 +1,33 @@
+{
+  "assessment": "PASS",
+  "fixture": "LAB-REAL01-01-r1",
+  "owned_input_removed": true,
+  "report": {
+    "analysis_execution_evidence": "cached_artifact_only_not_execution_proof",
+    "analysis_state_relation": "cached_results_but_flags_not_analyzed",
+    "e2k_scope": "selected_version_directory",
+    "e2k_state": "parsed_connectivity_limited",
+    "edb_presence": "absent",
+    "engineering_check_status": "loaded",
+    "fidelity_limitations": [
+      "project_scene_connectivity_is_approximate",
+      "sections_offsets_axes_openings_not_certified",
+      "no_member_results_or_source_current_certification"
+    ],
+    "geometry_ready": true,
+    "load_integrity": "verified_at_load",
+    "manifest_analysis": "not_marked_analyzed",
+    "metadata_analysis": "observed_not_analyzed",
+    "metadata_chronology": "metadata_predates_results",
+    "metadata_story_coherence": "matching_names_observational",
+    "metadata_units": "compatible",
+    "refusal": null,
+    "result_dto_ready": true,
+    "same_snapshot_linkage": "unverified",
+    "source_current_certified": false,
+    "story_coherence": "matching_explicit_order",
+    "supported_plots_ready": true,
+    "unit_coherence": "compatible"
+  },
+  "source_current_certified": false
+}
