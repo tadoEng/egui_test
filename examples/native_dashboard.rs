@@ -9,6 +9,9 @@ mod model;
 #[path = "support/native_viewport.rs"]
 mod native_viewport;
 #[cfg(target_os = "windows")]
+#[path = "support/smoke_receipt.rs"]
+mod smoke_receipt;
+#[cfg(target_os = "windows")]
 #[path = "support/webview_host.rs"]
 mod webview_host;
 #[cfg(target_os = "windows")]
