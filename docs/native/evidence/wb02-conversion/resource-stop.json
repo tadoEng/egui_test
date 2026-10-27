@@ -1,0 +1,12 @@
+{
+  "assessment": "BLOCKED",
+  "scope": "Whole-workspace verification resource stop, not a passing gate",
+  "source": "96faae331b7c8587ffafe9d0945e81f6ab7455fd",
+  "available_bytes": 1489862656,
+  "floor_bytes": 2147483648,
+  "owned_sequence_exit_observed": true,
+  "owner_apps_closed": false,
+  "focused_seven_tests_and_strict_crate_clippy": "PASS",
+  "full_gate_complete": false,
+  "process_identity_comparison": "PID ancestry, expected sequencer command and creation time; CIM microsecond truncation matched to Process100ns ticks"
+}
