@@ -1,0 +1,8 @@
+{
+  "analysis_freshness_verified": false,
+  "assessment": "PASS",
+  "fixture": "LAB-CACHED-DTO-01-gap-r1",
+  "inputs_unchanged": true,
+  "scope": "Owned authored gap fixture -> authoritative DTOs -> native Rust chart packet; no GUI or private input",
+  "source": "972d04c54b345ce49ca896c4832b44de4039c564943825e8ab03a8481029d370"
+}

@@ -1,0 +1,8 @@
+{
+  "source": "57a3f3187a8438eb19f5f152aafa8251addb7939",
+  "no_arguments_exit": 1,
+  "fixture": "empty independently owned temporary directory",
+  "assessment": "PASS",
+  "empty_owned_directory_exit": 1,
+  "owned_directory_removed": true
+}

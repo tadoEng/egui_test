@@ -1,0 +1,8 @@
+Presentation adapted from EtabExtension, https://github.com/tadoEng/EtabExtension
+Source revision: 9eb1c8792a1d41f3f81c60428afe89f1655782ba
+Original code is licensed under Apache-2.0; see LICENSE in this directory.
+
+Modified for this experimental cached-result viewer: standalone HTML panels,
+responsive insets, signed/null-preserving series and typed selection updates.
+Only chart presentation is adapted. No calculation builders are copied.
+Exact source paths and blobs: docs/native/cached-chart-style.md.
