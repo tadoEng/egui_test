@@ -1,40 +1,49 @@
-# WB-02 fixture mesh conversion
+# WB-02-A: validated synthetic CPU mesh conversion
 
-## Final certification preparation — 2026-10-27
+[PR42](https://github.com/tadoEng/egui_test/pull/42) is the first CPU-only slice of [WB-02 #24](https://github.com/tadoEng/egui_test/issues/24). `lab-fixture-mesh` consumes only immutable validated authored `lab-fixture::Fixture`. It reuses existing control points, prism face rings and shell normals; no parser, engineering calculations, worker, application dependency or GPU resource is introduced.
 
-PR42 now incorporates owner-merged main `6f622918791c2703ace42dd28e15c117eafef13d` through history-preserving merge `79aa3fa`. Compared with that main, Cargo.toml only adds this workspace member and Cargo.lock only adds this package record; the authoritative backend pin remains `9eb1c8792a1d41f3f81c60428afe89f1655782ba`. Main's inherited public-host JSON EOF blank line is preserved. The earlier reconciliation and partial receipts below remain historical.
+## Certified source and scope
 
-Final-head execution is **pending the serialized build lease and resource guards**. Source preparation alone does not update previous PASS/PARTIAL results. The manifest example now also emits authored story count, world bounds and exact buffer SHA256. Tests independently check each bulk kind's entity/vertex/triangle formula, authored shell normals and the actual inclined beam's swept corners. No fixtures were regenerated from private data.
+Measured source: `dfdb302666f2a80d3ac678a6475b8bcd1c6eeaa7`, tree `0bb6600d06c71ee50ccecaa0d002505743ea68bb`. History-preserving merge `79aa3fa` incorporates owner-merged main `6f622918791c2703ace42dd28e15c117eafef13d`. Relative to that main, the manifest adds this workspace member and the lock adds this package record only. All existing feature/dependency records and the authoritative backend pin `9eb1c8792a1d41f3f81c60428afe89f1655782ba` remain intact. Documentation/evidence follow-up changes do not modify compiled inputs.
 
-Two separate public utilities are provided:
+**PASS for recorded CPU conversion checks; draft pending independent exact-head review.** All native canonical checks passed: fmt, all-target/all-feature check, strict workspace Clippy, plain Cargo **197 passed / 12 ignored**, and four workspace doc suites with zero doc tests. Mandatory all-target/all-feature WASM passed separately with `RUSTC_WRAPPER` unset only in the child, using the documented Windows sccache os206 workaround. This is a recorded split, not a one-shot canonical-script PASS. Additional nextest discovered the same **209 test names and 12 ignored names**, and passed 197 with 12 skipped. It does not replace Cargo/docs or execute ignored GPU probes.
+
+[Final receipt and replayable harness](../../docs/native/evidence/wb02-conversion/final-certification/windows-validation.json), [Cargo/nextest parity](../../docs/native/evidence/wb02-conversion/final-certification/nextest-parity.json), [actual manifest CSV](../../docs/native/evidence/wb02-conversion/final-certification/manifest.csv), [actual Release CPU observations](../../docs/native/evidence/wb02-conversion/final-certification/cpu-budget.csv).
+
+The serialized campaign used Rust1.99.1, sccache0.19.0, nextest0.9.150, locked/offline commands, jobs1, test-threads1, debug0, stack268435456, the physical worktree's own `.codex-target`, and an owned D: cache/temp/server. Launch required 6GiB available RAM and disk; runtime required 2GiB RAM and 6GiB disk with fail-closed sampling. No resource guard stopped the campaign. Cleanup reverified and stopped the current owned listener; shared servers/counters and useful cache entries were preserved. No installation, global flags/profile/CRT changes or owner-app closure occurred.
+
+## Geometry and allocation contract
+
+Prism and actual inclined OrientedPrism become flat-shaded surfaces. Shells remain declared zero-thickness authored approximations. Every generated triangle must remain finite/nondegenerate with consistent normal/winding after recentering and f64-to-f32 conversion. Unsupported openings and invalid surfaces fail rather than silently filling a hole. Existing LabId/story and contiguous index ranges are retained. These labels/IDs are synthetic, never ETABS authority.
+
+One 36-byte position/normal/color vertex stream and one u32 index stream replace per-entity buffer plans. Default triangle-aligned shared-index ranges contain at most300,000 indices and can split within an entity, using base vertex0. They are **planned CPU ranges, not actual GPU draw calls**. The256MiB default checks logical stream lengths before reservation. It does not bound fixture/index-map allocations, allocator capacities, process memory, GPU residency or driver VRAM. Main vectors use fallible reservation.
+
+Lab formula revision is separate from SHA256 identity of the exact origin/vertex/index representation. Canonical hashing includes a mesh-format domain, f64 origin and count boundaries. Repartitioning batches preserves geometry identity; selection must still pair LabId with the immutable lab revision. There is no metadata editing API or camera-dependent triangulation.
+
+Tests cover all authored presets, independent per-kind grid/topology formulas, bounds, complete entity/batch ranges, shell front-side normals, outward prism triangles, actual inclined swept corners, revision/hash/partition identity, exact byte limits, invalid batch limits, unsupported holes, nonplanarity, nonfinite/degenerate surfaces and post-cast collapse.
+
+| Preset | Structural entities | Vertices | Triangles | Logical bytes | Planned ranges |
+|---|---:|---:|---:|---:|---:|
+| TruthTable |24|437|219|18,360|1|
+| Thousand |1,035|15,180|7,590|637,560|1|
+| TenThousand |10,281|197,064|98,532|8,276,688|1|
+| FiftyThousand |50,715|975,660|487,830|40,977,720|5|
+| HundredThousand |99,981|1,919,304|959,652|80,610,768|10|
+
+## Reproduction and CPU observations
 
 ```powershell
+./check.ps1 -Offline -SkipWeb
+# Mandatory split WASM step: unset RUSTC_WRAPPER in this child/session only.
+cargo check --workspace --all-targets --all-features --target wasm32-unknown-unknown --locked --offline --target-dir .codex-target
 cargo run -p lab-fixture-mesh --example fixture_mesh_manifest --locked --offline --target-dir .codex-target
 cargo run -p lab-fixture-mesh --example fixture_mesh_cpu_budget --release --locked --offline --target-dir .codex-target
 ```
 
-The first emits deterministic CSV. The second emits three serial CPU samples per preset after one warmup: fixture generation **including validation**, then mesh conversion **including validation and SHA256 hashing**. These are wall-clock CPU-pipeline observations; they exclude GPU upload and presentation. Release opt-level remains the repository's existing 2. Neither utility accepts model paths. Logical stream bytes do not measure fixture/index-map memory, allocator capacity, resident/staging GPU resources or process RSS. Future loader acceptance must budget those simultaneous allocations separately.
+Use the archived guarded harness with process-local owned cache/temp and relative `CARGO_TARGET_DIR=.codex-target`; see its [replay notes](../../docs/native/evidence/wb02-conversion/final-certification/README.md). Four harness files are byte-exact archives. The two launch wrappers have only local path bindings parameterized; original/published hashes and mechanical normalized equivalence are recorded. The modified wrappers were not literally executed.
 
-First independent WB-02 #24 slice, originating at main955661a and the accepted WB-01 `lab-fixture` contract, now reconciled with owner-merged mainc3ab8b7. This library consumes only a validated immutable authored Fixture. It creates CPU arrays and planned batch ranges; no GPU resource, app dependency, UI, source parser, result integration or worker is introduced. Sharing the workspace with the merged snapshot/E2K crates does not attach authoritative engineering meaning to this synthetic converter.
+The CPU utility makes three serial observations after one warmup per preset in **one process**, using the existing Release opt-level2. For99,981 entities, generation including validation observed41.5450–43.6706ms; conversion including triangle checks and SHA256 observed117.0377–117.5560ms. These are one-machine CPU pipeline observations, not independent performance trials, isolated triangulation time, GPU upload, presented frames or FPS. Other owner apps stayed open; compiler and OS caches were not cleared. Approximate process-tree sampling also excludes separate compiler-cache workers and cannot measure VRAM.
 
-## Current-main reconciliation — review5664454409
+Async latest-generation loading/cancellation, last-good retention, bounded actual GPU upload/draws, visible100k scenes and resource lifecycle belong to the separate WB-02-B draft. Picking #25, controls #26, source fidelity #7 and matched presented-frame benchmarking #4 remain open. All six migration gates remain open, Tauri stays production and #18 CRT/package HOLD is unchanged. No private input/derived public evidence, production edit or merge is authorized.
 
-History-preserving integration39ffabea80bcec62058991ef88f16412b72b4d23 incorporates owner-merged main `c3ab8b7be8f5fa634a614ba204abd53ecc844433`. The sole textual conflict was the workspace member list; the union retains `lab-fixture`, `lab-e2k-mesh` and `lab-fixture-mesh`. Cached-results, preflight, E2K, native-renderer and WebView features remain intact at the same backend pin. All843 main lockfile package records are unchanged; the only added record is the existing `lab-fixture-mesh` package (844 total). Converter Rust/example/manifest blobs remain identical to the previous head11dcf8b. No new GPU/stress/async implementation is introduced.
-
-Formatting, locked offline no-dependency metadata, source/blob comparison and whitespace for the actual PR diff against current main pass. A broad merge-index whitespace check against the old base flagged an inherited trailing blank line in main's vendored EtabExtension license; its bytes are preserved unchanged, rather than modifying a third-party license to silence that diagnostic. [Reconciliation receipt](../../docs/native/evidence/wb02-conversion/main-reconciliation.json).
-
-The historical focused7-test/Clippy evidence below does **not** constitute a new full integrated gate. Current RAM remains below the preserved6GiB launch requirement. Full canonical native/WASM/strict-Clippy/plain-Cargo/doc checks and actual public CSV/manifest utility execution remain pending, serially behind the REAL-02 acceptance priority. Review/source conflict maintenance does not resume the deferred runtime stress campaign. Keep draft/HOLD and do not merge before final-head execution and independent review.
-
-`build(&fixture, Config::default())` reuses `Geometry::control_points` and `PRISM_FACE_RINGS` for Prism/OrientedPrism, and the validated boundary/normal for Shell fan triangles. This includes the actual inclined truth-table beam. Normals and triangle winding are checked after recentering and f64→f32 display conversion. Unsupported voids, nonplanarity/nonfinite/degenerate display surfaces fail; the public API never accepts a raw/mutable fixture. Original kind/story LabId and contiguous index ranges are preserved. Wall/Slab tags here are explicitly authored synthetic labels, not inferred ETABS classifications.
-
-One position/normal/colour vertex stream (36byte layout) and one u32 index stream replace per-entity GPU allocations. Default planned draw ranges have at most300,000 triangle-aligned indices and can split within an entity. They index the shared vertex stream with base vertex0; they are CPU plans, not measured draws. The256MiB default limit bounds logical vertex/index lengths, not total process memory, source fixture/index maps, allocator capacities or GPU residency. Main output vectors use fallible reservation. There is no total-memory, cancellation, streaming or last-good proof.
-
-Lab geometry revision (preset/formula) is distinct from SHA256 identity of the exact origin/vertex/index buffer representation. Canonical little-endian hashing includes a mesh-format domain tag, f64 origin and count boundaries. Changing the batch partition does not invalidate geometry buffers; selection must still scope LabId to the correct immutable lab revision. Synthetic groups and IDs never become real source authority.
-
-Tests compare all five presets with the WB-01 manifest, including24 truth entities and1,035/10,281/50,715/99,981 bulk entities. They check per-kind vertices/triangles/entities, bounds, complete contiguous entity and batch ranges, unit/outward normals, inclined primitive topology, byte/index/batch guards and post-cast collapse/invalid surfaces. `cargo run -p lab-fixture-mesh --example fixture_mesh_manifest --locked --offline` emits deterministic public CSV counts with no model input or timing. Runtime/source evidence is recorded after verification; none of these counts is a GPU/FPS claim.
-
-Next small track: feed these arrays to the reviewed wgpu pipeline, then async A→B→C generation, stale/cancel/last-good, actual GPU residency/cleanup and public100k scenes. Picking, group/isolate, presented-frame benchmarks and real E2K authority remain separate. All six native migration gates stay open; Tauri remains production. No production EtabExtension edit or merge is authorized.
-
-## Current Windows verification — full gate resource-held
-
-Code96faae331b7c8587ffafe9d0945e81f6ab7455fd passes7 focused crate tests including all authored presets through99,981 entities, plus strict all-target crate Clippy (including the new manifest utility). Whole-workspace fmt passes. The full offline gate stopped during native all-feature dependency checking when available system RAM fell below2GiB; only the verified owned sequencer/tree was stopped. No owner apps were closed, no source was changed and no cache was deleted. Workspace Clippy/tests/WASM are NOT reported as passing. The CSV utility has not been executed yet. [Public exact-source/log receipt](../../docs/native/evidence/wb02-conversion/windows-validation.json) and [resource stop](../../docs/native/evidence/wb02-conversion/resource-stop.json). Keep draft/PARTIAL and rerun the full gate only after headroom recovers. No GPU or throughput measurement is asserted.
+Historical receipts remain unchanged: [focused partial validation](../../docs/native/evidence/wb02-conversion/windows-validation.json), [resource stop](../../docs/native/evidence/wb02-conversion/resource-stop.json), [earlier source reconciliation](../../docs/native/evidence/wb02-conversion/main-reconciliation.json). They are superseded only for this CPU conversion certification.

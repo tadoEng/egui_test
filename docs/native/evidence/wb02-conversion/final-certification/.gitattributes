@@ -1,0 +1,2 @@
+# Preserve executable harness byte hashes across Git autocrlf conversion.
+harness/*.ps1 -text
