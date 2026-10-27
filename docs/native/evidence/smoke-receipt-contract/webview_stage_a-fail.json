@@ -1,0 +1,1 @@
+{"assessment":"FAIL","chart_to_native_story":2,"controlled_failure":true,"diagnostic":null,"error":null,"manual_input_tested":false,"native_to_chart_story":5,"navigation_attempts":["allowed bootstrap"],"network_capture_performed":false,"phase":3,"scope":"programmatic native-to-JS selection readback and JS-to-Rust IPC only","script_result":"5","webview2":"156.0.4314.42"}
