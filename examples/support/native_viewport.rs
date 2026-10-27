@@ -445,16 +445,46 @@ impl RendererCore {
             bind_group_layouts: &[Some(&bind_group_layout)],
             immediate_size: 0,
         });
+        let pipeline =
+            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, false);
+        #[cfg(feature = "real-workbench")]
+        let selection_pipeline =
+            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, true);
+        Self {
+            pipeline,
+            #[cfg(feature = "real-workbench")]
+            selection_pipeline,
+            #[cfg(feature = "real-workbench")]
+            selection: None,
+            uniform,
+            bind_group,
+            mesh: None,
+            uploaded_key: None,
+            stats: Arc::new(GpuCounters::default()),
+        }
+    }
+
+    fn create_pipeline(
+        device: &wgpu::Device,
+        target_format: wgpu::TextureFormat,
+        pipeline_layout: &wgpu::PipelineLayout,
+        shader: &wgpu::ShaderModule,
+        highlighted: bool,
+    ) -> wgpu::RenderPipeline {
         let attributes = wgpu::vertex_attr_array![
             0 => Float32x3,
             1 => Float32x3,
             2 => Float32x3
         ];
         let descriptor = wgpu::RenderPipelineDescriptor {
-            label: Some("native_renderer_pipeline"),
-            layout: Some(&pipeline_layout),
+            label: Some(if highlighted {
+                "native_source_story_highlight"
+            } else {
+                "native_renderer_pipeline"
+            }),
+            layout: Some(pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: shader,
                 entry_point: Some("vs_main"),
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as u64,
@@ -470,15 +500,23 @@ impl RendererCore {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_write_enabled: Some(!highlighted),
+                depth_compare: Some(if highlighted {
+                    wgpu::CompareFunction::LessEqual
+                } else {
+                    wgpu::CompareFunction::Less
+                }),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
+                module: shader,
+                entry_point: Some(if highlighted {
+                    "fs_selected"
+                } else {
+                    "fs_main"
+                }),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -489,32 +527,7 @@ impl RendererCore {
             multiview_mask: None,
             cache: None,
         };
-        let pipeline = device.create_render_pipeline(&descriptor);
-        #[cfg(feature = "real-workbench")]
-        let selection_pipeline = {
-            let mut selected = descriptor.clone();
-            selected.label = Some("native_source_story_highlight");
-            if let Some(depth) = &mut selected.depth_stencil {
-                depth.depth_write_enabled = Some(false);
-                depth.depth_compare = Some(wgpu::CompareFunction::LessEqual);
-            }
-            if let Some(fragment) = &mut selected.fragment {
-                fragment.entry_point = Some("fs_selected");
-            }
-            device.create_render_pipeline(&selected)
-        };
-        Self {
-            pipeline,
-            #[cfg(feature = "real-workbench")]
-            selection_pipeline,
-            #[cfg(feature = "real-workbench")]
-            selection: None,
-            uniform,
-            bind_group,
-            mesh: None,
-            uploaded_key: None,
-            stats: Arc::new(GpuCounters::default()),
-        }
+        device.create_render_pipeline(&descriptor)
     }
 
     fn prepare(
