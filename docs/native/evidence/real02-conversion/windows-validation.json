@@ -1,0 +1,41 @@
+{
+  "full_offline_gate": {
+    "log_sha256": "85ea823221382302a452814305f31cd1e91bfc26aa759d8c0079361050cd4e96",
+    "docs": true,
+    "wasm_all_targets_all_features": true,
+    "fmt": true,
+    "shared_duplicate_executions": 10,
+    "gpu_instances_ignored": 2,
+    "cpu_executions": 85,
+    "assessment": "PASS",
+    "strict_clippy": true,
+    "new_mesh_tests": 11,
+    "native_all_targets_all_features": true
+  },
+  "scope": "Pure CPU source geometry conversion only; no application/renderer dependency change, native window, result attachment, analysis or migration claim.",
+  "upstream_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "validation": {
+    "separate_source_and_geometry_digest": true,
+    "outward_winding": true,
+    "large_origin_f64_recentered": true,
+    "input_output_limits": true,
+    "openings_unknown_concavity_nonplanarity_withheld": true,
+    "keys_story_order_units_preserved": true
+  },
+  "no_private_input_or_derived_output": true,
+  "fixture": {
+    "display_triangles": 26,
+    "identity": "LAB-REAL02-CONVERSION-01",
+    "gpu_resources_created": 0,
+    "source_entities": 3,
+    "logical_vertex_index_bytes": 2184,
+    "source": "Independently authored E2K constant in crate tests",
+    "display_vertices": 52,
+    "triangle_indices": 78
+  },
+  "base": "955661a8aea547fb3f186a9c380bf5082597d533",
+  "actual_gpu_upload_draw_or_presented_frame_verified": false,
+  "code_source": "a56d8eaa2767457fb9ad476f10b8089b5511a1e3",
+  "assessment": "PARTIAL",
+  "real_model_rendering_verified": false
+}

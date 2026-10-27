@@ -3361,6 +3361,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lab-e2k-mesh"
+version = "0.1.0"
+dependencies = [
+ "ext-e2k",
+ "lab-fixture",
+ "sha2",
+]
+
+[[package]]
 name = "lab-fixture"
 version = "0.1.0"
 

@@ -98,7 +98,7 @@ opt-level = 2
 workspace = true
 
 [workspace]
-members = ["crates/lab-fixture"]
+members = ["crates/lab-fixture", "crates/lab-e2k-mesh"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"
