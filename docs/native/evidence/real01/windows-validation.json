@@ -1,0 +1,43 @@
+{
+  "assessment": "PARTIAL",
+  "feature": "snapshot-preflight",
+  "scope": "Public fixtures and non-graphical read-only preflight only; no committed source/analysis freshness or geometry fidelity certification.",
+  "upstream_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "physical_windows_interaction_verified": false,
+  "source_authority": {
+    "metadata_dto": "ext-sidecar::ModelMetadata (DTO only; no client/transport)",
+    "calculation": "existing authoritative stored CalcOutput, no recomputation",
+    "metadata_version_reference": "https://github.com/tadoEng/EtabExtension/blob/9eb1c8792a1d41f3f81c60428afe89f1655782ba/crates/ext-sidecar/src/commands.rs#L865",
+    "parsing": "ext-e2k::parse_str_with_sources / project_scene"
+  },
+  "public_probe": {
+    "source_current_certified": false,
+    "assessment": "PASS",
+    "native_exit": 0,
+    "owned_input_removed": true,
+    "fixture": "LAB-REAL01-01-r1"
+  },
+  "full_offline_gate": {
+    "gpu_instances_ignored": 2,
+    "cpu_executions": 101,
+    "strict_clippy": true,
+    "shared_duplicate_executions": 13,
+    "fmt": true,
+    "log_sha256": "3020fecdbd5f21bbd7f9c7a89eea55d82402936203d4a836fd9aa955f7e73743",
+    "docs": true,
+    "new_preflight_tests": 19,
+    "wasm_all_targets_features": true,
+    "assessment": "PASS",
+    "native_all_targets_features": true
+  },
+  "compiled_source": "309b77d0e5739cf3498c99dfd25b6628dca47693",
+  "debug_artifact": {
+    "bytes": 26233344,
+    "build_log_sha256": "6fa99a2b0a37b2a4ad7f980d1c8dbe10109ef3f17d047227bb7d0d2e3a4f79e1",
+    "file": "native_results.exe",
+    "sha256": "62d7cb30b72d911adb034b24499817df701619fe243a497d66a75770e4c5697d"
+  },
+  "release_verified": false,
+  "no_private_input_or_derived_output": true,
+  "gpu_real_model_rendering_verified": false
+}

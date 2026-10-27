@@ -8,6 +8,12 @@ mod fixture;
 #[cfg(target_os = "windows")]
 #[path = "native_results/host.rs"]
 mod host;
+#[cfg(all(target_os = "windows", feature = "snapshot-preflight"))]
+#[path = "native_results/preflight.rs"]
+mod preflight;
+#[cfg(all(target_os = "windows", feature = "snapshot-preflight"))]
+#[path = "native_results/preflight_public.rs"]
+mod preflight_public;
 #[cfg(target_os = "windows")]
 #[path = "support/webview_host.rs"]
 mod webview_host;

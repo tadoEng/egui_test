@@ -90,6 +90,14 @@ fn public_fixture_probe() -> Result<(), String> {
 pub(crate) fn run() -> eframe::Result {
     // Explicit artifact input only; no persistence, default project or API context.
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    #[cfg(feature = "snapshot-preflight")]
+    if args.len() == 1 && args[0] == "--public-preflight-probe" {
+        return crate::preflight_public::run().map_err(failure);
+    }
+    #[cfg(feature = "snapshot-preflight")]
+    if args.first().is_some_and(|arg| arg == "--preflight") {
+        return crate::preflight::run_cli(&args[1..]).map_err(failure);
+    }
     if args.len() == 1 && args[0] == "--public-fixture-probe" {
         return public_fixture_probe().map_err(failure);
     }
