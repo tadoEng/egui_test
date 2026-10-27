@@ -1,0 +1,172 @@
+{
+  "assessment": "PASS",
+  "source": "66ac44e133e300229516368aca728940c1e5aa7b",
+  "artifacts": [
+    {
+      "bytes": 26017280,
+      "name": "native_dashboard",
+      "sha256": "5cabc3f745ebec0310b3ab7e22bcc9db9b7375a949d9a37ada0705ac264e6c2e",
+      "profile": "Debug debug0; jobs1; verification only",
+      "source": "66ac44e133e300229516368aca728940c1e5aa7b"
+    },
+    {
+      "bytes": 25120256,
+      "name": "webview_stage_a",
+      "sha256": "3bcee2372c97e354eb0ab672f5e63e136693f1e984aec2d0c6da59e704b836cf",
+      "profile": "Debug debug0; jobs1; verification only",
+      "source": "66ac44e133e300229516368aca728940c1e5aa7b"
+    }
+  ],
+  "controls": [
+    {
+      "binary": "native_dashboard",
+      "mode": "pass",
+      "stderr_sha256": "abda4e1dbe24056a6548d2397e9cdeb93b0f83362f1250d569d4a8510d1b5bae",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "fail",
+      "stderr_sha256": "618c199c5c91cedeb02f8ebdddc905ad7899d061ea9d331fdde0291952ff2904",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "missing-receipt",
+      "stderr_sha256": "cc86cc54ac01a7dfd150cc79016c3ab3cb67912f9201a3ef197536699bbcb74c",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "existing",
+      "stderr_sha256": "959d8c4335eb4006f1984b970497b4158fe88649c83e19a8bb7bbe804be7adc6",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "absent-parent",
+      "stderr_sha256": "68c209342ce7ad800889fa9e65b04d8c13922a3dbcb7c94df184668a0e20d04f",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "no-report",
+      "stderr_sha256": "0f8dba8ce77104255cb130b99a5dc5a7672157dd4677cbd283130fd1d76c96bf",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "unknown-control",
+      "stderr_sha256": "e064cae41566fc423e4c77195119475a72632aad94b6efc0b1d53f43a4928859",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "native_dashboard",
+      "mode": "no-write-parent",
+      "stderr_sha256": "d3d37645534caa7c5636d5e86958ab04ce06b8b1c95d1c5af615c37f079b7ba2",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "pass",
+      "stderr_sha256": "ff06d4264216edaf993ab0419a679edbac8c33fccbbbfc7433ff7c27285437e4",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "fail",
+      "stderr_sha256": "34f9e4a5ac2d485763c94eaa042e80fd5dbece64d7835320f442714f5fa223c2",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "missing-receipt",
+      "stderr_sha256": "9c6978ce7924eac2810eab9eecc4b3e2f430ab3530c0f72fbee45f325a17ee2a",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "existing",
+      "stderr_sha256": "959d8c4335eb4006f1984b970497b4158fe88649c83e19a8bb7bbe804be7adc6",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "absent-parent",
+      "stderr_sha256": "68c209342ce7ad800889fa9e65b04d8c13922a3dbcb7c94df184668a0e20d04f",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "no-report",
+      "stderr_sha256": "0f8dba8ce77104255cb130b99a5dc5a7672157dd4677cbd283130fd1d76c96bf",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "unknown-control",
+      "stderr_sha256": "e064cae41566fc423e4c77195119475a72632aad94b6efc0b1d53f43a4928859",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "binary": "webview_stage_a",
+      "mode": "no-write-parent",
+      "stderr_sha256": "d3d37645534caa7c5636d5e86958ab04ce06b8b1c95d1c5af615c37f079b7ba2",
+      "self_exit": true,
+      "assessment": "PASS",
+      "exit": 1,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "owned_fixture_removed": true,
+  "private_input_used": false,
+  "physical_input_verified": false,
+  "webview_process_cleanup_verified": false,
+  "scope": "Owned public synthetic root-process receipt and no-clobber contracts; not shared browser/worker lifecycle or UX acceptance",
+  "harness_sha256": "10695b1dd189c408eecee1105862f5d169e806ca40fb2d7a988c94f341f12707"
+}
