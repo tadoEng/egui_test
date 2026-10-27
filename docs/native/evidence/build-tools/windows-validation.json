@@ -1,0 +1,134 @@
+{
+  "assessment": "PASS",
+  "scope": "Two-tool functionality, test discovery and compiler-cache isolation only; not a full-project or speed benchmark",
+  "tools": {
+    "sccache": "0.19.0",
+    "cargo_nextest": "0.9.150",
+    "probe_cargo": "1.96.0",
+    "project_toolchain_unchanged": "1.99.1"
+  },
+  "installs_or_downloads_performed": 0,
+  "registry_dependency": "itoa1.0.18 from pre-existing local cache; Cargo offline",
+  "probe_tests_unique": 2,
+  "nextest_test_threads": 1,
+  "cargo_jobs": 1,
+  "dev_test_debug": 0,
+  "application_or_production_changed": false,
+  "canonical_gate_changed": false,
+  "private_models_used": false,
+  "global_cache_configuration_changed": false,
+  "speedup_claimed": false,
+  "variants": {
+    "absolute_target_environment": {
+      "test_names": [
+        "tests::negative_number",
+        "tests::positive_number"
+      ],
+      "plain_cargo_pass_per_directory": 2,
+      "nextest_pass_per_directory": 2,
+      "directory_a": {
+        "rust_hits": 0,
+        "rust_misses": 1,
+        "noncacheable_incremental_calls": 2
+      },
+      "directory_b": {
+        "rust_hits": 0,
+        "rust_misses": 2,
+        "noncacheable_incremental_calls": 4
+      },
+      "targets_shared": false,
+      "owned_compiler_cache_shared_between_probe_directories": true,
+      "cleanup": {
+        "owned_server_exit_verified": true,
+        "owned_probe_removed": true,
+        "shared_server_or_cache_changed": false
+      },
+      "local_log_sha256": {
+        "a-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "a-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "a-nextest-list.stdout.log": "d7b25a19b4389f7d727e488c2ff531a410199fd6b411e293e488e4084930d7d6",
+        "a-nextest-run.stderr.log": "9a09023a4e7edb34be922aeafe79369d35c17c9475008d306b2f5a64f9404127",
+        "stats-after-a.json": "9d65b03e8e4276b89517847a2b612651d274055a8af4a267da4efb858f57421b",
+        "b-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "b-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "b-nextest-list.stdout.log": "437f9db291d0a3f65bbaf1d24d6664c742378ff3ae20d3bccce8374bae12e575",
+        "b-nextest-run.stderr.log": "3875f4391f4c8dbab3bce8e23b5a7fc2330e8e3864c67fbb2ef2a95cb099f799",
+        "stats-after-b.json": "b32dae3884227963b936e71fc3459135abfa632884ed6995516f1317b960fef9"
+      }
+    },
+    "cli_target_directory": {
+      "test_names": [
+        "tests::negative_number",
+        "tests::positive_number"
+      ],
+      "plain_cargo_pass_per_directory": 2,
+      "nextest_pass_per_directory": 2,
+      "directory_a": {
+        "rust_hits": 0,
+        "rust_misses": 1,
+        "noncacheable_incremental_calls": 2
+      },
+      "directory_b": {
+        "rust_hits": 1,
+        "rust_misses": 1,
+        "noncacheable_incremental_calls": 4
+      },
+      "targets_shared": false,
+      "owned_compiler_cache_shared_between_probe_directories": true,
+      "cleanup": {
+        "owned_server_exit_verified": true,
+        "owned_probe_removed": true,
+        "shared_server_or_cache_changed": false
+      },
+      "local_log_sha256": {
+        "a-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "a-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "a-nextest-list.stdout.log": "064fcdc0aa49b04b238a22c232d9aaf3f24ee0239bedf368daed001d35f95d3a",
+        "a-nextest-run.stderr.log": "f5edb11caa121ed466eef08c986ff74422e9da662704c5f58f7a27c50506ee1e",
+        "stats-after-a.json": "be943bdc8620b33604034f6cb3400630e2dc9af1f5c4d4494d459465822d8f6e",
+        "b-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "b-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "b-nextest-list.stdout.log": "0947bc93ddde4ab8be5412da8c3da9e6a7daf7fcff1a4e2bdbdb6bb752211ef2",
+        "b-nextest-run.stderr.log": "d877b0fa2bb05412533a0491d689f7c15278482a595e54c1c36e42d2ea34f805",
+        "stats-after-b.json": "43c1f60a39e4d0389f5def69e8c6ea21b2aa30a7fb90ddca9ca612035ae58f21"
+      }
+    },
+    "relative_target_environment": {
+      "test_names": [
+        "tests::negative_number",
+        "tests::positive_number"
+      ],
+      "plain_cargo_pass_per_directory": 2,
+      "nextest_pass_per_directory": 2,
+      "directory_a": {
+        "rust_hits": 0,
+        "rust_misses": 1,
+        "noncacheable_incremental_calls": 2
+      },
+      "directory_b": {
+        "rust_hits": 1,
+        "rust_misses": 1,
+        "noncacheable_incremental_calls": 4
+      },
+      "targets_shared": false,
+      "owned_compiler_cache_shared_between_probe_directories": true,
+      "cleanup": {
+        "owned_server_exit_verified": true,
+        "owned_probe_removed": true,
+        "shared_server_or_cache_changed": false
+      },
+      "local_log_sha256": {
+        "a-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "a-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "a-nextest-list.stdout.log": "8d525cf1fb873a8479b57ac1bfa4894600f9329d570c3e0b040390a74ecbb96a",
+        "a-nextest-run.stderr.log": "22de4723495dd431003350fb1f3de3dbb00d35d591bc4746315f4a423f46f67f",
+        "stats-after-a.json": "779c0681248bab646db31c669116b8baf7703866ed379c7051be72d8f4529991",
+        "b-cargo-test.stdout.log": "744db92b5537e182303c5e937c50b116b9e4bfa13c3c638bdb6b52288382480a",
+        "b-cargo-list.stdout.log": "1c43e06d1c1e2e27cedc1f2a52fcb4982b946d440484d0eb4cf6ed3827a8a64c",
+        "b-nextest-list.stdout.log": "b5441f58e6531886969b29b693abfa490f1027753014761f62d2bef55d02ae96",
+        "b-nextest-run.stderr.log": "807d65ad3bf121375c7621010d691fa8ea9377d5c72b9824c46f51e4ad21bd59",
+        "stats-after-b.json": "82737e5debd28e10cda091482aad26cfb3cab1396587a5b38d82f7120be4ff23"
+      }
+    }
+  }
+}
