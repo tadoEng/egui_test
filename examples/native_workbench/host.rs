@@ -255,12 +255,7 @@ impl Workbench {
                                     .iter()
                                     .position(|s| s == story)
                                     .and_then(|j| {
-                                        self.session
-                                            .packet
-                                            .shear
-                                            .series
-                                            .first()
-                                            .and_then(|s| s.values[j])
+                                        self.session.packet.shear.series.first()?.values[j]
                                     });
                                 ui.label(shear.map_or_else(|| "—".into(), |v| format!("{v:.3}")));
                                 ui.end_row();
@@ -449,10 +444,10 @@ impl Workbench {
                 && stats.selection_bytes == 0 =>
             {
                 // Avoid issuing another readback while waiting for its reply.
-                if !self.request_probe(2) {
-                    smoke.phase = 250;
-                } else {
+                if self.request_probe(2) {
                     smoke.phase = 6;
+                } else {
+                    smoke.phase = 250;
                 }
             }
             _ => {}
