@@ -1,7 +1,7 @@
 use crate::{
     data::Direction,
     model::{self, Session},
-    native_viewport::NativeViewport,
+    native_viewport::{GpuStats, NativeViewport},
     webview_host::ChildWebView,
 };
 use std::{
@@ -68,6 +68,7 @@ pub(crate) fn run() -> eframe::Result {
     let mesh = session.mesh.take().ok_or_else(|| failure("mesh_missing"))?;
     let receipt: SmokeReport = Arc::new(Mutex::new(None));
     let result = Arc::clone(&receipt);
+    let smoke = owned.as_ref().map(|input| Smoke::new(input, result));
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         depth_buffer: 24,
@@ -94,11 +95,7 @@ pub(crate) fn run() -> eframe::Result {
                 last_sent: None,
                 rejected: 0,
                 transport_error: false,
-                smoke: public.then(|| Smoke {
-                    started: Instant::now(),
-                    phase: 0,
-                    report: result,
-                }),
+                smoke,
             }))
         }),
     )?;
@@ -345,6 +342,64 @@ struct Smoke {
     started: Instant,
     phase: u8,
     report: SmokeReport,
+    public_input: PathBuf,
+    last_linked_story: Option<String>,
+    unlink_proof: Option<UnlinkProof>,
+}
+struct UnlinkProof {
+    original_inputs_unchanged: bool,
+    changed_recheck_refused: bool,
+    restored_recheck_refused: bool,
+}
+impl Smoke {
+    // The writable control path can only originate from the generated public
+    // TempDir. Normal explicit version paths never construct a Smoke.
+    fn new(input: &tempfile::TempDir, report: SmokeReport) -> Self {
+        Self {
+            started: Instant::now(),
+            phase: 0,
+            report,
+            public_input: input.path().to_owned(),
+            last_linked_story: None,
+            unlink_proof: None,
+        }
+    }
+
+    fn invalidate_owned_fixture(&self, session: &mut Session) -> Option<UnlinkProof> {
+        let paths = [
+            "manifest.json",
+            "results/calc_output.json",
+            "results/source-units.json",
+            "authored.e2k",
+        ]
+        .map(|name| self.public_input.join(name));
+        let originals = paths
+            .iter()
+            .map(|path| Ok((std::fs::read(path)?, std::fs::metadata(path)?.modified()?)))
+            .collect::<std::io::Result<Vec<_>>>()
+            .ok()?;
+        let marker = self.public_input.join(".partial");
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker)
+            .ok()?;
+        drop(file);
+        let changed_recheck_refused = session.recheck().is_err() && !session.linked;
+        std::fs::remove_file(marker).ok()?;
+        let restored_recheck_refused = session.recheck().is_err() && !session.linked;
+        let original_inputs_unchanged = paths.iter().zip(originals).all(|(path, (bytes, time))| {
+            std::fs::read(path).is_ok_and(|current| current == bytes)
+                && std::fs::metadata(path)
+                    .and_then(|metadata| metadata.modified())
+                    .is_ok_and(|current| current == time)
+        });
+        Some(UnlinkProof {
+            original_inputs_unchanged,
+            changed_recheck_refused,
+            restored_recheck_refused,
+        })
+    }
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -361,6 +416,8 @@ struct Probe {
     positive: Option<f64>,
     negative: Option<f64>,
     force: Option<f64>,
+    unlinked: bool,
+    selection_disabled: bool,
 }
 impl Workbench {
     fn probe_reply(&mut self, raw: &str) -> bool {
@@ -374,8 +431,9 @@ impl Workbench {
             return false;
         };
         let expected = match (smoke.phase, probe.stage) {
-            (2, 1) => "Roof",
-            (6, 2) => "L1",
+            (2, 1) => Some("Roof"),
+            (6, 2) => Some("L1"),
+            (8, 3) => None,
             _ => {
                 smoke.phase = 250;
                 return true;
@@ -383,9 +441,11 @@ impl Workbench {
         };
         let pass = probe.source == self.session.packet.source
             && probe.generation == self.session.packet.generation
-            && probe.story.as_deref() == Some(expected)
-            && probe.drift.as_deref() == Some(expected)
-            && probe.shear.as_deref() == Some(expected)
+            && probe.story.as_deref() == expected
+            && probe.drift.as_deref() == expected
+            && probe.shear.as_deref() == expected
+            && probe.unlinked != self.session.linked
+            && probe.selection_disabled != self.session.linked
             && probe.positive == Some(0.002)
             && probe.negative == Some(-0.0025)
             && probe.force == Some(7.0);
@@ -403,24 +463,17 @@ impl Workbench {
                 Ok(()) => smoke.phase = 3,
                 Err(_private_error) => smoke.phase = 250,
             }
-        } else {
+        } else if probe.stage == 2 {
             smoke.phase = 5;
+        } else {
+            smoke.phase = 9;
         }
         true
     }
     fn request_probe(&self, stage: u8) -> bool {
-        self.chart.webview.evaluate_script(&format!("window.ipc.postMessage(JSON.stringify({{version:1,type:'workbench_probe',stage:{stage},source:active.source,generation:active.generation,story:active.selected_story,drift:charts.drift.getOption().series[0].markLine.data[0]?.yAxis??null,shear:charts.shear.getOption().series[0].markLine.data[0]?.yAxis??null,positive:active.drift.series[0].values[0],negative:active.drift.series[1].values[0],force:active.shear.series[0].values[0]}}));")).is_ok()
+        self.chart.webview.evaluate_script(&format!("window.ipc.postMessage(JSON.stringify({{version:1,type:'workbench_probe',stage:{stage},source:active.source,generation:active.generation,story:active.selected_story,drift:charts.drift.getOption().series[0].markLine.data[0]?.yAxis??null,shear:charts.shear.getOption().series[0].markLine.data[0]?.yAxis??null,positive:active.drift.series[0].values[0],negative:active.drift.series[1].values[0],force:active.shear.series[0].values[0],unlinked:document.querySelector('.notice').textContent.startsWith('UNLINKED'),selection_disabled:document.getElementById('plots').style.pointerEvents==='none'}}));")).is_ok()
     }
-    fn step_smoke(&mut self, ctx: &egui::Context) {
-        let Some(mut smoke) = self.smoke.take() else {
-            return;
-        };
-        let stats = self.viewport.gpu_stats();
-        let current_sent = self.last_sent.as_ref().is_some_and(|(g, s, linked)| {
-            *g == self.session.packet.generation
-                && *s == self.session.packet.selected_story
-                && *linked
-        });
+    fn advance_smoke(&mut self, smoke: &mut Smoke, stats: &GpuStats, current_sent: bool) {
         match smoke.phase {
             0 if self.chart.is_ready() && stats.uploads == 1 => {
                 smoke.phase = if self.session.select(Some("Roof".into())).is_ok() {
@@ -443,47 +496,158 @@ impl Workbench {
                 && self.rejected == 1
                 && stats.selection_bytes == 0 =>
             {
-                // Avoid issuing another readback while waiting for its reply.
-                if self.request_probe(2) {
-                    smoke.phase = 6;
+                smoke.phase = if self.request_probe(2) { 6 } else { 250 };
+            }
+            5 => {
+                smoke
+                    .last_linked_story
+                    .clone_from(&self.session.packet.selected_story);
+                smoke.unlink_proof = smoke.invalidate_owned_fixture(&mut self.session);
+                smoke.phase = if smoke.unlink_proof.as_ref().is_some_and(|proof| {
+                    proof.original_inputs_unchanged
+                        && proof.changed_recheck_refused
+                        && proof.restored_recheck_refused
+                }) {
+                    7
                 } else {
-                    smoke.phase = 250;
-                }
+                    250
+                };
+            }
+            7 if current_sent && !self.session.linked && stats.selection_bytes == 0 => {
+                smoke.phase = if self.request_probe(3) { 8 } else { 250 };
+            }
+            9 if current_sent => {
+                // Pointer events are disabled; even direct current-generation
+                // IPC must be refused by Rust until an explicit reopen.
+                let event = serde_json::json!({"version":1,"type":"select_story","source":self.session.packet.source,"generation":self.session.packet.generation,"plot":"drift","story":"Roof"});
+                smoke.phase = if self
+                    .chart
+                    .webview
+                    .evaluate_script(&format!("window.ipc.postMessage(JSON.stringify({event}));"))
+                    .is_ok()
+                {
+                    10
+                } else {
+                    250
+                };
+            }
+            10 if current_sent
+                && self.rejected == 2
+                && self.session.packet.selected_story.is_none() =>
+            {
+                smoke.phase = 11;
             }
             _ => {}
         }
-        // Readback stage2 is requested once in phase6; the reply transitions to5.
-        if smoke.started.elapsed() > Duration::from_secs(25) {
+    }
+
+    fn finish_smoke(&self, smoke: &Smoke, stats: &GpuStats, ctx: &egui::Context) {
+        let proof = smoke.unlink_proof.as_ref();
+        let unchanged = proof.is_some_and(|p| p.original_inputs_unchanged);
+        let failed_recheck = proof.is_some_and(|p| p.changed_recheck_refused);
+        let restored_refused = proof.is_some_and(|p| p.restored_recheck_refused);
+        let pass = smoke.phase == 11
+            && !self.session.linked
+            && unchanged
+            && failed_recheck
+            && restored_refused
+            && smoke.last_linked_story.as_deref() == Some("L1")
+            && self.session.packet.selected_story.is_none()
+            && !self.session.report.source_current_certified
+            && self.session.entity_count == 3
+            && self.session.withheld == 0
+            && stats.uploads == 1
+            && stats.vertex_bytes + stats.index_bytes == self.session.mesh_bytes as u64
+            && stats.selection_uploads == 1
+            && stats.selection_draw_records > 0
+            && stats.selection_bytes == 0
+            && self.rejected == 2;
+        let value = serde_json::json!({"assessment":if pass {"PASS"} else {"FAIL"},"fixture":"LAB-REAL02-WORKBENCH-01-r2",
+            "same_guarded_version":true,"native_to_two_chart_markers":pass,"typed_chart_to_native":pass,
+            "stale_selection_refused":self.rejected.min(1),"unlinked_selection_refused":self.rejected.saturating_sub(1),
+            "unlinked_after_recheck":failed_recheck,"reopen_required_after_restoration":restored_refused,
+            "unlinked_notice_observed":pass,"chart_pointer_events_disabled":pass,"chart_markers_cleared":pass,
+            "last_good_values_retained":pass,"original_fixture_bytes_mtime_unchanged":unchanged,
+            "source_entities":self.session.entity_count,"withheld":self.session.withheld,"vertices":self.viewport.mesh_counts().0,"triangles":self.viewport.mesh_counts().1,
+            "mesh_uploads":stats.uploads,"vertex_bytes":stats.vertex_bytes,"index_bytes":stats.index_bytes,"selection_uploads":stats.selection_uploads,
+            "selection_draw_records":stats.selection_draw_records,"draw_records":stats.draw_records,"selected_story":self.session.packet.selected_story,"last_linked_story":smoke.last_linked_story,
+            "manual_input_verified":false,"presented_frame_verified":false,"source_current_certified":false,"analysis_freshness_verified":false,
+            "engineering_fidelity_certified":false,"browser_process_cleanup_verified":false});
+        if let Ok(mut report) = smoke.report.lock() {
+            *report = Some(value);
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+    }
+
+    fn step_smoke(&mut self, ctx: &egui::Context) {
+        let Some(mut smoke) = self.smoke.take() else {
+            return;
+        };
+        let stats = self.viewport.gpu_stats();
+        let current_sent = self.last_sent.as_ref().is_some_and(|(g, s, linked)| {
+            *g == self.session.packet.generation
+                && *s == self.session.packet.selected_story
+                && *linked == self.session.linked
+        });
+        self.advance_smoke(&mut smoke, &stats, current_sent);
+        if smoke.started.elapsed() > Duration::from_secs(25) || self.transport_error {
             smoke.phase = 250;
         }
-        if self.transport_error {
-            smoke.phase = 250;
-        }
-        if matches!(smoke.phase, 5 | 250) {
-            let pass = smoke.phase == 5
-                && self.session.linked
-                && !self.session.report.source_current_certified
-                && self.session.entity_count == 3
-                && self.session.withheld == 0
-                && stats.uploads == 1
-                && stats.vertex_bytes + stats.index_bytes == self.session.mesh_bytes as u64
-                && stats.selection_uploads == 1
-                && stats.selection_draw_records > 0
-                && self.rejected == 1;
-            let value = serde_json::json!({"assessment":if pass {"PASS"} else {"FAIL"},"fixture":"LAB-REAL02-WORKBENCH-01-r1",
-                "same_guarded_version":true,"native_to_two_chart_markers":pass,"typed_chart_to_native":pass,"stale_selection_refused":self.rejected,
-                "source_entities":self.session.entity_count,"withheld":self.session.withheld,"vertices":self.viewport.mesh_counts().0,"triangles":self.viewport.mesh_counts().1,
-                "mesh_uploads":stats.uploads,"vertex_bytes":stats.vertex_bytes,"index_bytes":stats.index_bytes,"selection_uploads":stats.selection_uploads,
-                "selection_draw_records":stats.selection_draw_records,"draw_records":stats.draw_records,"selected_story":self.session.packet.selected_story,
-                "manual_input_verified":false,"presented_frame_verified":false,"source_current_certified":false,"analysis_freshness_verified":false,
-                "engineering_fidelity_certified":false,"browser_process_cleanup_verified":false});
-            if let Ok(mut report) = smoke.report.lock() {
-                *report = Some(value);
-            }
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        if matches!(smoke.phase, 11 | 250) {
+            self.finish_smoke(&smoke, &stats, ctx);
             return;
         }
         self.smoke = Some(smoke);
         ctx.request_repaint_after(Duration::from_millis(25));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_recheck_control_preserves_inputs_and_requires_reopen() {
+        let input = model::public_fixture().expect("authored input");
+        let mut session = Session::load(input.path()).expect("checked version");
+        session
+            .select(Some("Roof".into()))
+            .expect("linked selection");
+        let smoke = Smoke::new(&input, Arc::new(Mutex::new(None)));
+        let proof = smoke
+            .invalidate_owned_fixture(&mut session)
+            .expect("public control");
+        assert!(proof.original_inputs_unchanged);
+        assert!(proof.changed_recheck_refused && proof.restored_recheck_refused);
+        assert!(!input.path().join(".partial").exists());
+        assert!(!session.linked && session.packet.selected_story.is_none());
+        assert!(session.select(Some("Roof".into())).is_err());
+        assert!(session.recheck().is_err());
+    }
+
+    #[test]
+    fn public_recheck_control_never_clobbers_an_existing_marker() {
+        let input = model::public_fixture().expect("authored input");
+        let mut session = Session::load(input.path()).expect("checked version");
+        let marker = input.path().join(".partial");
+        std::fs::write(&marker, b"owned existing sentinel").expect("owned marker");
+        let modified = std::fs::metadata(&marker)
+            .expect("metadata")
+            .modified()
+            .expect("time");
+        let smoke = Smoke::new(&input, Arc::new(Mutex::new(None)));
+        assert!(smoke.invalidate_owned_fixture(&mut session).is_none());
+        assert_eq!(
+            std::fs::read(&marker).expect("same marker"),
+            b"owned existing sentinel"
+        );
+        assert_eq!(
+            std::fs::metadata(&marker)
+                .expect("metadata")
+                .modified()
+                .expect("time"),
+            modified
+        );
+        assert!(session.linked, "refused control must not perform a recheck");
     }
 }
