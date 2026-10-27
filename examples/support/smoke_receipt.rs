@@ -65,10 +65,9 @@ impl Receipt {
             return Ok(());
         }
         let written = write_receipt(&mut self.file, contents);
-        drop(
-            self.result
-                .try_send(self.qualify_pass(passed) && written.is_ok()),
-        );
+        let _delivery = self
+            .result
+            .try_send(self.qualify_pass(passed) && written.is_ok());
         written
     }
 }
