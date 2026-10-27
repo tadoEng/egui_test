@@ -14,22 +14,37 @@ mod host {
         fs::OpenOptions,
         io::{Read as _, Seek as _, Write as _},
         path::{Path, PathBuf},
+        sync::mpsc::{self, SyncSender},
         time::{Duration, Instant},
     };
     const MAX_BYTES: u64 = 64 * 1024 * 1024;
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum SmokeControl {
+        Normal,
+        ForceFail,
+        MissingReceipt,
+    }
     enum Mode {
         Visible(PathBuf),
         Check(PathBuf),
-        PublicSmoke,
+        PublicSmoke(SmokeControl),
     }
     fn mode(args: &[OsString]) -> Result<Mode, &'static str> {
         match args {
-            [flag] if flag == "--public-smoke" => Ok(Mode::PublicSmoke),
+            [flag] if flag == "--public-smoke" => Ok(Mode::PublicSmoke(SmokeControl::Normal)),
+            [flag] if flag == "--public-smoke-force-fail" => {
+                Ok(Mode::PublicSmoke(SmokeControl::ForceFail))
+            }
+            [flag] if flag == "--public-smoke-missing-receipt" => {
+                Ok(Mode::PublicSmoke(SmokeControl::MissingReceipt))
+            }
             [flag, path] if flag == "--check-only" && !path.to_string_lossy().starts_with("--") => {
                 Ok(Mode::Check(path.into()))
             }
             [path] if !path.to_string_lossy().starts_with("--") => Ok(Mode::Visible(path.into())),
-            _ => Err("Usage: native_e2k <export.e2k> | --check-only <export.e2k> | --public-smoke"),
+            _ => Err(
+                "Usage: native_e2k <export.e2k> | --check-only <export.e2k> | --public-smoke | --public-smoke-force-fail | --public-smoke-missing-receipt",
+            ),
         }
     }
     fn load(path: &Path) -> Result<lab_e2k_mesh::Mesh, String> {
@@ -90,13 +105,32 @@ mod host {
     fn failure(message: impl Into<String>) -> eframe::Error {
         eframe::Error::AppCreation(Box::new(std::io::Error::other(message.into())))
     }
+    fn smoke_exit(verdict: Option<bool>) -> Result<(), &'static str> {
+        match verdict {
+            Some(true) => Ok(()),
+            Some(false) => Err("Public GPU smoke failed or its receipt could not be written"),
+            None => Err("Public GPU smoke ended without a completed receipt"),
+        }
+    }
+    fn write_public_report(
+        out: &mut impl std::io::Write,
+        report: &serde_json::Value,
+    ) -> std::io::Result<()> {
+        serde_json::to_writer(&mut *out, report).map_err(std::io::Error::other)?;
+        writeln!(out)?;
+        out.flush()
+    }
     pub(super) fn run() -> eframe::Result {
         let args: Vec<_> = std::env::args_os().skip(1).collect();
         let mode = mode(&args).map_err(failure)?;
-        let public = matches!(mode, Mode::PublicSmoke);
+        let public = matches!(mode, Mode::PublicSmoke(_));
+        let control = match &mode {
+            Mode::PublicSmoke(control) => *control,
+            _ => SmokeControl::Normal,
+        };
         let mesh = match &mode {
             Mode::Visible(path) | Mode::Check(path) => load(path).map_err(failure)?,
-            Mode::PublicSmoke => lab_e2k_mesh::build(
+            Mode::PublicSmoke(_) => lab_e2k_mesh::build(
                 lab_e2k_mesh::public_fixture::E2K.as_bytes(),
                 Default::default(),
             )
@@ -127,6 +161,9 @@ mod host {
                 .with_min_inner_size([640.0, 480.0]),
             ..Default::default()
         };
+        // The callback's receipt/verdict must survive window teardown. A closed
+        // native window alone cannot turn FAIL, missing output or I/O failure into success.
+        let (result, verdict) = mpsc::sync_channel(1);
         eframe::run_native(
             "TALOS | read-only E2K GPU preview",
             options,
@@ -138,10 +175,16 @@ mod host {
                     smoke: public.then(|| Smoke {
                         started: Instant::now(),
                         done: false,
+                        control,
+                        result,
                     }),
                 }))
             }),
-        )
+        )?;
+        if public {
+            smoke_exit(verdict.try_recv().ok()).map_err(failure)?;
+        }
+        Ok(())
     }
     struct Summary {
         entities: usize,
@@ -153,6 +196,8 @@ mod host {
     struct Smoke {
         started: Instant,
         done: bool,
+        control: SmokeControl,
+        result: SyncSender<bool>,
     }
     struct App {
         viewport: NativeViewport,
@@ -182,22 +227,31 @@ mod host {
                 && !smoke.done
             {
                 let stats = self.viewport.gpu_stats();
-                if stats.draw_records >= 3 || smoke.started.elapsed() > Duration::from_secs(20) {
+                let timed_out = smoke.started.elapsed() >= Duration::from_secs(20);
+                if stats.draw_records >= 3 || timed_out {
                     smoke.done = true;
-                    let pass = stats.draw_records >= 3
+                    // Controlled negative modes accept no user path and never
+                    // change geometry or counters. They exercise this real exit path.
+                    if smoke.control == SmokeControl::MissingReceipt {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                        return;
+                    }
+                    let pass = !timed_out
+                        && smoke.control == SmokeControl::Normal
+                        && stats.draw_records >= 3
                         && stats.uploads == 1
                         && stats.vertex_bytes + stats.index_bytes
                             == self.summary.cpu_buffer_bytes as u64;
-                    let report = serde_json::json!({"assessment":if pass{"PASS"}else{"FAIL"},"fixture":"LAB-REAL02-GPU-01-r1","source_entities":self.summary.entities,"vertices":self.viewport.mesh_counts().0,"triangles":self.viewport.mesh_counts().1,"mesh_uploads":stats.uploads,"resident_mesh_buffers":2,"vertex_bytes":stats.vertex_bytes,"index_bytes":stats.index_bytes,"draw_indexed_records":stats.draw_records,"callback_records":self.viewport.callback_paints(),"buffer_creation_cpu_ns":stats.buffer_creation_cpu_ns,"presented_frame_or_fps_verified":false,"physical_input_verified":false,"private_input_used":false,"scope":"Owned hidden public E2K GPU callback smoke only; no presentation, real-model fidelity or lifecycle gate acceptance"});
+                    let report = serde_json::json!({"assessment":if pass{"PASS"}else{"FAIL"},"fixture":"LAB-REAL02-GPU-01-r1","controlled_failure":smoke.control == SmokeControl::ForceFail,"timed_out":timed_out,"source_entities":self.summary.entities,"vertices":self.viewport.mesh_counts().0,"triangles":self.viewport.mesh_counts().1,"mesh_uploads":stats.uploads,"resident_mesh_buffers":2,"vertex_bytes":stats.vertex_bytes,"index_bytes":stats.index_bytes,"draw_indexed_records":stats.draw_records,"callback_records":self.viewport.callback_paints(),"buffer_creation_cpu_ns":stats.buffer_creation_cpu_ns,"presented_frame_or_fps_verified":false,"physical_input_verified":false,"private_input_used":false,"scope":"Owned hidden public E2K GPU callback smoke only; no presentation, real-model fidelity or lifecycle gate acceptance"});
                     let mut out = std::io::stdout().lock();
-                    if serde_json::to_writer(&mut out, &report).is_err()
-                        || writeln!(out).and_then(|()| out.flush()).is_err()
-                    {
+                    let written = write_public_report(&mut out, &report).is_ok();
+                    if !written {
                         drop(writeln!(
                             std::io::stderr().lock(),
                             "Cannot write public GPU smoke receipt"
                         ));
                     }
+                    drop(smoke.result.try_send(pass && written));
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 } else {
                     ui.ctx().request_repaint_after(Duration::from_millis(10));
@@ -212,10 +266,44 @@ mod host {
         fn public_smoke_cannot_accept_a_user_source() {
             assert!(matches!(
                 mode(&["--public-smoke".into()]),
-                Ok(Mode::PublicSmoke)
+                Ok(Mode::PublicSmoke(SmokeControl::Normal))
             ));
-            assert!(mode(&["--public-smoke".into(), "private.e2k".into()]).is_err());
+            for flag in [
+                "--public-smoke",
+                "--public-smoke-force-fail",
+                "--public-smoke-missing-receipt",
+            ] {
+                assert!(mode(&[flag.into(), "private.e2k".into()]).is_err());
+            }
             assert!(mode(&[]).is_err());
+        }
+        #[test]
+        fn failed_or_missing_smoke_verdict_cannot_return_success() {
+            assert!(
+                smoke_exit(Some(false)).is_err(),
+                "FAIL must reach the executable Result"
+            );
+            assert!(
+                smoke_exit(None).is_err(),
+                "early close/missing receipt cannot succeed"
+            );
+            assert!(smoke_exit(Some(true)).is_ok());
+        }
+        #[test]
+        fn stdout_flush_failure_is_not_a_completed_smoke_receipt() {
+            struct BrokenFlush;
+            impl std::io::Write for BrokenFlush {
+                fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                    Ok(bytes.len())
+                }
+                fn flush(&mut self) -> std::io::Result<()> {
+                    Err(std::io::ErrorKind::BrokenPipe.into())
+                }
+            }
+            assert!(
+                write_public_report(&mut BrokenFlush, &serde_json::json!({"assessment":"PASS"}))
+                    .is_err()
+            );
         }
         #[test]
         fn edb_is_refused_before_file_access() {
