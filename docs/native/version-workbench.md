@@ -1,6 +1,8 @@
 # REAL-02: one checked version workbench
 
-**PARTIAL / build validation pending.** This source slice is stacked on #41 at `78cf0164fa52bb53a680df498a77ff8eec87677d`. Its parent incorporates owner-merged #35, #39 and #40 from main `1b9aab7bfc4c03b3052249d2ca97abbc5f2ee976`. No PR was merged by this implementation. Formatting, locked offline metadata and whitespace checks pass; the new Rust code, GPU overlay and native smoke have not been compiled/executed yet because D: is below the existing 6 GiB free-disk guard. Prior #41 GPU evidence belongs to its earlier exact source, not this code.
+**PARTIAL / build validation pending.** This source slice is stacked on #41, now at `045aaa0bca4af48cb61bd47aa380215e9d04bed5`. Its parent incorporates owner-merged #35, #39 and #40 from main `1b9aab7bfc4c03b3052249d2ca97abbc5f2ee976`. A history-preserving local merge carries #41's smoke-failure/missing-receipt exit repair into this branch. No GitHub PR was merged by this implementation. Formatting, locked offline metadata and whitespace checks pass; the new Rust code, GPU overlay and native smoke have not been compiled/executed yet because D: is below the existing 6 GiB free-disk guard. Prior #41 GPU evidence belongs to its earlier exact source, not this code.
+
+Reviews [#41](https://github.com/tadoEng/egui_test/pull/41#pullrequestreview-5662783650) and [#44](https://github.com/tadoEng/egui_test/pull/44#pullrequestreview-5662730634) require exact integrated execution evidence. Resolve/review #41 first; **only after the owner merges it** retarget/reconcile this PR to current main and rerun final-head checks. Until then this PR stays stacked, draft and unaccepted. Physical native-runtime, local-only real-model and engineering-provenance limitations remain separate from authored public smoke success.
 
 ## Data path and authority
 
