@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "source": "972d04c54b345ce49ca896c4832b44de4039c564943825e8ab03a8481029d370",
+  "generation": 2,
+  "selected_story": "Roof",
+  "drift": {
+    "title": "Cached wind drift X · G · W",
+    "unit": "ratio",
+    "stories": [
+      "Roof",
+      "L1"
+    ],
+    "series": [
+      {
+        "name": "Stored positive envelope",
+        "values": [
+          0.002,
+          null
+        ]
+      },
+      {
+        "name": "Stored negative envelope",
+        "values": [
+          -0.0025,
+          null
+        ]
+      }
+    ],
+    "reference": 0.01
+  },
+  "shear": {
+    "title": "Cached signed shear X · FX",
+    "unit": "kip",
+    "stories": [
+      "Roof",
+      "L1"
+    ],
+    "series": [
+      {
+        "name": "FX",
+        "values": [
+          7.0,
+          -2.0
+        ]
+      }
+    ],
+    "reference": null
+  }
+}

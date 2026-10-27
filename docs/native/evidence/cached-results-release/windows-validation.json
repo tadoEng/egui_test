@@ -1,0 +1,43 @@
+{
+  "assessment": "PARTIAL",
+  "release_build_and_public_probe": "PASS",
+  "compiled_source": "bc65f5c68ed2e4838c9e9f6e7f6fb33da0a2c919",
+  "backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "artifact_sha256": "20f5b33c9addd7e5904fbf0b4f5e4dbb5a798ba0f917651cfc488ec290e19a2d",
+  "artifact_bytes": 19217408,
+  "compiled_input_equivalence": "Git diff to fully tested0dad38c contains docs/evidence only; full82 CPU/13shared,2GPUignored,fmt/native/strictClippy/docs0/WASM evidence stays attributed to0dad38c, not a claimed new test execution",
+  "actual_release_public_packet_and_cli": "PASS",
+  "actual_release_packet_headless_widths": [
+    1000,
+    420,
+    832
+  ],
+  "authored_style_headless_cases": 9,
+  "public_image_inspected": true,
+  "browser_runtime": "preinstalled bundled Playwright1.62.1/Chromium; no download",
+  "owned_cli_and_browser_roots_exit_observed": true,
+  "owned_public_fixture_report_and_browser_temp_removed": true,
+  "cache_server_exit_observed": true,
+  "cache_clean_shutdown_or_acceleration_proven": false,
+  "private_models_or_derived_evidence_included": false,
+  "no_gui_launched": true,
+  "no_installer_or_clean_machine_claim": true,
+  "remaining": [
+    "independent exact-head review and explicit owner merge approval",
+    "physical Windows input/focus/DPI/native WebView2 runtime acceptance",
+    "SDK browser-group/worker lifecycle",
+    "same-version E2K geometry/result/selection composite",
+    "engineering source freshness/fidelity and packaged migration gates"
+  ],
+  "raw_local_probe_log_sha256": {
+    "release-public-probe.stdout.log": "b1d72c3589c0ff0e9ca5e2483542dc5744c42893494125ba965cc3a24fcd22d5",
+    "release-public-check-only.stdout.log": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "release-public-check-only.stderr.log": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "release-no-args.stderr.log": "d9d16a8c278fd1ad112b7fb946d8ba4ff56c5132e6fc8f13034f801a4dbc068f",
+    "release-empty-directory.stderr.log": "cd0b93aa99c25807e1209bec4dc3101b6b2c97a511bd698fb405c631e7db1e80",
+    "release-chart-packet.log": "cbf02759ca20b424c097af95453c850d4380dc48071ccf40406fa4120f84975b",
+    "release-chart-style.log": "cb5877b1e8249c2157cb4664aec8d9fe7c6c2cc0d78fd7c70ee3104dbb07afe3"
+  },
+  "production": "Tauri",
+  "migration_gates_closed": 0
+}

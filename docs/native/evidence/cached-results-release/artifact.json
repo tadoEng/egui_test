@@ -1,0 +1,26 @@
+{
+  "source": "bc65f5c68ed2e4838c9e9f6e7f6fb33da0a2c919",
+  "tree": "4b0a6db89378565deff55e6830c09713e0af2f68",
+  "profile": "Release",
+  "bytes": 19217408,
+  "sha256": "20f5b33c9addd7e5904fbf0b4f5e4dbb5a798ba0f917651cfc488ec290e19a2d",
+  "lock_sha256": "a4d9a4ec296b0ca7e9da904ac1e03356b714256b6b069646661459feabf7b4a6",
+  "timing_unit_records": 640,
+  "settings": {
+    "CARGO_TARGET_DIR": ".codex-target",
+    "SCCACHE_SERVER_PORT": "<owned-loopback-port>",
+    "CARGO_PROFILE_TEST_DEBUG": "0",
+    "CARGO_PROFILE_RELEASE_INCREMENTAL": "false",
+    "TMP": "<owned-D-cache-service>/tmp",
+    "CARGO_PROFILE_RELEASE_OPT_LEVEL": "2",
+    "CARGO_BUILD_JOBS": "1",
+    "CARGO_PROFILE_RELEASE_LTO": "false",
+    "SCCACHE_DIR": "<owned-D-cache-service>/sccache_dir",
+    "SCCACHE_CONF": "<owned-D-cache-service>/sccache_conf",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "TEMP": "<owned-D-cache-service>/temp",
+    "RUSTC_WRAPPER": "<installed-sccache-0.19.0>",
+    "CARGO_PROFILE_RELEASE_DEBUG": "0",
+    "RUST_MIN_STACK": "268435456"
+  }
+}
