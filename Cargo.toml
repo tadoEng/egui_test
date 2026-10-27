@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
-include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "examples/**/*.html", "assets/vendor/echarts/**", "Cargo.toml"]
+include = ["LICENSE-APACHE", "LICENSE-MIT", "**/*.rs", "examples/**/*.html", "assets/vendor/**", "assets/fixtures/**", "Cargo.toml"]
 rust-version = "1.99"
 
 [package.metadata.docs.rs]
@@ -27,6 +27,11 @@ bytemuck = { version = "1.25.2", features = ["derive"], optional = true }
 env_logger = "0.11.11"
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
 lab-e2k-mesh = { path = "crates/lab-e2k-mesh", features = ["render-layout"], optional = true }
+ext-calc = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
+ext-core = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
+ext-sidecar = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
+chrono = { version = "=0.4.41", default-features = false, features = ["std"], optional = true }
+sha2 = { version = "0.10.9", optional = true }
 pollster = { version = "1.0.0", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -38,6 +43,8 @@ e2k = ["dep:ext-e2k"]
 native-renderer = ["dep:bytemuck", "dep:pollster"]
 real-geometry = ["native-renderer", "dep:lab-e2k-mesh", "dep:serde_json"]
 webview = ["dep:base64", "dep:serde_json", "dep:wry"]
+cached-results = ["dep:ext-calc", "dep:ext-core", "dep:sha2"]
+snapshot-preflight = ["cached-results", "e2k", "dep:ext-sidecar", "dep:chrono"]
 
 [[example]]
 name = "webview_stage_a"
@@ -47,12 +54,16 @@ required-features = ["webview"]
 name = "native_dashboard"
 required-features = ["native-renderer", "webview"]
 
+[[example]]
+name = "native_results"
+required-features = ["cached-results", "webview"]
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
 # Keep toolbar icons available without depending on installed system fonts in tests.
 egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
-tempfile = "=3.27.0"
+tempfile = "3.27.0"
 
 [[example]]
 name = "native_renderer"

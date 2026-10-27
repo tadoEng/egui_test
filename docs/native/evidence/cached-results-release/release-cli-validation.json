@@ -1,0 +1,17 @@
+{
+  "assessment": "PASS",
+  "source": "bc65f5c68ed2e4838c9e9f6e7f6fb33da0a2c919",
+  "artifact_sha256": "20f5b33c9addd7e5904fbf0b4f5e4dbb5a798ba0f917651cfc488ec290e19a2d",
+  "artifact_bytes": 19217408,
+  "public_probe_exit": 0,
+  "public_check_only_exit": 0,
+  "no_args_exit": 1,
+  "empty_directory_exit": 1,
+  "public_probe_packet_values_verified": true,
+  "all_owned_cli_process_exits_observed": true,
+  "public_input_bytes_mtime_unchanged": true,
+  "app_owned_input_removed": true,
+  "no_gui_launched": true,
+  "private_input_used": false,
+  "scope": "Actual Release authored public DTO-to-packet and CLI controls, not physical Windows/analysis freshness/lifecycle certification"
+}

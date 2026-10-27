@@ -1,0 +1,20 @@
+{
+  "current_commit": "bc65f5c68ed2e4838c9e9f6e7f6fb33da0a2c919",
+  "tested_code": "0dad38c",
+  "all_changed_paths_are_documentation": true,
+  "changed_paths": [
+    "docs/native/cached-chart-style.md",
+    "docs/native/cached-results-viewer.md",
+    "docs/native/evidence/cached-chart-style/native-public-probe.json",
+    "docs/native/evidence/cached-chart-style/validation.json",
+    "docs/native/evidence/cached-results/cached-cli-controls.json",
+    "docs/native/evidence/cached-results/cleanup.json",
+    "docs/native/evidence/cached-results/packet.json",
+    "docs/native/evidence/cached-results/release-memory-stop.json",
+    "docs/native/evidence/cached-results/results.json",
+    "docs/native/evidence/cached-results/status.json",
+    "docs/native/evidence/cached-results/synthetic-cached-charts.png",
+    "docs/native/evidence/cached-results/windows-validation.json"
+  ],
+  "scope": "No compiled input changes; original full82/nativeWASM/Clippy evidence remains source-scoped, new current-head Release verification separate"
+}

@@ -1,0 +1,37 @@
+{
+  "lock_sha256": "efb213576d77a88770d0c5be88bd1a8cf1a85451578ba3a3be13262560822cc7",
+  "full_gate": {
+    "tests_failed": 0,
+    "tests_passed": 82,
+    "command": "check.ps1 -Offline",
+    "log_sha256": "254318fa0d327f36762cd8f92c65983c4a7ec661bbdd2ac14a101e7f9ca99143",
+    "docs": true,
+    "native_all_targets_all_features": true,
+    "strict_clippy": true,
+    "opt_in_gpu_tests_ignored": 2,
+    "fmt": true,
+    "wasm_all_targets_all_features": true
+  },
+  "source": "57a3f3187a8438eb19f5f152aafa8251addb7939",
+  "lock_package_records": 841,
+  "assessment": "PASS",
+  "debug_artifact": {
+    "name": "native_results.exe",
+    "sha256": "c227d0d56f9e5f145fed388d0ae7a785c955617d7e0909414c90649941d204a3",
+    "build_log_sha256": "e96442a3d5c56730305e54ac1d5fdb952f6cccbbaf249f1f7174ee856e8240a0",
+    "bytes": 25233408
+  },
+  "source_blobs": {
+    "tests/chart-layout/cached.cjs": "43e20247929aecced033a03e36f8593490a95725",
+    "examples/native_results/data.rs": "1bc7872b1ede3b00e008b9f96b567fa1ae264b2d",
+    "examples/native_results/chart.html": "3832e46d76911e5ed7d44eb78797b7e28e2439cb",
+    "Cargo.toml": "2a36f8f8527db24f32fdc26c761d223643c1e0c2",
+    "Cargo.lock": "9136d3ed87847e0fefe9a499d513ee52de28363b",
+    "examples/native_results/fixture.rs": "16f9c4421066d3d3abbe84a58b4dccb50c220838",
+    "examples/native_results/host.rs": "b09ce7b1ce38538b8dd394561c1beb2d8481c526",
+    "examples/native_results.rs": "26bf1f580ea345c4d63a54e6fd66a7b3def9b306",
+    "examples/native_results/data_tests.rs": "15ab8dda9be78a4a9735e9cc510b4fbac75a7674"
+  },
+  "scope": "Authored public fixtures and non-graphical native packet -> owned headless Chromium. No private inputs, actual WebView/Windows input, analysis freshness or packaged runtime acceptance.",
+  "source_tree": "72946234160f086ff709e9b87268b2b04d93e637"
+}

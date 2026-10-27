@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;min-width:0;min-height:0;margin:0;overflow:hidden;font:13px system-ui,sans-serif;color:#18181b;background:#f4f4f5}
+body{display:flex;flex-direction:column}
+.notice{padding:8px 12px;flex:none;font-size:12px;line-height:1.4;color:#854d0e;background:#fefce8;border-bottom:1px solid #fde68a}
+#plots{flex:1;min-width:0;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(2,minmax(0,1fr));gap:12px;padding:12px}
+.panel{display:flex;flex-direction:column;min-width:0;min-height:0;border:1px solid #e4e4e7;border-radius:6px;background:#fff;padding:12px}
+.panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex:none;margin-bottom:8px;min-width:0}
+.panel-labels{min-width:0}
+h3{font-size:14px;line-height:20px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.caption{margin:2px 0 0;color:#71717a;font-size:12px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.unit{flex:none;font-size:11px;line-height:18px;border:1px solid #e4e4e7;border-radius:4px;padding:0 6px;color:#52525b}
+.plot{flex:1;min-width:0;min-height:0;overflow:hidden}
+.plot:focus{outline:1px solid #0d9488;outline-offset:-1px}
+@media(max-height:540px){#plots{padding:6px;gap:6px}.panel{padding:6px}.caption{display:none}.panel-heading{margin-bottom:2px}}
+</style>
+</head>
+<body>
+<div class="notice">Cached snapshot only · analysis freshness and source-model parity are not established.</div>
+<div id="plots">
+<section class="panel" aria-labelledby="drift-title"><div class="panel-heading"><div class="panel-labels"><h3 id="drift-title">Cached wind drift</h3><p class="caption">Stored positive and negative fields · missing values remain gaps</p></div><span class="unit" id="drift-unit"></span></div><div class="plot" id="drift" tabindex="0" aria-label="Cached wind drift chart"></div></section>
+<section class="panel" aria-labelledby="shear-title"><div class="panel-heading"><div class="panel-labels"><h3 id="shear-title">Cached signed shear</h3><p class="caption">Stored signed case profile · missing values remain gaps</p></div><span class="unit" id="shear-unit"></span></div><div class="plot" id="shear" tabindex="0" aria-label="Cached signed shear chart"></div></section>
+</div>
+<script>/*__ECHARTS_RUNTIME__*/</script>
+<script>
+"use strict";
+// Presentation adapted from EtabExtension at 9eb1c879 (Apache-2.0):
+// analytics/charts/{AnalysisChartPanel.tsx,chartSpec.ts,calcOptions.ts}.
+// See docs/native/cached-chart-style.md for exact source blobs and adaptations.
+const REPORT_PALETTE=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#8c564b','#17becf','#bcbd22','#7f7f7f'];
+const charts={drift:echarts.init(document.getElementById('drift')),shear:echarts.init(document.getElementById('shear'))};
+let active=null;
+function markers(packet,kind){const p=packet[kind];return packet.selected_story!==null&&p.stories.includes(packet.selected_story)?[{name:'Selected story',yAxis:packet.selected_story,lineStyle:{color:'#0d9488',width:2}}]:[];}
+function layout(kind){const chart=charts[kind];return {left:Math.max(120,chart.getWidth()*.11),right:Math.max(36,chart.getWidth()*.05),top:Math.max(34,chart.getHeight()*.10),bottom:Math.max(48,chart.getHeight()*.13)};}
+function option(packet,kind){
+  const p=packet[kind];
+  const series=p.series.map((s,i)=>({id:'cached-'+i,name:s.name,type:'line',smooth:false,showSymbol:true,symbolSize:4,connectNulls:false,itemStyle:{color:REPORT_PALETTE[i%REPORT_PALETTE.length]},lineStyle:{color:REPORT_PALETTE[i%REPORT_PALETTE.length],type:'solid',width:2},data:p.stories.map((story,j)=>[s.values[j],story]),...(i===0?{markLine:{silent:true,symbol:'none',label:{position:'insideEndTop',fontSize:10},data:markers(packet,kind)}}:{})}));
+  if(p.reference!==null)series.push({id:'stored-reference',name:'Stored allowable ratio',type:'line',smooth:false,showSymbol:false,silent:true,lineStyle:{color:'#cc0000',type:'dashed',width:1.5},itemStyle:{color:'#cc0000'},data:p.stories.map(story=>[p.reference,story])});
+  return {animation:false,backgroundColor:'transparent',textStyle:{fontFamily:'system-ui, sans-serif',fontSize:11},color:REPORT_PALETTE,legend:{type:'scroll',left:8,right:8,top:'1%',textStyle:{fontSize:11,color:'#52525b'}},tooltip:{trigger:'axis',confine:true,renderMode:'richText'},grid:layout(kind),xAxis:{type:'value',name:kind==='drift'?'Drift Ratio':'Shear ('+p.unit+')',nameLocation:'middle',nameGap:28,axisLabel:{color:'#52525b'},splitLine:{lineStyle:{color:'#e4e4e7'}},...(p.reference===null?{}:{max:extent=>Math.max(extent.max,p.reference)})},yAxis:{type:'category',data:p.stories,inverse:true,name:'Story',nameLocation:'middle',nameGap:100,nameRotate:90,axisLabel:{width:80,overflow:'truncate',color:'#52525b'},axisTick:{show:false},axisLine:{lineStyle:{color:'#a1a1aa'}}},dataZoom:[{type:'inside',yAxisIndex:0,filterMode:'none'},{type:'slider',yAxisIndex:0,right:0,width:10,filterMode:'none',showDetail:false,borderColor:'#e4e4e7',fillerColor:'rgba(31,119,180,.10)',handleStyle:{color:'#a1a1aa',borderColor:'#a1a1aa'}}],series};
+}
+window.resultBridge=Object.freeze({apply(packet){
+  if(packet.version!==1||typeof packet.source!=='string')throw Error('Invalid cached packet');
+  if(active&&packet.source===active.source&&packet.generation<active.generation)return;
+  const same=active&&packet.source===active.source&&packet.generation===active.generation;
+  active=packet;
+  for(const kind of ['drift','shear']){
+    if(same)charts[kind].setOption({series:[{id:'cached-0',markLine:{data:markers(packet,kind)}}]});
+    else{
+      const title=document.getElementById(kind+'-title');title.textContent=packet[kind].title;title.title=packet[kind].title;
+      document.getElementById(kind+'-unit').textContent=packet[kind].unit;
+      charts[kind].setOption(option(packet,kind),{notMerge:true});
+    }
+  }
+}});
+for(const kind of ['drift','shear']){
+  charts[kind].on('click',p=>{if(active&&p.componentType==='series'&&p.seriesId!=='stored-reference'&&Array.isArray(p.value)&&active[kind].stories.includes(p.value[1]))window.ipc.postMessage(JSON.stringify({version:1,type:'select_story',source:active.source,generation:active.generation,plot:kind,story:p.value[1]}));});
+  document.getElementById(kind).addEventListener('keydown',e=>{if(e.key==='Escape'&&active){window.ipc.postMessage(JSON.stringify({version:1,type:'clear_selection',source:active.source,generation:active.generation,plot:kind,story:null}));e.preventDefault();}});
+}
+new ResizeObserver(()=>{for(const [kind,chart] of Object.entries(charts)){chart.resize();if(active)chart.setOption({grid:layout(kind)});}}).observe(document.getElementById('plots'));
+window.ipc.postMessage(JSON.stringify({version:1,type:'results_ready'}));
+</script>
+</body>
+</html>

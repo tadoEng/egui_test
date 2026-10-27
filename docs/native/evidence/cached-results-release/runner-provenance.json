@@ -1,0 +1,16 @@
+{
+  "upstream_harness_commit": "4b64083adc6fba1c26c691ecf91f05be2ea73841",
+  "upstream_sha256": "efbec387209165f18d4232dc77385f569e031bbf0cc4c6196191e4f14675140c",
+  "variant_sha256": "f465c6323c9b570a861ea9c7d29dd3d999ce210ff58afc3c037324b64e4cc6e5",
+  "change": "relative worktree target and recorded existing tool/temp settings only; guards unchanged",
+  "current_source": "bc65f5c68ed2e4838c9e9f6e7f6fb33da0a2c919",
+  "compiled_input_comparison": "0dad38c to bc65: only docs/evidence changed, no compiled input changes",
+  "memory_launch_floor_bytes": 6442450944,
+  "memory_runtime_floor_bytes": 2147483648,
+  "disk_floor_bytes": 6442450944,
+  "immutable_published_runner": "executed-runner.ps1.gz contains exact executed bytes; measure-cargo-local-cache.ps1 is readable LF-normalized mirror",
+  "archived_uncompressed_sha256": "f465c6323c9b570a861ea9c7d29dd3d999ce210ff58afc3c037324b64e4cc6e5",
+  "archive_sha256": "dac47031ab1f31c2b53583af4d2d58f7ad3ae6308e036efeea20d647297c3faf",
+  "readable_mirror_sha256": "f465c6323c9b570a861ea9c7d29dd3d999ce210ff58afc3c037324b64e4cc6e5",
+  "readable_diff_is_line_endings_only": true
+}
