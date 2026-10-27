@@ -1,0 +1,53 @@
+{
+  "assessment": "PARTIAL",
+  "source_commit": "d5f7b8e358da6c40f74d43a16a067229a5b761d1",
+  "source_tree": "f1b3d855c42646812c99430c0f19d41baba130b8",
+  "backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+  "cargo_lock_sha256": "03889d632e170384f7ab153bcb2f7a3eccece3b38baa737dc9ec4566e20bc54b",
+  "full_offline_gate": {
+    "assessment": "PASS",
+    "cpu_test_executions": 98,
+    "shared_duplicate_executions": 19,
+    "gpu_ignored_executions": 6,
+    "fmt": true,
+    "native_all_targets_features": true,
+    "strict_clippy": true,
+    "wasm_all_targets_features": true,
+    "doc_tests": 0
+  },
+  "separate_legacy_native_renderer_feature_clippy": "PASS",
+  "explicit_gpu": {
+    "assessment": "PASS",
+    "tests": 2,
+    "source_fixture": "LAB-REAL02-GPU-01-r1, independently authored",
+    "e2k_adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU / Vulkan / driver591.74",
+    "depth_adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU / Dx12 (driver text unavailable)",
+    "source_capture": "256x256 offscreen GPU readback, inspected",
+    "depth_capture": "64x64 independent depth oracle, inspected",
+    "scope": "Single source fixture; complete geometry digest reuse/invalidation, actual nonclear readback, depth oracle; not presentation or engineering parity"
+  },
+  "logs_sha256": {
+    "e2k-gpu-full-check.log": "885729da0465ba471efcd19eb82d5360b9d719e067ae7abc460ad0a4511a9bce",
+    "e2k-gpu-probes.log": "5e7d76e938a05d64a1ea73fea741a86085b7211a81379fb47e2e09e308e54165",
+    "e2k-legacy-renderer-check.log": "03ee1e214dbde92bb3198c67a982de0f54896138949cc12ba459d9d5f0ee1b6f",
+    "e2k-gpu-debug-build.log": "bc06ab98768dc29be6c384dac4760799cfab85c166770b0a0fa2cb13121f6bbb"
+  },
+  "public_artifacts_sha256": {
+    "public-host-smoke.json": "e24bce43b7a6954e38fd553d9f9682416302461dccc7f5d15f57af27d213290e",
+    "public-native-validation.json": "086cc2ff14bd61bbc843195362ff618095c1c4badc6e9c3dec1a45ddf7a62f92",
+    "public-e2k.png": "c8835b5472cd03ff32c0db73b43376fe3c32aa79347baef7979e397aeacc9fec",
+    "depth-probe.png": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2"
+  },
+  "private_evidence_included": false,
+  "remaining": [
+    "same-version cached result/story selection attachment",
+    "async load/cancel/last-good switching",
+    "100k GPU scene/presented benchmark",
+    "source section/local-axis/offset/opening fidelity",
+    "physical Windows/DPI/focus input",
+    "Release and clean-machine packaging",
+    "worker/device/lifecycle acceptance"
+  ],
+  "production": "Tauri",
+  "migration_gates_closed": 0
+}

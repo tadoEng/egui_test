@@ -1,12 +1,15 @@
-//! Shared synthetic GPU viewport, extracted from the reviewed renderer example.
+//! Shared GPU viewport, extracted from the reviewed renderer example.
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
 };
 
+#[cfg(not(feature = "real-geometry"))]
 use bytemuck::{Pod, Zeroable};
 use eframe::egui_wgpu;
 use egui_wgpu::wgpu;
+#[cfg(feature = "real-geometry")]
+use lab_e2k_mesh::Vertex;
 use wgpu::util::DeviceExt as _;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
@@ -48,23 +51,58 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let diffuse = 0.28 + 0.72 * abs(dot(normal, light));
     return vec4<f32>(input.color * diffuse, 1.0);
 }
+
+@fragment
+fn fs_selected(input: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0, 0.72, 0.12, 1.0);
+}
 ";
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
+#[cfg(not(feature = "real-geometry"))]
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
     color: [f32; 3],
 }
 
+#[cfg(feature = "real-geometry")]
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "Local bounds were derived from these already validated f32 vertices; conversion round-trips"
+)]
+fn source_mesh(source: lab_e2k_mesh::Mesh) -> MeshData {
+    let source = source.into_render_parts();
+    MeshData {
+        key: MeshKey::SourceGeometry(source.revision.geometry_sha256),
+        vertices: source.vertices,
+        indices: source.indices,
+        #[cfg(feature = "real-workbench")]
+        source_entities: source.entities,
+        bounds: Bounds {
+            min: source.bounds.min.map(|v| v as f32),
+            max: source.bounds.max.map(|v| v as f32),
+        },
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MeshKey {
+    Lab(u64),
+    #[cfg(feature = "real-geometry")]
+    SourceGeometry([u8; 32]),
+}
+
 #[derive(Clone, Debug)]
 struct MeshData {
     // A geometry revision, not an entity ID. Immutable meshes with different geometry
     // must use different keys; camera changes retain the key and resident buffers.
-    key: u64,
+    key: MeshKey,
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
+    #[cfg(feature = "real-workbench")]
+    source_entities: Vec<lab_e2k_mesh::EntityMesh>,
     bounds: Bounds,
 }
 
@@ -189,12 +227,38 @@ impl MeshBuilder {
 
     fn finish(self, key: u64) -> MeshData {
         MeshData {
-            key,
+            key: MeshKey::Lab(key),
             vertices: self.vertices,
             indices: self.indices,
+            #[cfg(feature = "real-workbench")]
+            source_entities: Vec::new(),
             bounds: self.bounds,
         }
     }
+}
+
+#[cfg(feature = "real-workbench")]
+fn story_indices(mesh: &MeshData, story: Option<&str>) -> Result<Vec<u32>, &'static str> {
+    let Some(story) = story else {
+        return Ok(Vec::new());
+    };
+    let mut indices = Vec::new();
+    for entity in mesh
+        .source_entities
+        .iter()
+        .filter(|entity| entity.story == story)
+    {
+        let range = entity.indices.start as usize..entity.indices.end as usize;
+        let source = mesh
+            .indices
+            .get(range)
+            .ok_or("Invalid source index range")?;
+        if source.len() % 3 != 0 || indices.len().saturating_add(source.len()) > 16 * 1024 * 1024 {
+            return Err("Story highlight exceeds its 64 MiB index budget");
+        }
+        indices.extend_from_slice(source);
+    }
+    Ok(indices)
 }
 
 fn synthetic_structure() -> MeshData {
@@ -303,10 +367,44 @@ struct GpuMesh {
 
 struct RendererCore {
     pipeline: wgpu::RenderPipeline,
+    #[cfg(feature = "real-workbench")]
+    selection_pipeline: wgpu::RenderPipeline,
+    #[cfg(feature = "real-workbench")]
+    selection: Option<(Arc<Vec<u32>>, wgpu::Buffer)>,
     uniform: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     mesh: Option<GpuMesh>,
-    uploaded_key: Option<u64>,
+    uploaded_key: Option<MeshKey>,
+    stats: Arc<GpuCounters>,
+}
+
+#[derive(Default)]
+struct GpuCounters {
+    uploads: AtomicU64,
+    vertex_bytes: AtomicU64,
+    index_bytes: AtomicU64,
+    draw_records: AtomicU64,
+    buffer_creation_cpu_ns: AtomicU64,
+    #[cfg(feature = "real-workbench")]
+    selection_uploads: AtomicU64,
+    #[cfg(feature = "real-workbench")]
+    selection_bytes: AtomicU64,
+    #[cfg(feature = "real-workbench")]
+    selection_draw_records: AtomicU64,
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GpuStats {
+    pub(crate) uploads: u64,
+    pub(crate) vertex_bytes: u64,
+    pub(crate) index_bytes: u64,
+    pub(crate) draw_records: u64,
+    pub(crate) buffer_creation_cpu_ns: u64,
+    #[cfg(feature = "real-workbench")]
+    pub(crate) selection_uploads: u64,
+    #[cfg(feature = "real-workbench")]
+    pub(crate) selection_bytes: u64,
+    #[cfg(feature = "real-workbench")]
+    pub(crate) selection_draw_records: u64,
 }
 
 impl RendererCore {
@@ -347,16 +445,46 @@ impl RendererCore {
             bind_group_layouts: &[Some(&bind_group_layout)],
             immediate_size: 0,
         });
+        let pipeline =
+            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, false);
+        #[cfg(feature = "real-workbench")]
+        let selection_pipeline =
+            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, true);
+        Self {
+            pipeline,
+            #[cfg(feature = "real-workbench")]
+            selection_pipeline,
+            #[cfg(feature = "real-workbench")]
+            selection: None,
+            uniform,
+            bind_group,
+            mesh: None,
+            uploaded_key: None,
+            stats: Arc::new(GpuCounters::default()),
+        }
+    }
+
+    fn create_pipeline(
+        device: &wgpu::Device,
+        target_format: wgpu::TextureFormat,
+        pipeline_layout: &wgpu::PipelineLayout,
+        shader: &wgpu::ShaderModule,
+        highlighted: bool,
+    ) -> wgpu::RenderPipeline {
         let attributes = wgpu::vertex_attr_array![
             0 => Float32x3,
             1 => Float32x3,
             2 => Float32x3
         ];
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("native_renderer_pipeline"),
-            layout: Some(&pipeline_layout),
+        let descriptor = wgpu::RenderPipelineDescriptor {
+            label: Some(if highlighted {
+                "native_source_story_highlight"
+            } else {
+                "native_renderer_pipeline"
+            }),
+            layout: Some(pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: shader,
                 entry_point: Some("vs_main"),
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as u64,
@@ -372,15 +500,23 @@ impl RendererCore {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_write_enabled: Some(!highlighted),
+                depth_compare: Some(if highlighted {
+                    wgpu::CompareFunction::LessEqual
+                } else {
+                    wgpu::CompareFunction::Less
+                }),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
+                module: shader,
+                entry_point: Some(if highlighted {
+                    "fs_selected"
+                } else {
+                    "fs_main"
+                }),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -390,14 +526,8 @@ impl RendererCore {
             }),
             multiview_mask: None,
             cache: None,
-        });
-        Self {
-            pipeline,
-            uniform,
-            bind_group,
-            mesh: None,
-            uploaded_key: None,
-        }
+        };
+        device.create_render_pipeline(&descriptor)
     }
 
     fn prepare(
@@ -408,6 +538,12 @@ impl RendererCore {
         view_projection: &[[f32; 4]; 4],
     ) {
         if self.uploaded_key != Some(mesh.key) {
+            #[cfg(feature = "real-workbench")]
+            {
+                self.selection = None;
+                self.stats.selection_bytes.store(0, Ordering::Relaxed);
+            }
+            let started = web_time::Instant::now();
             let vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("native_renderer_vertices"),
                 contents: bytemuck::cast_slice(&mesh.vertices),
@@ -424,6 +560,19 @@ impl RendererCore {
                 index_count: u32::try_from(mesh.indices.len()).unwrap_or(u32::MAX),
             });
             self.uploaded_key = Some(mesh.key);
+            self.stats.uploads.fetch_add(1, Ordering::Relaxed);
+            self.stats.vertex_bytes.store(
+                self.mesh.as_ref().map_or(0, |m| m.vertex.size()),
+                Ordering::Relaxed,
+            );
+            self.stats.index_bytes.store(
+                self.mesh.as_ref().map_or(0, |m| m.index.size()),
+                Ordering::Relaxed,
+            );
+            self.stats.buffer_creation_cpu_ns.store(
+                u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+                Ordering::Relaxed,
+            );
         }
         queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(view_projection));
     }
@@ -437,11 +586,49 @@ impl RendererCore {
         pass.set_vertex_buffer(0, mesh.vertex.slice(..));
         pass.set_index_buffer(mesh.index.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(0..mesh.index_count, 0, 0..1);
+        self.stats.draw_records.fetch_add(1, Ordering::Relaxed);
+        #[cfg(feature = "real-workbench")]
+        if let Some((indices, buffer)) = &self.selection {
+            pass.set_pipeline(&self.selection_pipeline);
+            pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..u32::try_from(indices.len()).unwrap_or(0), 0, 0..1);
+            self.stats
+                .selection_draw_records
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    #[cfg(feature = "real-workbench")]
+    fn prepare_selection(&mut self, device: &wgpu::Device, indices: &Arc<Vec<u32>>) {
+        if self
+            .selection
+            .as_ref()
+            .is_some_and(|(old, _)| Arc::ptr_eq(old, indices))
+        {
+            return;
+        }
+        if indices.is_empty() {
+            self.selection = None;
+            self.stats.selection_bytes.store(0, Ordering::Relaxed);
+            return;
+        }
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("source_story_highlight_indices"),
+            contents: bytemuck::cast_slice(indices.as_slice()),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        self.stats.selection_uploads.fetch_add(1, Ordering::Relaxed);
+        self.stats
+            .selection_bytes
+            .store(buffer.size(), Ordering::Relaxed);
+        self.selection = Some((Arc::clone(indices), buffer));
     }
 }
 
 struct ViewportCallback {
     mesh: Arc<MeshData>,
+    #[cfg(feature = "real-workbench")]
+    selection: Arc<Vec<u32>>,
     view_projection: [[f32; 4]; 4],
     paints: Arc<AtomicU64>,
 }
@@ -457,6 +644,8 @@ impl egui_wgpu::CallbackTrait for ViewportCallback {
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(renderer) = resources.get_mut::<RendererCore>() {
             renderer.prepare(device, queue, &self.mesh, &self.view_projection);
+            #[cfg(feature = "real-workbench")]
+            renderer.prepare_selection(device, &self.selection);
         }
         Vec::new()
     }
@@ -492,33 +681,80 @@ pub(crate) struct NativeViewport {
     camera: OrbitCamera,
     fit_pending: bool,
     paints: Arc<AtomicU64>,
+    stats: Arc<GpuCounters>,
+    #[cfg(feature = "real-workbench")]
+    selected_story: Option<String>,
+    #[cfg(feature = "real-workbench")]
+    selection_error: Option<&'static str>,
+    #[cfg(feature = "real-workbench")]
+    selection: Arc<Vec<u32>>,
 }
 
 impl NativeViewport {
     pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Result<Self, String> {
-        let mesh = Arc::new(synthetic_structure());
+        #[cfg(feature = "real-geometry")]
+        {
+            Self::new_with_source(cc, None)
+        }
+        #[cfg(not(feature = "real-geometry"))]
+        {
+            Self::with_mesh(cc, Arc::new(synthetic_structure()))
+        }
+    }
+
+    #[cfg(feature = "real-geometry")]
+    pub(crate) fn new_with_source(
+        cc: &eframe::CreationContext<'_>,
+        source: Option<lab_e2k_mesh::Mesh>,
+    ) -> Result<Self, String> {
+        let mesh = source.map_or_else(synthetic_structure, source_mesh);
+        Self::with_mesh(cc, Arc::new(mesh))
+    }
+
+    fn with_mesh(cc: &eframe::CreationContext<'_>, mesh: Arc<MeshData>) -> Result<Self, String> {
         let render_state = cc
             .wgpu_render_state
             .as_ref()
             .ok_or_else(|| "native_renderer requires eframe's wgpu renderer".to_owned())?;
+        let renderer = RendererCore::new(&render_state.device, render_state.target_format);
+        let stats = Arc::clone(&renderer.stats);
         render_state
             .renderer
             .write()
             .callback_resources
-            .insert(RendererCore::new(
-                &render_state.device,
-                render_state.target_format,
-            ));
+            .insert(renderer);
         Ok(Self {
             camera: OrbitCamera::fit(mesh.bounds, 1.0),
             mesh,
             fit_pending: true,
             paints: Arc::new(AtomicU64::new(0)),
+            stats,
+            #[cfg(feature = "real-workbench")]
+            selected_story: None,
+            #[cfg(feature = "real-workbench")]
+            selection_error: None,
+            #[cfg(feature = "real-workbench")]
+            selection: Arc::new(Vec::new()),
         })
     }
 }
 
 impl NativeViewport {
+    pub(crate) fn gpu_stats(&self) -> GpuStats {
+        GpuStats {
+            uploads: self.stats.uploads.load(Ordering::Relaxed),
+            vertex_bytes: self.stats.vertex_bytes.load(Ordering::Relaxed),
+            index_bytes: self.stats.index_bytes.load(Ordering::Relaxed),
+            draw_records: self.stats.draw_records.load(Ordering::Relaxed),
+            buffer_creation_cpu_ns: self.stats.buffer_creation_cpu_ns.load(Ordering::Relaxed),
+            #[cfg(feature = "real-workbench")]
+            selection_uploads: self.stats.selection_uploads.load(Ordering::Relaxed),
+            #[cfg(feature = "real-workbench")]
+            selection_bytes: self.stats.selection_bytes.load(Ordering::Relaxed),
+            #[cfg(feature = "real-workbench")]
+            selection_draw_records: self.stats.selection_draw_records.load(Ordering::Relaxed),
+        }
+    }
     /// Callback records, not presented/completed frames or GPU draw-call timing.
     pub(crate) fn callback_paints(&self) -> u64 {
         self.paints.load(Ordering::Relaxed)
@@ -531,7 +767,27 @@ impl NativeViewport {
         (self.mesh.vertices.len(), self.mesh.indices.len() / 3)
     }
 
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn show(&mut self, ui: &mut egui::Ui, selected_story: Option<&str>) {
+        #[cfg(feature = "real-workbench")]
+        if self.selected_story.as_deref() != selected_story {
+            self.selected_story = selected_story.map(str::to_owned);
+            match story_indices(&self.mesh, selected_story) {
+                Ok(indices) => {
+                    self.selection = Arc::new(indices);
+                    self.selection_error = None;
+                }
+                Err(error) => {
+                    self.selection = Arc::new(Vec::new());
+                    self.selection_error = Some(error);
+                }
+            }
+        }
+        #[cfg(feature = "real-workbench")]
+        if let Some(error) = self.selection_error {
+            ui.colored_label(egui::Color32::YELLOW, error);
+        }
+        #[cfg(not(feature = "real-workbench"))]
+        let _unused_selection = selected_story;
         let ctx = ui.ctx().clone();
         let size = ui.available_size();
         if !size.is_finite() || size.x < 1.0 || size.y < 1.0 {
@@ -559,10 +815,34 @@ impl NativeViewport {
             rect,
             ViewportCallback {
                 mesh: Arc::clone(&self.mesh),
+                #[cfg(feature = "real-workbench")]
+                selection: Arc::clone(&self.selection),
                 view_projection: self.camera.view_projection(aspect),
                 paints: Arc::clone(&self.paints),
             },
         ));
+        let stats = self.gpu_stats();
+        #[cfg(feature = "real-workbench")]
+        let selection_label = format!(
+            " · selected indices {} bytes / {} uploads / {} draw records",
+            stats.selection_bytes, stats.selection_uploads, stats.selection_draw_records
+        );
+        #[cfg(not(feature = "real-workbench"))]
+        let selection_label = "";
+        ui.painter().with_clip_rect(rect).text(
+            rect.left_bottom() + egui::vec2(10.0, -8.0),
+            egui::Align2::LEFT_BOTTOM,
+            format!(
+                "{} draw records · {} buffer uploads · {} mesh bytes · CPU buffer creation {} µs{}",
+                stats.draw_records,
+                stats.uploads,
+                stats.vertex_bytes + stats.index_bytes,
+                stats.buffer_creation_cpu_ns / 1000,
+                selection_label
+            ),
+            egui::FontId::monospace(10.0),
+            egui::Color32::LIGHT_GRAY,
+        );
     }
 }
 
@@ -928,7 +1208,7 @@ mod tests {
 
         let resident_index = renderer.mesh.as_ref().expect("resident mesh").index.clone();
         let mut replacement = mesh.clone();
-        replacement.key += 1;
+        replacement.key = MeshKey::Lab(100);
         replacement.vertices[0].position[0] += 0.25;
         replacement.indices.truncate(3);
         renderer.prepare(&device, &queue, &replacement, &camera.view_projection(1.0));
@@ -945,6 +1225,404 @@ mod tests {
         assert_eq!(
             uploaded.index_count, 3,
             "new revision replaces the draw count"
+        );
+    }
+
+    #[cfg(feature = "real-geometry")]
+    #[test]
+    fn source_conversion_moves_buffers_and_preserves_the_complete_geometry_key() {
+        let source = lab_e2k_mesh::build(
+            lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+            Default::default(),
+        )
+        .expect("public source");
+        let vertices = source.vertices().as_ptr();
+        let indices = source.indices().as_ptr();
+        #[cfg(feature = "real-workbench")]
+        let entities = source.entities().as_ptr();
+        let key = source.revision().geometry_sha256;
+        let mesh = source_mesh(source);
+        assert_eq!(
+            mesh.vertices.as_ptr(),
+            vertices,
+            "transfer must not clone vertex storage"
+        );
+        assert_eq!(
+            mesh.indices.as_ptr(),
+            indices,
+            "transfer must not clone index storage"
+        );
+        assert_eq!(mesh.key, MeshKey::SourceGeometry(key));
+        #[cfg(feature = "real-workbench")]
+        assert_eq!(
+            mesh.source_entities.as_ptr(),
+            entities,
+            "source identity/ranges move with buffers"
+        );
+        assert_eq!(std::mem::size_of::<Vertex>(), 36);
+        assert_triangle_winding_matches_normals(&mesh);
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn source_story_highlight_uses_exact_attributed_ranges_and_refuses_invalid_ranges() {
+        let source = lab_e2k_mesh::build(
+            lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+            Default::default(),
+        )
+        .expect("public source");
+        let mut mesh = source_mesh(source);
+        assert_eq!(
+            story_indices(&mesh, Some("Roof")).expect("all Roof entities"),
+            mesh.indices
+        );
+        assert!(
+            story_indices(&mesh, Some("Base"))
+                .expect("story without assigned entities")
+                .is_empty()
+        );
+        assert!(
+            story_indices(&mesh, Some("roof"))
+                .expect("no inferred case-folding")
+                .is_empty()
+        );
+        mesh.source_entities[1].story = "Base".into();
+        let assigned = mesh.source_entities[1].indices.clone();
+        assert_eq!(
+            story_indices(&mesh, Some("Base")).expect("exact range"),
+            mesh.indices[assigned.start as usize..assigned.end as usize]
+        );
+        assert_eq!(
+            story_indices(&mesh, Some("Roof"))
+                .expect("remaining Roof ranges")
+                .len(),
+            mesh.indices.len() - (assigned.end - assigned.start) as usize
+        );
+        mesh.source_entities[1].indices.end = u32::MAX;
+        assert!(
+            story_indices(&mesh, Some("Base")).is_err(),
+            "never slice an invalid range or allocate from it"
+        );
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    #[ignore = "public GPU highlight/readback evidence; run explicitly with --ignored --nocapture"]
+    fn public_source_story_highlight_reuses_geometry_and_clears_overlay() {
+        let (device, queue, _adapter) = open_test_device().expect("GPU adapter required");
+        let mesh = source_mesh(
+            lab_e2k_mesh::build(
+                lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+                Default::default(),
+            )
+            .expect("public source"),
+        );
+        let camera = OrbitCamera::fit(mesh.bounds, 1.0);
+        let mut renderer = RendererCore::new(&device, wgpu::TextureFormat::Rgba8Unorm);
+        renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
+        let resident = renderer.mesh.as_ref().expect("resident").vertex.clone();
+        let selected = Arc::new(story_indices(&mesh, Some("Roof")).expect("source indices"));
+        renderer.prepare_selection(&device, &selected);
+        let selected_buffer = renderer
+            .selection
+            .as_ref()
+            .expect("highlight buffer")
+            .1
+            .clone();
+        renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
+        renderer.prepare_selection(&device, &selected);
+        assert_eq!(renderer.mesh.as_ref().expect("resident").vertex, resident);
+        assert_eq!(
+            renderer.selection.as_ref().expect("highlight").1,
+            selected_buffer
+        );
+        assert_eq!(renderer.stats.uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(renderer.stats.selection_uploads.load(Ordering::Relaxed), 1);
+        let highlighted = read_public_rgba(&device, &queue, &renderer);
+        let gold = |bytes: &[u8]| {
+            bytes
+                .chunks_exact(4)
+                .filter(|p| p[0] > 240 && p[1] > 160 && p[1] < 210 && p[2] < 60)
+                .count()
+        };
+        assert!(
+            gold(&highlighted) > 100,
+            "gold source-story overlay must reach mapped GPU pixels"
+        );
+        if let Some(path) = std::env::var_os("E2K_WORKBENCH_HIGHLIGHT_CAPTURE") {
+            image::save_buffer(path, &highlighted, 256, 256, image::ColorType::Rgba8)
+                .expect("public capture");
+        }
+        renderer.prepare_selection(&device, &Arc::new(Vec::new()));
+        assert!(renderer.selection.is_none());
+        assert_eq!(renderer.stats.selection_bytes.load(Ordering::Relaxed), 0);
+        let cleared = read_public_rgba(&device, &queue, &renderer);
+        assert!(
+            gold(&cleared) < gold(&highlighted),
+            "clear restores unhighlighted geometry"
+        );
+        assert_eq!(
+            renderer.stats.uploads.load(Ordering::Relaxed),
+            1,
+            "selection never reuploads vertices"
+        );
+    }
+
+    #[cfg(feature = "real-workbench")]
+    fn read_public_rgba(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        renderer: &RendererCore,
+    ) -> Vec<u8> {
+        let size = 256;
+        let color = texture(
+            device,
+            "public_highlight_color",
+            wgpu::TextureFormat::Rgba8Unorm,
+            size,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
+        let depth = texture(
+            device,
+            "public_highlight_depth",
+            DEPTH_FORMAT,
+            size,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        );
+        let color_view = color.create_view(&Default::default());
+        let depth_view = depth.create_view(&Default::default());
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("public_highlight_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            renderer.paint(&mut pass);
+        }
+        let readback = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("public_highlight_readback"),
+            size: u64::from(size * size * 4),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            color.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(size * 4),
+                    rows_per_image: Some(size),
+                },
+            },
+            wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let slice = readback.slice(..);
+        let (send, recv) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _sent = send.send(result);
+        });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(10)),
+            })
+            .expect("GPU completion");
+        recv.recv_timeout(std::time::Duration::from_secs(10))
+            .expect("map callback")
+            .expect("map success");
+        let mapped = slice.get_mapped_range().expect("mapped pixels");
+        let pixels = mapped.to_vec();
+        drop(mapped);
+        readback.unmap();
+        pixels
+    }
+
+    #[cfg(feature = "real-geometry")]
+    #[test]
+    #[ignore = "native GPU public E2K evidence; run explicitly with --ignored --nocapture"]
+    #[expect(
+        clippy::print_stderr,
+        reason = "Explicit GPU probe records the actual adapter"
+    )]
+    fn public_e2k_upload_readback_and_geometry_cache() {
+        let (device, queue, adapter) = open_test_device().expect("GPU adapter required");
+        eprintln!("public E2K GPU adapter: {adapter}");
+        let source = lab_e2k_mesh::build(
+            lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+            Default::default(),
+        )
+        .expect("public source");
+        let source_key = source.revision().source_sha256;
+        let expected_bytes = source.buffer_bytes() as u64;
+        let mesh = source_mesh(source);
+        let camera = OrbitCamera::fit(mesh.bounds, 1.0);
+        let mut renderer = RendererCore::new(&device, wgpu::TextureFormat::Rgba8Unorm);
+        renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
+        let resident = renderer.mesh.as_ref().expect("resident").vertex.clone();
+        let resident_index = renderer.mesh.as_ref().expect("resident").index.clone();
+        let comment_only = format!(
+            "{}\n$ public metadata comment\n",
+            lab_e2k_mesh::public_fixture::E2K
+        );
+        let same = lab_e2k_mesh::build(comment_only.as_bytes(), Default::default())
+            .expect("comment-only source");
+        assert_ne!(source_key, same.revision().source_sha256);
+        let same_mesh = source_mesh(same);
+        assert_eq!(mesh.key, same_mesh.key);
+        renderer.prepare(&device, &queue, &same_mesh, &camera.view_projection(0.5));
+        assert_eq!(renderer.mesh.as_ref().expect("resident").vertex, resident);
+        assert_eq!(
+            renderer.mesh.as_ref().expect("resident").index,
+            resident_index
+        );
+        assert_eq!(renderer.stats.uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(resident.size() + resident_index.size(), expected_bytes);
+        renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
+
+        let size = 256;
+        let color = texture(
+            &device,
+            "public_e2k_color",
+            wgpu::TextureFormat::Rgba8Unorm,
+            size,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        );
+        let depth = texture(
+            &device,
+            "public_e2k_depth",
+            DEPTH_FORMAT,
+            size,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        );
+        let color_view = color.create_view(&Default::default());
+        let depth_view = depth.create_view(&Default::default());
+        let mut encoder = device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("public_e2k_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            renderer.paint(&mut pass);
+        }
+        let bytes_per_row = size * 4;
+        let readback = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("public_e2k_readback"),
+            size: u64::from(bytes_per_row * size),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        encoder.copy_texture_to_buffer(
+            color.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &readback,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row),
+                    rows_per_image: Some(size),
+                },
+            },
+            wgpu::Extent3d {
+                width: size,
+                height: size,
+                depth_or_array_layers: 1,
+            },
+        );
+        queue.submit([encoder.finish()]);
+        let slice = readback.slice(..);
+        let (send, recv) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = send.send(result);
+        });
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(10)),
+            })
+            .expect("GPU completion");
+        recv.recv_timeout(std::time::Duration::from_secs(10))
+            .expect("map callback")
+            .expect("map success");
+        let data = slice.get_mapped_range().expect("mapped range");
+        let geometry_pixels = data
+            .chunks_exact(4)
+            .filter(|p| p[..3].iter().any(|v| *v > 20))
+            .count();
+        assert!(
+            geometry_pixels > 100,
+            "source geometry must reach actual GPU readback"
+        );
+        assert_eq!(&data[..4], &[0, 0, 0, 255]);
+        assert_eq!(renderer.stats.draw_records.load(Ordering::Relaxed), 1);
+        if let Some(path) = std::env::var_os("E2K_PUBLIC_GPU_CAPTURE") {
+            image::save_buffer(path, &data, size, size, image::ColorType::Rgba8)
+                .expect("save public fixture capture");
+        }
+        drop(data);
+        readback.unmap();
+
+        let mut changed = mesh.clone();
+        let MeshKey::SourceGeometry(mut digest) = changed.key else {
+            panic!("source key expected")
+        };
+        digest[31] ^= 1;
+        changed.key = MeshKey::SourceGeometry(digest);
+        renderer.prepare(&device, &queue, &changed, &camera.view_projection(1.0));
+        assert_eq!(
+            renderer.stats.uploads.load(Ordering::Relaxed),
+            2,
+            "full digest including last byte invalidates buffers"
+        );
+        assert_ne!(
+            renderer.mesh.as_ref().expect("replacement").vertex,
+            resident
+        );
+        assert_ne!(
+            renderer.mesh.as_ref().expect("replacement").index,
+            resident_index
         );
     }
 

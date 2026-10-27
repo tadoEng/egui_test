@@ -1572,6 +1572,7 @@ dependencies = [
  "ext-e2k",
  "ext-sidecar",
  "image",
+ "lab-e2k-mesh",
  "log",
  "pollster",
  "serde",
@@ -3364,6 +3365,7 @@ dependencies = [
 name = "lab-e2k-mesh"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "ext-e2k",
  "lab-fixture",
  "sha2",

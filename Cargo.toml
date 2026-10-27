@@ -26,6 +26,7 @@ serde_json = { version = "1.0.145", optional = true }
 bytemuck = { version = "1.25.2", features = ["derive"], optional = true }
 env_logger = "0.11.11"
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
+lab-e2k-mesh = { path = "crates/lab-e2k-mesh", features = ["render-layout"], optional = true }
 ext-calc = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
 ext-core = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
 ext-sidecar = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
@@ -40,9 +41,15 @@ wry = { version = "=0.55.1", optional = true }
 [features]
 e2k = ["dep:ext-e2k"]
 native-renderer = ["dep:bytemuck", "dep:pollster"]
+real-geometry = ["native-renderer", "dep:lab-e2k-mesh", "dep:serde_json"]
 webview = ["dep:base64", "dep:serde_json", "dep:wry"]
 cached-results = ["dep:ext-calc", "dep:ext-core", "dep:sha2"]
 snapshot-preflight = ["cached-results", "e2k", "dep:ext-sidecar", "dep:chrono"]
+real-workbench = ["real-geometry", "snapshot-preflight", "webview"]
+
+[[example]]
+name = "native_workbench"
+required-features = ["real-workbench"]
 
 [[example]]
 name = "webview_stage_a"
@@ -66,6 +73,10 @@ tempfile = "3.27.0"
 [[example]]
 name = "native_renderer"
 required-features = ["native-renderer"]
+
+[[example]]
+name = "native_e2k"
+required-features = ["real-geometry"]
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]

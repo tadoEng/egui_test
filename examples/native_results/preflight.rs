@@ -252,7 +252,81 @@ pub(crate) fn inspect(opts: &Options) -> Report {
     }
     report
 }
-fn inspect_inner(opts: &Options, report: &mut Report) -> Result<(), Refusal> {
+/// Holds the exact source/result bytes and read handles through mesh preparation.
+pub(crate) struct CheckedVersion {
+    pub(crate) snapshot: Snapshot,
+    root: PathBuf,
+    selected_root: PathBuf,
+    inputs: Vec<Artifact>,
+    e2k: Artifact,
+    automatic_export: bool,
+}
+impl CheckedVersion {
+    pub(crate) fn e2k_bytes(&self) -> &[u8] {
+        &self.e2k.bytes
+    }
+    pub(crate) fn verify_inputs(&mut self) -> Result<(), Refusal> {
+        if self.selected_root.canonicalize().ok().as_ref() != Some(&self.root) {
+            return Err("version_directory_changed");
+        }
+        self.e2k.verify()?;
+        if fs::symlink_metadata(self.root.join("model-metadata.json")).is_ok()
+            != (self.inputs.len() > 3)
+        {
+            return Err("metadata_presence_changed");
+        }
+        if self.automatic_export {
+            let mut exports = 0;
+            for (index, entry) in fs::read_dir(&self.root)
+                .map_err(|_private_error| "version_entries_refused")?
+                .enumerate()
+            {
+                if index >= 512 {
+                    return Err("version_entry_limit");
+                }
+                let entry = entry.map_err(|_private_error| "version_entries_refused")?;
+                if entry
+                    .path()
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("e2k"))
+                {
+                    exports += 1;
+                }
+            }
+            if exports != 1 {
+                return Err("e2k_set_changed");
+            }
+        }
+        verify_all(&mut self.inputs, &self.root, &mut Report::default())
+    }
+    // Namespace is part of identity: equal branch/version/files in a different
+    // selected project directory must not accept the previous project's IPC.
+    pub(crate) fn scoped_fingerprint(&self) -> String {
+        use std::os::windows::ffi::OsStrExt as _;
+        let mut hash = Sha256::new();
+        hash.update(b"REAL02-SELECTED-VERSION-v1");
+        let root: Vec<u16> = self.root.as_os_str().encode_wide().collect();
+        hash.update((root.len() as u64).to_le_bytes());
+        for unit in root {
+            hash.update(unit.to_le_bytes());
+        }
+        hash.update((self.inputs.len() as u64).to_le_bytes());
+        for artifact in self.inputs.iter().chain(std::iter::once(&self.e2k)) {
+            hash.update((artifact.bytes.len() as u64).to_le_bytes());
+            hash.update(&artifact.bytes);
+        }
+        format!("{:x}", hash.finalize())
+    }
+}
+pub(crate) fn load_checked_preview(opts: &Options) -> Result<(CheckedVersion, Report), Refusal> {
+    let mut report = Report::default();
+    let checked = inspect_inner(opts, &mut report)?.ok_or("e2k_missing_or_ambiguous")?;
+    if !report.can_show_uncertified_preview() {
+        return Err("snapshot_pairing_refused");
+    }
+    Ok((checked, report))
+}
+fn inspect_inner(opts: &Options, report: &mut Report) -> Result<Option<CheckedVersion>, Refusal> {
     let root = opts
         .root
         .canonicalize()
@@ -271,7 +345,7 @@ fn inspect_inner(opts: &Options, report: &mut Report) -> Result<(), Refusal> {
     ] {
         inputs.push(Artifact::read(&root.join(name), &root, false)?);
     }
-    let snapshot = Snapshot::load(&root)
+    let snapshot = Snapshot::from_bytes([&inputs[0].bytes, &inputs[1].bytes, &inputs[2].bytes])
         .map_err(|_private_error| "cached_identity_schema_or_units_refused")?;
     report.result_dto_ready = true;
     report.manifest_analysis = if snapshot.manifest.is_analyzed {
@@ -289,12 +363,22 @@ fn inspect_inner(opts: &Options, report: &mut Report) -> Result<(), Refusal> {
     let source: SourceUnitMetadata = serde_json::from_slice(&inputs[2].bytes)
         .map_err(|_private_error| "source_units_refused")?;
     let metadata_stories = inspect_metadata(&root, &snapshot, &source, &mut inputs, report)?;
-    let Some(e2k) = select_export(opts, &root, snapshot.manifest.e2k_size_bytes, report)? else {
-        return verify_all(&mut inputs, &root, report);
+    let Some(mut e2k) = select_export(opts, &root, snapshot.manifest.e2k_size_bytes, report)?
+    else {
+        verify_all(&mut inputs, &root, report)?;
+        return Ok(None);
     };
     check_geometry(&e2k, &snapshot, &source, &metadata_stories, report)?;
-    inputs.push(e2k);
-    verify_all(&mut inputs, &root, report)
+    e2k.verify()?;
+    verify_all(&mut inputs, &root, report)?;
+    Ok(Some(CheckedVersion {
+        snapshot,
+        root,
+        selected_root: opts.root.clone(),
+        inputs,
+        e2k,
+        automatic_export: opts.e2k.is_none(),
+    }))
 }
 fn select_export(
     opts: &Options,

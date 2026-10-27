@@ -10,6 +10,10 @@ mod fixture;
 mod host;
 #[cfg(all(target_os = "windows", feature = "snapshot-preflight"))]
 #[path = "native_results/preflight.rs"]
+#[expect(
+    dead_code,
+    reason = "The shared guarded bundle is consumed by native_workbench; this example uses the categorical preflight CLI"
+)]
 mod preflight;
 #[cfg(all(target_os = "windows", feature = "snapshot-preflight"))]
 #[path = "native_results/preflight_public.rs"]

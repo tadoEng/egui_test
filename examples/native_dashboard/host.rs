@@ -1,6 +1,7 @@
 use crate::{
     model::{self, Case, Config, Direction, Packet, State, Units},
     native_viewport::NativeViewport,
+    smoke_receipt::{self, Control, Receipt},
     webview_host::ChildWebView,
     windows_probe::WindowsProbe,
 };
@@ -23,10 +24,24 @@ fn html() -> Result<String, String> {
     }
     Ok(TEMPLATE.replacen(MARKER, ECHARTS, 1))
 }
+fn failure(message: impl Into<String>) -> eframe::Error {
+    eframe::Error::AppCreation(Box::new(std::io::Error::other(message.into())))
+}
 
 pub(crate) fn run() -> eframe::Result {
     env_logger::init();
     let smoke = std::env::var_os("DASHBOARD_SMOKE_REPORT").map(PathBuf::from);
+    let public = smoke.is_some();
+    let control = Control::parse(
+        std::env::var_os("TALOS_PUBLIC_SMOKE_CONTROL").as_deref(),
+        public,
+    )
+    .map_err(failure)?;
+    let (sender, verdict) = mpsc::sync_channel(1);
+    let smoke = smoke
+        .map(|path| Receipt::create(&path, control, sender))
+        .transpose()
+        .map_err(|error| failure(error.to_string()))?;
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         depth_buffer: 24,
@@ -45,7 +60,11 @@ pub(crate) fn run() -> eframe::Result {
                 Dashboard::new(cc, smoke).map_err(std::io::Error::other)?,
             ))
         }),
-    )
+    )?;
+    if public {
+        smoke_receipt::require_pass(verdict.try_recv().ok()).map_err(failure)?;
+    }
+    Ok(())
 }
 
 struct Dashboard {
@@ -61,7 +80,7 @@ struct Dashboard {
     windows_probe: WindowsProbe,
 }
 struct Smoke {
-    path: PathBuf,
+    receipt: Receipt,
     started: Instant,
     phase: u8,
     query: Option<Receiver<String>>,
@@ -69,7 +88,7 @@ struct Smoke {
 }
 
 impl Dashboard {
-    fn new(cc: &eframe::CreationContext<'_>, smoke: Option<PathBuf>) -> Result<Self, String> {
+    fn new(cc: &eframe::CreationContext<'_>, smoke: Option<Receipt>) -> Result<Self, String> {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         let state = State::default();
         let packet = state.packet();
@@ -87,8 +106,8 @@ impl Dashboard {
             error,
             rejected: 0,
             windows_probe: WindowsProbe::default(),
-            smoke: smoke.map(|path| Smoke {
-                path,
+            smoke: smoke.map(|receipt| Smoke {
+                receipt,
                 started: Instant::now(),
                 phase: 0,
                 query: None,
@@ -382,13 +401,15 @@ impl Dashboard {
     fn finish_smoke(&self, ctx: &egui::Context, smoke: Smoke, passed: bool) {
         let (vertices, triangles) = self.viewport.mesh_counts();
         let callback_paints = self.viewport.callback_paints();
-        let passed = passed && callback_paints > 0;
+        let passed = smoke
+            .receipt
+            .qualify_pass(passed && callback_paints > 0 && self.error.is_none());
         let report = serde_json::json!({"assessment":if passed{"PASS"}else{"FAIL"},"scope":"hidden composite programmatic two-chart options/readback/IPC and one WebView recreation; not manual input/presentation/network capture",
                 "webview2":wry::webview_version().ok(),"phase":smoke.phase,"rejected":self.rejected,"selected_story":self.state.selected(),"error":self.error,
                 "native_core_vertices":vertices,"native_core_triangles":triangles,"snapshots":smoke.snapshots,"manual_input_tested":false,"network_capture_performed":false,
-                "native_callback_paints":callback_paints,"presented_frames_measured":false,
+                "native_callback_paints":callback_paints,"presented_frames_measured":false,"controlled_failure":smoke.receipt.forced_failure(),
                 "navigation_attempts":self.chart.as_ref().and_then(|chart|chart.navigation.lock().ok().map(|entries|entries.clone()))});
-        if let Err(e) = std::fs::write(smoke.path, report.to_string()) {
+        if let Err(e) = smoke.receipt.finish(report.to_string().as_bytes(), passed) {
             log::error!("write dashboard smoke report: {e}");
         }
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -419,7 +440,7 @@ impl eframe::App for Dashboard {
                     ui.small(format!(
                         "{v} vertices / {t} triangles · boxes + zero-thickness shell"
                     ));
-                    self.viewport.show(ui);
+                    self.viewport.show(ui, None);
                 });
                 cols[1].vertical(|ui| {
                     let (rect, _) =

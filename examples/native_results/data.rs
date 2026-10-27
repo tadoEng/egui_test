@@ -102,12 +102,29 @@ impl Snapshot {
             .iter()
             .map(|p| read_bounded(&root.join(p)))
             .collect::<Result<Vec<_>, _>>()?;
+        let snapshot = Self::from_bytes([&bytes[0], &bytes[1], &bytes[2]])?;
+        for (path, original) in paths.iter().zip(&bytes) {
+            if read_bounded(&root.join(path))? != *original {
+                return Err("Source changed while loading; retry".into());
+            }
+        }
+        if root.join(".partial").exists() {
+            return Err("Version became incomplete while loading".into());
+        }
+        Ok(snapshot)
+    }
+    // Same authoritative DTO validation for bytes already held by the preflight
+    // read guards. Do not reopen joined paths when assembling a combined scene.
+    pub(crate) fn from_bytes(bytes: [&[u8]; 3]) -> Result<Self, String> {
+        if bytes.iter().any(|b| b.len() > 64 * 1024 * 1024) {
+            return Err("Oversized cached artifact".into());
+        }
         let manifest: VersionManifest =
-            serde_json::from_slice(&bytes[0]).map_err(|e| format!("Version manifest: {e}"))?;
-        let calc: CalcOutput = serde_json::from_slice(&bytes[1])
+            serde_json::from_slice(bytes[0]).map_err(|e| format!("Version manifest: {e}"))?;
+        let calc: CalcOutput = serde_json::from_slice(bytes[1])
             .map_err(|e| format!("Authoritative CalcOutput: {e}"))?;
         let source: SourceUnitMetadata =
-            serde_json::from_slice(&bytes[2]).map_err(|e| format!("Source-unit metadata: {e}"))?;
+            serde_json::from_slice(bytes[2]).map_err(|e| format!("Source-unit metadata: {e}"))?;
         source
             .context()
             .map_err(|e| format!("Source-unit validation: {e}"))?;
@@ -141,16 +158,17 @@ impl Snapshot {
             return Err("This viewer supports confirmed canonical kip/ft fields only; no unit conversion is inferred".into());
         }
         let mut hasher = Sha256::new();
-        for (path, original) in paths.iter().zip(&bytes) {
-            if read_bounded(&root.join(path))? != *original {
-                return Err("Source changed while loading; retry".into());
-            }
+        for (path, original) in [
+            "manifest.json",
+            "results/calc_output.json",
+            "results/source-units.json",
+        ]
+        .into_iter()
+        .zip(bytes)
+        {
             hasher.update(path.as_bytes());
             hasher.update((original.len() as u64).to_le_bytes());
             hasher.update(original);
-        }
-        if root.join(".partial").exists() {
-            return Err("Version became incomplete while loading".into());
         }
         Ok(Self {
             calc,

@@ -1,0 +1,241 @@
+{
+  "assessment": "PASS scoped authored same-version composite verification; programme PARTIAL",
+  "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+  "base": {
+    "source": "aaa05d8dad5229d3aef0a4221b6edfd468fad42a",
+    "authoritative_backend_pin": "9eb1c8792a1d41f3f81c60428afe89f1655782ba",
+    "lock_identical_to_main": true,
+    "owner_merged45": true,
+    "owner_merged_parent41": "2283a86c05bbca782f9773dc98daffe7b5c2bef2",
+    "retarget_verified": true,
+    "agent_github_merges": false,
+    "branch": "main",
+    "new_packages_or_pin_changes": false,
+    "lock_git_blob": "d4556b89f5fdd4132c86c3186083390a8d3bef2c"
+  },
+  "changes": [
+    "Extracted pipeline creation to meet strict constructor-size lint without suppression",
+    "Used direct optional lookup and positive probe branch",
+    "History-preserving local merge of actual owner-merged main; no GitHub merge by agent"
+  ],
+  "checks": {
+    "fmt": "PASS",
+    "strict_clippy": "PASS",
+    "doc_tests": 0,
+    "native_public_workbench": "JSON PASS and owned root self-exit0",
+    "owned_input_removed": true,
+    "gpu": "Three explicit public highlight/cache/depth tests PASS; all three images inspected",
+    "plain_cargo_cpu_executions": 187,
+    "native_all_targets_all_features": "PASS",
+    "new_workbench_model_tests": 9,
+    "doc_test_suites": 3,
+    "authored_input_bytes_mtime_unchanged": true,
+    "native_canonical": "check.ps1 -Offline -SkipWeb PASS",
+    "mandatory_wasm": "Identical required WASM command PASS with process-local RUSTC_WRAPPER unset due demonstrated Windows sccache os206",
+    "ignored_gpu_instances": 12,
+    "nextest": "187PASS/12skip/199listed; test and ignored-name multiset parity",
+    "cli_controls": 12
+  },
+  "artifact": {
+    "profile": "Debug debug0; jobs1; verification only",
+    "sha256": "a5f35e6ca4d67ffcc5078001f93393575abe058c85a867ba5579dc1be08bc70b",
+    "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+    "name": "native_workbench",
+    "bytes": 26510336
+  },
+  "tools": {
+    "cache_speedup_claim": false,
+    "jobs": 1,
+    "sccache": "0.19.0",
+    "powershell": "7.6.5",
+    "dev_test_debug": 0,
+    "test_threads": 1,
+    "rust_min_stack": 268435456,
+    "worktree_target": ".codex-target; same physical worktree; never borrowed",
+    "downloads": false,
+    "nextest": "0.9.150",
+    "warnings_suppressed": false,
+    "cache": "Private D-backed PID/start/port/reported-directory verified",
+    "rust": "1.99.1"
+  },
+  "gpu": {
+    "adapter": "NVIDIA GeForce RTX 3050 Ti Laptop GPU",
+    "resident_geometry_uploads": 1,
+    "driver": "591.74",
+    "index_bytes": 312,
+    "highlight_uploads": 1,
+    "images": [
+      {
+        "inspected": true,
+        "name": "public-highlight.png",
+        "sha256": "bfca60482acec85e7849c8ed6ff6212d6e849c6c3406b3931c7892cb8a9ebf8f"
+      },
+      {
+        "inspected": true,
+        "name": "public-e2k.png",
+        "sha256": "c8835b5472cd03ff32c0db73b43376fe3c32aa79347baef7979e397aeacc9fec"
+      },
+      {
+        "inspected": true,
+        "name": "public-depth.png",
+        "sha256": "e2e48afa2c5d4d4d8db6f871230bf70b1c17db41f96ec84acc4741ce4b6b18a2"
+      }
+    ],
+    "presented_frames_or_fps_measured": false,
+    "vertex_bytes": 1872,
+    "backend": "Vulkan",
+    "highlight_and_clear_keep_geometry_resident": true
+  },
+  "guards": {
+    "minimum_disk_bytes": 6442450944,
+    "sampling_fail_closed": true,
+    "runtime_ram_floor_bytes": 2147483648,
+    "minimum_launch_available_ram_bytes": 6442450944
+  },
+  "runs": [
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "5a3ecc64d8f0417f0fd7265f98adf9a2c4eb1c8798c85775a465fcac079a970b",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "66e45a6fa84d0416967d943f129e49e097fd9b0acbc4972f401545c7a72a60d2",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "pr44-canonical-native-4",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "91ad8be4c4383db4abe02c1b7a626789365cce5150a33fcf0daf088825595e15",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "408e47f4dc9a7fbfcd372d65a42f93a0cdb07970bc9942112df3f1d5bec9e22a",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": false,
+      "label": "wasm-direct-1",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "049d47d31b8616b115efda4ff206881398dde7a1979ffdc2650f652ba853e5c9",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "e4f832dc18b1ad459312c08de9c5021918bc1596dd10246086e801a10688fe93",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "plain-test-list",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "d8d7ea3c972a00c7f9296ba206c9a03551538398cc820c145fa865cd7bcf316c",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "532a1eb94ba05d480a01d7b218b19b8ae86575997b3557ffab3a27b2d7c170c4",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "nextest-list",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "9ce2ae670913601982f6a3cd79fc60f30b004f9b522d967fea18e775dcdbd15d",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "nextest-run",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "e1ad5d2ec6cbce14282897a26c122e5e549befce9a2ea5c354a16cb99d965dd8",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "02995fc1681688916aae869f10df1b062a6c7fed7c387e710c4e5a5aa5900e0a",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "gpu-highlight",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "cb670d786a49c98b8f5d0b8da9da8fed54a495ef1437b84b4f978735807b8b14",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "759ceed61cf5c4221e674983779f6f403e752b10e977cf5d2a3687464955993b",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "gpu-cache",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "4ebb8c3ca38ae556a9298dc58c7ba0bcf24dfdda99e3318ef29caddd86c6a552",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "66b1d927ef1f33879e89ac6f47b243482241a9f7056b1019d9e5b8c4c3d797d7",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "gpu-depth",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    },
+    {
+      "source": "7873b235a7fe0bd1d1b0a4df70849e66df1c91a3",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tree": "a765114dd04bb3be1b83f0d9ad53f8fc0cc5523e",
+      "stderr_sha256": "958478f7cd1929c3b75b3557e9f4d2c9e7eef0382f71166c90f815247fd31169",
+      "disk_guard_triggered": false,
+      "rustc_wrapper_used": true,
+      "label": "build-hosts",
+      "source_clean_and_unchanged": true,
+      "exit": 0,
+      "memory_guard_triggered": false,
+      "driver_sha256": "fab9dee6f267730feec27bf8ba267a3424a059b89f29af926ef42190d66086f5",
+      "lock_sha256": "43e4f281c5e8a99cac478d221c403aa422c637b6b9bb8663a1f3f7036d719e41"
+    }
+  ],
+  "cleanup": {
+    "useful_entries_logs_preserved": true,
+    "webview_process_cleanup_or_worker_join_proven": false,
+    "shared_servers_owner_apps_untouched": true,
+    "owned_root_self_exit": true,
+    "owned_cache_servers_stopped": true,
+    "owned_public_input_removed": true
+  },
+  "scope_limits": [
+    "Only authored public inputs in this published suite",
+    "Common checked bytes and unit coherence do not certify cached results were computed from shown E2K",
+    "Engineering source/analysis freshness and fidelity remain unverified",
+    "Frame display proxies and zero-thickness/withheld surfaces retain their stated limits",
+    "No physical Windows/DPI/focus/zorder, network capture, presented frame/RSS or lifecycle acceptance",
+    "WASM checks cfg stubs; native workbench UX is Windows-only",
+    "No Release/installer, real-model public proof, merge or migration-readiness claim",
+    "Six migration gates open; Tauri production; PR18 CRT hold"
+  ]
+}

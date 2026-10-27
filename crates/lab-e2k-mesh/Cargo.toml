@@ -10,6 +10,10 @@ description = "Experimental immutable E2K connectivity to bounded display mesh a
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false }
 lab-fixture = { path = "../lab-fixture" }
 sha2 = "0.10.9"
+bytemuck = { version = "1.25.2", features = ["derive"], optional = true }
+
+[features]
+render-layout = ["dep:bytemuck"]
 
 [lints]
 workspace = true

@@ -1,28 +1,5 @@
 use super::*;
-const SOURCE: &str = r#"$ PROGRAM INFORMATION
- PROGRAM "ETABS" VERSION "23.2.0"
-$ CONTROLS
- UNITS "Kip" "ft" "F"
-$ STORIES - IN SEQUENCE FROM TOP
- STORY "Roof" HEIGHT 10
- STORY "Base" ELEV 0
-$ POINT COORDINATES
- POINT "1" 0 0
- POINT "2" 10 0
- POINT "3" 10 10
- POINT "4" 0 10
-$ LINE CONNECTIVITIES
- LINE "C" COLUMN "1" "1" 1
- LINE "B" BEAM "1" "2" 0
-$ AREA CONNECTIVITIES
- AREA "S" FLOOR 4 "1" "2" "3" "4" 0 0 0 0
-$ LINE ASSIGNS
- LINEASSIGN "C" "Roof"
- LINEASSIGN "B" "Roof"
-$ AREA ASSIGNS
- AREAASSIGN "S" "Roof" OPENING "NO"
-$ END OF MODEL FILE
-"#;
+use crate::public_fixture::E2K as SOURCE;
 #[test]
 fn known_source_keys_story_order_metre_centerlines_and_batch_counts_are_preserved() {
     let mesh = build(SOURCE.as_bytes(), Config::default()).expect("authored source");
