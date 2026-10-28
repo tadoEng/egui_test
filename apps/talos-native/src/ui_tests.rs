@@ -19,10 +19,14 @@ fn harness(mode: LoadMode) -> Harness<'static, App> {
     harness_sized(mode, egui::vec2(1280.0, 800.0))
 }
 fn harness_sized(mode: LoadMode, size: egui::Vec2) -> Harness<'static, App> {
+    harness_scaled(mode, size, 1.0)
+}
+fn harness_scaled(mode: LoadMode, size: egui::Vec2, scale: f32) -> Harness<'static, App> {
     let mut harness = Harness::builder()
         // A loading spinner animates; a settled UI needs far fewer steps.
         .with_max_steps(8)
         .with_size(size)
+        .with_pixels_per_point(scale)
         .build_eframe(move |cc| {
             crate::theme::install(&cc.egui_ctx);
             App::with_parts(
@@ -1039,4 +1043,55 @@ fn the_explorer_says_when_the_selection_is_outside_its_story_filter() {
     assert_eq!(selected(&harness), picked, "the selection is kept");
     assert!(!present(&harness, "outside the"));
     assert!(present(&harness, "ENTITIES ON L1"));
+}
+
+#[test]
+fn compact_panels_keep_a_narrow_inspector_at_every_scale_and_height() {
+    for scale in [1.0, 1.25, 1.5] {
+        for height in [600.0, 700.0] {
+            let context = format!("900 x {height} at {scale}");
+            let mut harness = harness_scaled(LoadMode::Inline, egui::vec2(900.0, height), scale);
+            assert!(card(&harness, "Explorer").is_some(), "{context}");
+            assert!(card(&harness, "Inspector").is_none(), "{context}");
+            select(&mut harness, "|F|L12");
+            assert!(card(&harness, "Explorer").is_none(), "{context}");
+            let inspector = card(&harness, "Inspector").expect("inspector");
+            let canvas = harness.get_by_label("3D model view").rect();
+            let left = canvas.right()
+                - crate::pages::model::MARGIN
+                - crate::pages::model::COMPACT_INSPECTOR_WIDTH;
+            assert!(inspector.left() >= left - 0.5, "{context}: {inspector:?}");
+            let free = unobscured(&harness);
+            assert!(
+                free.width() >= 600.0 && free.height() >= 330.0,
+                "{context}: {free:?}"
+            );
+            // Readable, not elided: the native-display sentence and the
+            // source key appear whole in the narrow card.
+            assert!(present(&harness, "flat at declared face"), "{context}");
+            assert!(present(&harness, "inst|sh|F|L12"), "{context}");
+            // E/I, compact -> wide -> compact, docked: one narrow panel.
+            harness.key_press(egui::Key::I);
+            settle(&mut harness);
+            assert!(card(&harness, "Explorer").is_some(), "{context}: I");
+            harness.key_press(egui::Key::E);
+            settle(&mut harness);
+            assert!(card(&harness, "Inspector").is_some(), "{context}: E");
+            harness.set_size(egui::vec2(1280.0, 800.0));
+            settle(&mut harness);
+            assert!(card(&harness, "Explorer").is_some(), "{context}: wide");
+            harness.set_size(egui::vec2(900.0, height));
+            settle(&mut harness);
+            assert!(
+                card(&harness, "Explorer").is_none(),
+                "{context}: compact again"
+            );
+            set_mode(&mut harness, "Docked panels");
+            let docked = harness.get_by_label("3D model view").rect();
+            assert!(
+                docked.width() >= 900.0 - crate::pages::model::COMPACT_INSPECTOR_WIDTH - 2.0,
+                "{context}: docked {docked:?}"
+            );
+        }
+    }
 }

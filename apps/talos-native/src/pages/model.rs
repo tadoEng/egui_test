@@ -18,15 +18,21 @@ use lab_e2k_mesh::{
 
 pub(crate) const MARGIN: f32 = 14.0;
 const EXPLORER_WIDTH: f32 = 272.0;
-const INSPECTOR_WIDTH: f32 = 344.0;
+const INSPECTOR_WIDTH: f32 = 336.0;
+/// The Inspector's width on a compact window, where it is the only panel
+/// (owner, #54 Windows note: ~240–260 pt).
+pub(crate) const COMPACT_INSPECTOR_WIDTH: f32 = 256.0;
 const STRIP_HEIGHT: f32 = 64.0;
 /// Explorer and inspector widths for a page `total` wide: the design widths
-/// on a wide window, narrower at 900 px so the canvas keeps ~400 px.
+/// on a wide window; below the compact width a narrower Explorer and a
+/// 256 pt Inspector (one of them at a time).
 pub(crate) fn pane_widths(total: f32) -> (f32, f32) {
-    (
-        EXPLORER_WIDTH.min((total * 0.25).max(220.0)),
-        INSPECTOR_WIDTH.min((total * 0.32).max(260.0)),
-    )
+    let inspector = if total < crate::app::COMPACT_WIDTH {
+        COMPACT_INSPECTOR_WIDTH
+    } else {
+        INSPECTOR_WIDTH.min((total * 0.32).max(260.0))
+    };
+    (EXPLORER_WIDTH.min((total * 0.25).max(220.0)), inspector)
 }
 
 pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<Action> {
@@ -67,7 +73,7 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .frame(pane.stroke(egui::Stroke::new(1.0, tokens.chrome_line)))
             .resizable(true)
             .default_size(inspector_width)
-            .size_range(260.0..=(total * 0.32).max(260.0))
+            .size_range(240.0..=inspector_width.max(240.0))
             .show(ui, |ui| {
                 if inspector(
                     ui,

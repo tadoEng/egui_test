@@ -83,6 +83,12 @@ explorer (I)** / **Switch to inspector (E)**. The hidden one keeps a corner
 button (**Show explorer (E)** / **Show inspector (I)**). E and I do the same
 from the keyboard, and an explicit toggle always works.
 
+On a compact window the Inspector is 256 pt wide (owner's Windows note on
+#54: 240–260 pt). Wide windows keep up to 336 pt. Its rows stack name over
+value and wrap, with nothing below 12 pt and no truncation, and longer content
+scrolls. `before-inspector-288-900-1x.png` is the 288 pt version, for
+comparison with `model-900-floating-inspector-1x.png`.
+
 The user's panel intent (`explorer_open` / `inspector_open`) is kept apart from
 what the width can show (`ModelState::shows_explorer` / `shows_inspector`).
 Resizing 1280 → 900 → 1280 restores both panels, keeps the selection, project
@@ -156,7 +162,7 @@ values are plotted or invented.
 
 ## Tests
 
-There are 41 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
+There are 42 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
 `NativeModelView` through egui's AccessKit tree. Seven are new or rewritten
 for A.2:
 
@@ -173,6 +179,10 @@ for A.2:
 - the explorer text filter and type filter;
 - the selection outside the story filter: the notice, and **Show in Explorer**
   keeping the selection (state and UI);
+- at 900 × 600 and 900 × 700, each at 1.0, 1.25 and 1.5: one panel; the
+  Inspector at 256 pt with the native-display sentence and source key whole; an
+  unobscured region of at least 600 × 330 pt; E/I; compact → wide → compact;
+  Docked. This test fails at the earlier 288 pt;
 - at 900 pt: the More overflow, no header overlaps, shortcuts still route, and
   the canvas keeps at least 380 pt;
 - shrinking from 1280 to 900 pt narrows the docked panes. This test fails
@@ -190,7 +200,8 @@ chips.
   real pick, the same pick docked, Results, then the window resized to
   900 × 700 with one contextual panel (the Inspector for the pick, then the
   Explorer, floating and docked).
-- `*.png`: those 21 frames, all public synthetic tower data.
+- `*.png`: those 21 frames plus `before-inspector-288-900-1x.png`, all public
+  synthetic tower data.
 - `gate.sh.txt` and `gate-a2-66c15d7.txt`: the clean-worktree gate at
   `66c15d7`, after the compact-panel and story-filter changes. Every step is
   green except the known G-ENV-1 whole-workspace Clippy exception
