@@ -222,7 +222,7 @@ mod host {
                 ui.small("Rectangular frame proxies and zero-thickness supported shells. Assigned sections, local axes, offsets, insertion and opening subtraction are unverified. Unknown/invalid surfaces are withheld.");
                 ui.colored_label(egui::Color32::YELLOW,"Geometry snapshot only · analysis/source-model freshness unverified. Cached results and selection are not attached in this slice.");
             });
-            egui::CentralPanel::default().show(ui, |ui| self.viewport.show(ui, None));
+            egui::CentralPanel::default().show(ui, |ui| self.viewport.show(ui, None, 0));
             if let Some(smoke) = &mut self.smoke
                 && !smoke.done
             {

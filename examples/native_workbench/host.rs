@@ -321,10 +321,11 @@ impl eframe::App for Workbench {
                 bounds = Some(rect.shrink(2.0));
             });
         egui::CentralPanel::default().show(ui, |ui| {
-            self.viewport
-                .set_load_generation(self.session.packet.generation);
-            self.viewport
-                .show(ui, self.session.packet.selected_story.as_deref());
+            self.viewport.show(
+                ui,
+                self.session.packet.selected_story.as_deref(),
+                self.session.packet.generation,
+            );
         });
         self.sync(bounds, ui.ctx());
         self.step_smoke(ui.ctx());

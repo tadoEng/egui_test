@@ -838,7 +838,18 @@ impl NativeViewport {
         (self.mesh.vertices.len(), self.mesh.indices.len() / 3)
     }
 
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui, selected_story: Option<&str>) {
+    /// `load_generation` is the host's load identity; a change expires the
+    /// element selection even when the new load has byte-identical geometry.
+    pub(crate) fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        selected_story: Option<&str>,
+        load_generation: u64,
+    ) {
+        #[cfg(feature = "real-workbench")]
+        self.set_load_generation(load_generation);
+        #[cfg(not(feature = "real-workbench"))]
+        let _unused_generation = load_generation;
         #[cfg(feature = "real-workbench")]
         if self.selected_story.as_deref() != selected_story {
             self.selected_story = selected_story.map(str::to_owned);
@@ -924,9 +935,7 @@ impl NativeViewport {
 
 #[cfg(feature = "real-workbench")]
 impl NativeViewport {
-    /// The host's load generation; a change expires the element selection even
-    /// when the new load has byte-identical geometry.
-    pub(crate) fn set_load_generation(&mut self, generation: u64) {
+    fn set_load_generation(&mut self, generation: u64) {
         if self.picking.generation != generation {
             self.picking.generation = generation;
             self.picking.hovered = None;
@@ -1542,7 +1551,7 @@ mod tests {
             camera.orbit(egui::vec2(yaw / 0.008, pitch / 0.008));
             camera.zoom(zoom);
             let m = camera.view_projection(aspect);
-            for p in mesh.vertices.iter().step_by(97).map(|v| v.position) {
+            for p in mesh.vertices.iter().step_by(5).map(|v| v.position) {
                 let ndc = project(m, p);
                 if ndc.iter().any(|v| v.abs() > 1.0) || ndc[2] < 0.0 {
                     continue;
