@@ -210,7 +210,8 @@ impl ModelState {
 }
 
 /// A stored story response (`lab-results`): wind or seismic drift, wind
-/// displacement, story shear or overturning moment.
+/// displacement, story shear, or the stored story moment components Mx and My
+/// (no overturning axis is inferred).
 pub use lab_results::response::Response as Metric;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
@@ -573,6 +574,14 @@ impl State {
         }
         self.results.query.stories = range;
         self.results.notice = None;
+        // A highlighted story the new range no longer shows is cleared, so the
+        // table and chart never point at a row that is not on screen.
+        let off_screen = self.results.story.as_ref().is_some_and(|story| {
+            !matches!(self.shown_profile(), Shown::Plot(plot) if plot.stories.contains(story))
+        });
+        if off_screen {
+            self.results.story = None;
+        }
         Ok(())
     }
 

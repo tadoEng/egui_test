@@ -345,6 +345,33 @@ fn chart_card(
                 .iter()
                 .filter(|story| !model.contains(story.as_str()))
                 .count();
+            // And the other way: model stories inside the shown range that the
+            // cached profile has no row for (e.g. an intermediate level).
+            let cached: std::collections::BTreeSet<&str> =
+                plot.stories.iter().map(String::as_str).collect();
+            let uncovered = document
+                .story_names()
+                .filter(|name| !cached.contains(name))
+                .count();
+            if uncovered > 0 {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{uncovered} model {} no cached row",
+                        if uncovered == 1 {
+                            "story has"
+                        } else {
+                            "stories have"
+                        }
+                    ))
+                    .size(theme::SMALL)
+                    .color(tokens.warning_text),
+                )
+                .on_hover_text(
+                    "This version's model lists stories the cached profile does not. A base \
+                     level often has none; an intermediate level missing may mean the results \
+                     come from a different model.",
+                );
+            }
             if foreign > 0 {
                 ui.label(
                     egui::RichText::new(format!(

@@ -83,6 +83,9 @@ version folder (read only)             lab-results (pinned ext-calc / ext-core t
 | P2: group × case combinations | `response_choices(…, group)` offers only cases with rows for that group. The state re-picks a case (with a notice) only when the current one has no rows in the new group. |
 | P2: story set vs E2K | Flagged in the chart subtitle; the freshness badge is always shown. |
 | P2: selection on version switch, leak into Model | Cleared on the switch request; a test checks the Model selection and story stay untouched. |
+| Follow-up at `c4c0340`: stale "overturning" wording in the state docs | Reworded: "the stored story moment components Mx and My (no overturning axis is inferred)". |
+| Follow-up at `c4c0340`: highlighted story vs a new story range | A highlighted story that the new range no longer shows is cleared (test: `a_story_range_that_excludes_the_highlighted_story_clears_it`). |
+| Follow-up at `c4c0340`: model stories missing from the cache | The chart also warns "N model stories have no cached row". A missing base level is common; a missing intermediate level may mean the results come from another model. |
 | P2: Windows example smoke after the move | **Still required on Windows.** The examples include the moved files through `#[path]` and compile only on Windows, which cannot be checked from this container. |
 
 ## Tests

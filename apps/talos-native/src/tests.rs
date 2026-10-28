@@ -748,6 +748,33 @@ fn a_story_range_the_cached_profile_lacks_is_a_mismatch_not_every_story() {
 }
 
 #[test]
+fn a_story_range_that_excludes_the_highlighted_story_clears_it() {
+    let (mut state, effects) = State::new(Project::public_results_fixture());
+    deliver(&mut state, &effects[0]).expect("fixture");
+    state
+        .apply(Action::SelectResultStory(Some("L1".to_owned())))
+        .expect("L1 is stored");
+    let range = |story: &str| {
+        Some(StoryRange {
+            top: story.to_owned(),
+            bottom: story.to_owned(),
+        })
+    };
+    state
+        .apply(Action::SetStoryRange(range("L1")))
+        .expect("range");
+    assert_eq!(
+        state.results.story.as_deref(),
+        Some("L1"),
+        "still on screen"
+    );
+    state
+        .apply(Action::SetStoryRange(range("Roof")))
+        .expect("range");
+    assert_eq!(state.results.story, None, "L1 is no longer shown");
+}
+
+#[test]
 fn a_result_story_selection_is_per_version_and_never_reaches_the_model() {
     let (one, two) = (folder("v1", Some(&same)), folder("v2", Some(&same)));
     let mut state = ready(&[&one, &two]);
