@@ -202,16 +202,17 @@ chips.
   Explorer, floating and docked).
 - `*.png`: those 21 frames plus `before-inspector-288-900-1x.png`, all public
   synthetic tower data.
-- `gate.sh.txt` and `gate-a2-66c15d7.txt`: the clean-worktree gate at
-  `66c15d7`, after the compact-panel and story-filter changes. Every step is
-  green except the known G-ENV-1 whole-workspace Clippy exception
-  (`webview_stage_a.rs:393` `eprintln!`). Results:
-  - workspace tests: 163 passed, 0 failed, 7 ignored;
-  - Mesa GPU, `talos-native` + `lab-viewport`: 43 passed;
+- `gate.sh.txt` and `gate-a2-72d7b98.txt`: the clean-worktree gate at
+  `72d7b98`, after the compact panels, the story-filter notice and the 256 pt
+  compact Inspector. Every step is green except the known G-ENV-1
+  whole-workspace Clippy exception (`webview_stage_a.rs:393` `eprintln!`).
+  Results:
+  - workspace tests: 164 passed, 0 failed, 7 ignored;
+  - Mesa GPU, `talos-native` + `lab-viewport`: 44 passed;
   - GPU examples: 41 passed.
 
-  The commit after it adds only this receipt. `gate-a2-d7fab97.txt` is the
-  earlier receipt, before those changes.
+  The commit after it adds only this receipt. `gate-a2-66c15d7.txt` and
+  `gate-a2-d7fab97.txt` are earlier receipts.
 
 Not verified here: Windows rendering and fonts at real DPI, Narrator, and
 keyboard focus under a window manager (Xvfb has none, so the captures click
