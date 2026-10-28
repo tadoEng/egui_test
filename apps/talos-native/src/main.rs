@@ -9,7 +9,7 @@ fn main() -> std::process::ExitCode {
     let project = match project(std::env::args().skip(1)) {
         Ok(project) => project,
         Err(message) => {
-            eprintln!("talos-native: {message}");
+            complain(&message);
             return std::process::ExitCode::from(2);
         }
     };
@@ -42,10 +42,18 @@ fn main() -> std::process::ExitCode {
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("talos-native: {error}");
+            complain(&error.to_string());
             std::process::ExitCode::FAILURE
         }
     }
+}
+
+/// A command-line or startup error, on standard error (the window never opens).
+#[cfg(not(target_arch = "wasm32"))]
+fn complain(message: &str) {
+    use std::io::Write as _;
+    // Nothing else can report it if standard error is closed.
+    writeln!(std::io::stderr(), "talos-native: {message}").ok();
 }
 
 #[cfg(not(target_arch = "wasm32"))]

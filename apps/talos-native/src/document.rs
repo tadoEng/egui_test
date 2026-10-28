@@ -43,9 +43,8 @@ impl Document {
                 Results::Absent("This synthetic snapshot has no cached results.".to_owned()),
             ),
             Source::PublicResultsFixture => {
-                let (manifest, calc, units) = lab_results::fixture::values();
-                let [manifest, calc, units] =
-                    [manifest, calc, units].map(|value| value.to_string().into_bytes());
+                let [manifest, calc, units] = <[_; 3]>::from(lab_results::fixture::values())
+                    .map(|value| value.to_string().into_bytes());
                 let results = match Snapshot::from_bytes([&manifest, &calc, &units]) {
                     Ok(snapshot) => owned(entry, snapshot),
                     Err(reason) => Results::Refused(reason),

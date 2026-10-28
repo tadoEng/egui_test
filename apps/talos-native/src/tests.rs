@@ -647,10 +647,9 @@ fn show_in_explorer_moves_the_filter_to_the_selection_and_keeps_it() {
 /// A version folder built from the authored public fixture: the LAB-REAL01
 /// E2K as `model.e2k` and its cached results, edited by `edit` (manifest and
 /// calc JSON). `None` for `edit` leaves out the results entirely.
-fn folder(
-    version: &str,
-    edit: Option<&dyn Fn(&mut serde_json::Value, &mut serde_json::Value)>,
-) -> tempfile::TempDir {
+/// Edits the fixture's manifest and calc JSON before they are written.
+type Edit<'a> = &'a dyn Fn(&mut serde_json::Value, &mut serde_json::Value);
+fn folder(version: &str, edit: Option<Edit<'_>>) -> tempfile::TempDir {
     let (mut manifest, mut calc, units) = lab_results::fixture::values();
     manifest["id"] = serde_json::json!(version);
     calc["meta"]["versionId"] = serde_json::json!(version);
@@ -788,14 +787,16 @@ fn a_result_story_selection_is_per_version_and_never_reaches_the_model() {
     let scope = state.session.scope().expect("ready");
     assert!(state.model.selected(scope).is_empty(), "no model pick");
     assert_eq!(state.model.story, None, "no model story either");
-    let effect = switch(&mut state, "v2");
+    // The latest folder (v2) opens first; switch to the other one.
+    assert_eq!(state.results.query.version, Some(v("v2")));
+    let effect = switch(&mut state, "v1");
     assert_eq!(
         state.results.story, None,
-        "cleared the moment v2 is requested"
+        "cleared the moment v1 is requested"
     );
-    deliver(&mut state, &effect).expect("v2");
+    deliver(&mut state, &effect).expect("v1");
     assert_eq!(state.results.story, None);
-    assert_eq!(state.results.query.version, Some(v("v2")));
+    assert_eq!(state.results.query.version, Some(v("v1")));
 }
 
 #[test]

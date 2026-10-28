@@ -609,14 +609,12 @@ impl State {
 impl State {
     /// The current version's cached results, if loaded and accepted.
     pub fn cached(&self) -> Option<&lab_results::data::Snapshot> {
-        self.session
-            .ready()
-            .and_then(|document| cached_of(document).map(|s| &**s))
+        let document = self.session.ready()?;
+        cached_of(document).map(|s| &**s)
     }
     fn cached_arc(&self) -> Option<Arc<lab_results::data::Snapshot>> {
-        self.session
-            .ready()
-            .and_then(|document| cached_of(document).cloned())
+        let document = self.session.ready()?;
+        cached_of(document).cloned()
     }
 
     /// The stored profile the query asks for, or why there is none.
@@ -682,7 +680,7 @@ impl State {
         let group_for_cases = group.as_deref().or(query.group.as_deref());
         let choices = snapshot
             .response_choices(query.metric, query.direction.cached(), group_for_cases)
-            .map_err(|_| Refusal::NotInResults)?;
+            .map_err(|_absent| Refusal::NotInResults)?;
         if group.as_ref().is_some_and(|g| !choices.groups.contains(g))
             || case.as_ref().is_some_and(|c| !choices.cases.contains(c))
         {
@@ -701,7 +699,7 @@ impl State {
 
     fn select_result_story(&mut self, story: Option<String>) -> Result<(), Refusal> {
         if let Some(name) = &story {
-            let plot = self.profile().map_err(|_| Refusal::NotInResults)?;
+            let plot = self.profile().map_err(|_absent| Refusal::NotInResults)?;
             if !plot.stories.contains(name) {
                 return Err(Refusal::UnknownStory);
             }

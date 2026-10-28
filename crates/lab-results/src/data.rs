@@ -77,6 +77,10 @@ pub(crate) fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 impl Snapshot {
+    /// Reads one version folder's manifest, cached results and source units.
+    ///
+    /// # Errors
+    /// A partial, unreadable, oversized, changing or inconsistent version.
     pub fn load(root: &Path) -> Result<Self, String> {
         let root = root
             .canonicalize()
@@ -113,8 +117,11 @@ impl Snapshot {
         }
         Ok(snapshot)
     }
-    // Same authoritative DTO validation for bytes already held by the preflight
-    // read guards. Do not reopen joined paths when assembling a combined scene.
+    /// Same authoritative DTO validation for bytes already held by the preflight
+    /// read guards. Do not reopen joined paths when assembling a combined scene.
+    ///
+    /// # Errors
+    /// Invalid DTOs, mismatched identity or unsupported/conflicting units.
     pub fn from_bytes(bytes: [&[u8]; 3]) -> Result<Self, String> {
         if bytes.iter().any(|b| b.len() > 64 * 1024 * 1024) {
             return Err("Oversized cached artifact".into());
@@ -201,6 +208,10 @@ impl Snapshot {
             Direction::Y => &forces.y_profiles,
         })
     }
+    /// Wind-drift groups/cases and story-force cases for one direction.
+    ///
+    /// # Errors
+    /// The cached results lack wind drift or story forces.
     pub fn choices(&self, direction: Direction) -> Result<Choices, String> {
         let drift = self.drift(direction)?;
         let groups = drift
@@ -228,6 +239,10 @@ impl Snapshot {
             forces: force_cases,
         })
     }
+    /// The first stored drift row and force profile for one direction.
+    ///
+    /// # Errors
+    /// The cached results hold no such rows.
     pub fn initial_config(&self, direction: Direction) -> Result<Config, String> {
         let drift = self.drift(direction)?;
         let row = drift.rows.first().ok_or("No cached wind drift rows")?;
@@ -242,6 +257,10 @@ impl Snapshot {
             shear_case: force.output_case.clone(),
         })
     }
+    /// The drift and shear chart packet for one configuration.
+    ///
+    /// # Errors
+    /// Unknown cases, invalid story order or membership, non-finite values.
     pub fn packet(
         &self,
         config: &Config,
@@ -376,6 +395,11 @@ pub(crate) fn validate_membership<'a>(
     Ok(())
 }
 impl Packet {
+    /// A chart selection message, accepted only for this packet's source and
+    /// generation.
+    ///
+    /// # Errors
+    /// Malformed, stale or unknown selections.
     pub fn accept(&self, raw: &str) -> Result<Option<String>, String> {
         let msg: Select = serde_json::from_str(raw)
             .map_err(|error| format!("Invalid result selection: {error}"))?;

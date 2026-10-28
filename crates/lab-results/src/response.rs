@@ -263,44 +263,63 @@ impl Snapshot {
                 })
             }
             Source::Profiles(profiles, order) => {
-                validate_order(order)?;
-                let profile = profiles
-                    .iter()
-                    .find(|p| p.output_case == case)
-                    .ok_or("No cached profile for this case")?;
-                validate_membership(order, profile.rows.iter().map(|r| &r.story))?;
-                type Row = ext_calc::output::StoryForceCaseRow;
-                // The direction picks the stored X or Y profile list; the
-                // fields read are named, never re-labelled as a physical axis.
-                let fields: &[(&str, fn(&Row) -> f64)] = match (response, direction) {
-                    (Response::StoryShear, Direction::X) => &[("Vx", |r: &Row| r.vx_kip)],
-                    (Response::StoryShear, Direction::Y) => &[("Vy", |r: &Row| r.vy_kip)],
-                    _ => &[("Mx", |r: &Row| r.mx_kip_ft), ("My", |r: &Row| r.my_kip_ft)],
-                };
-                let unit = if response == Response::StoryShear {
-                    &units.force
-                } else {
-                    &units.moment
-                };
-                let mut series = Vec::new();
-                for (field, read) in fields {
-                    let values = column(order, &profile.rows, |r| &r.story, read);
-                    finite(&values)?;
-                    series.push(Series {
-                        name: format!("{field} (stored)"),
-                        values,
-                    });
-                }
-                Ok(Plot {
-                    title: format!("{} · {axis}-direction profiles · {case}", response.label()),
-                    unit: unit.clone(),
-                    stories: order.to_vec(),
-                    series,
-                    reference: None,
-                })
+                profile_plot(response, direction, profiles, order, case, units)
             }
         }
     }
+}
+
+type Row = ext_calc::output::StoryForceCaseRow;
+/// A stored field of a story-force case row: its name and how to read it.
+type Field = (&'static str, fn(&Row) -> f64);
+
+/// Shear or moment profile from the X- or Y-direction case profiles.
+fn profile_plot(
+    response: Response,
+    direction: Direction,
+    profiles: &[StoryForceCaseProfile],
+    order: &[String],
+    case: &str,
+    units: &ext_calc::output::UnitLabels,
+) -> Result<Plot, String> {
+    let axis = match direction {
+        Direction::X => "X",
+        Direction::Y => "Y",
+    };
+    validate_order(order)?;
+    let profile = profiles
+        .iter()
+        .find(|p| p.output_case == case)
+        .ok_or("No cached profile for this case")?;
+    validate_membership(order, profile.rows.iter().map(|r| &r.story))?;
+    // The direction picks the stored X or Y profile list; the
+    // fields read are named, never re-labelled as a physical axis.
+    let fields: &[Field] = match (response, direction) {
+        (Response::StoryShear, Direction::X) => &[("Vx", |r: &Row| r.vx_kip)],
+        (Response::StoryShear, Direction::Y) => &[("Vy", |r: &Row| r.vy_kip)],
+        _ => &[("Mx", |r: &Row| r.mx_kip_ft), ("My", |r: &Row| r.my_kip_ft)],
+    };
+    let unit = if response == Response::StoryShear {
+        &units.force
+    } else {
+        &units.moment
+    };
+    let mut series = Vec::new();
+    for (field, read) in fields {
+        let values = column(order, &profile.rows, |r| &r.story, read);
+        finite(&values)?;
+        series.push(Series {
+            name: format!("{field} (stored)"),
+            values,
+        });
+    }
+    Ok(Plot {
+        title: format!("{} · {axis}-direction profiles · {case}", response.label()),
+        unit: unit.clone(),
+        stories: order.to_vec(),
+        series,
+        reference: None,
+    })
 }
 
 fn missing(response: Response) -> String {

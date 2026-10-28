@@ -199,7 +199,7 @@ fn selectors(
         actions,
     );
     group(ui, "Stories", |ui| {
-        stories(ui, document, query.stories.as_ref(), actions)
+        stories(ui, document, query.stories.as_ref(), actions);
     });
     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let authority = state.session.project.authority;
@@ -337,59 +337,7 @@ fn chart_card(
                 ))
                 .color(tokens.muted),
             );
-            // Same version name is not the same story set: say when the
-            // cached profile names stories this version's model does not.
-            let model: std::collections::BTreeSet<&str> = document.story_names().collect();
-            let foreign = plot
-                .stories
-                .iter()
-                .filter(|story| !model.contains(story.as_str()))
-                .count();
-            // And the other way: model stories inside the shown range that the
-            // cached profile has no row for (e.g. an intermediate level).
-            let cached: std::collections::BTreeSet<&str> =
-                plot.stories.iter().map(String::as_str).collect();
-            let uncovered = document
-                .story_names()
-                .filter(|name| !cached.contains(name))
-                .count();
-            if uncovered > 0 {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{uncovered} model {} no cached row",
-                        if uncovered == 1 {
-                            "story has"
-                        } else {
-                            "stories have"
-                        }
-                    ))
-                    .size(theme::SMALL)
-                    .color(tokens.warning_text),
-                )
-                .on_hover_text(
-                    "This version's model lists stories the cached profile does not. A base \
-                     level often has none; an intermediate level missing may mean the results \
-                     come from a different model.",
-                );
-            }
-            if foreign > 0 {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "{foreign} cached {} not in this version's model",
-                        if foreign == 1 {
-                            "story is"
-                        } else {
-                            "stories are"
-                        }
-                    ))
-                    .size(theme::SMALL)
-                    .color(tokens.warning_text),
-                )
-                .on_hover_text(
-                    "The cached results and the model list different stories, so these \
-                     results may not belong to this model geometry.",
-                );
-            }
+            story_set_warnings(ui, document, plot, &tokens);
             for (index, series) in plot.series.iter().enumerate() {
                 legend(ui, palette(&tokens, index), &series.name, false);
             }
@@ -434,6 +382,63 @@ fn chart_card(
             ));
         }
     });
+}
+
+/// Same version name is not the same story set: warn both ways.
+fn story_set_warnings(ui: &mut egui::Ui, document: &Document, plot: &Plot, tokens: &Tokens) {
+    // Same version name is not the same story set: say when the
+    // cached profile names stories this version's model does not.
+    let model: std::collections::BTreeSet<&str> = document.story_names().collect();
+    let foreign = plot
+        .stories
+        .iter()
+        .filter(|story| !model.contains(story.as_str()))
+        .count();
+    // And the other way: model stories inside the shown range that the
+    // cached profile has no row for (e.g. an intermediate level).
+    let cached: std::collections::BTreeSet<&str> =
+        plot.stories.iter().map(String::as_str).collect();
+    let uncovered = document
+        .story_names()
+        .filter(|name| !cached.contains(name))
+        .count();
+    if uncovered > 0 {
+        ui.label(
+            egui::RichText::new(format!(
+                "{uncovered} model {} no cached row",
+                if uncovered == 1 {
+                    "story has"
+                } else {
+                    "stories have"
+                }
+            ))
+            .size(theme::SMALL)
+            .color(tokens.warning_text),
+        )
+        .on_hover_text(
+            "This version's model lists stories the cached profile does not. A base \
+             level often has none; an intermediate level missing may mean the results \
+             come from a different model.",
+        );
+    }
+    if foreign > 0 {
+        ui.label(
+            egui::RichText::new(format!(
+                "{foreign} cached {} not in this version's model",
+                if foreign == 1 {
+                    "story is"
+                } else {
+                    "stories are"
+                }
+            ))
+            .size(theme::SMALL)
+            .color(tokens.warning_text),
+        )
+        .on_hover_text(
+            "The cached results and the model list different stories, so these \
+             results may not belong to this model geometry.",
+        );
+    }
 }
 
 fn legend(ui: &mut egui::Ui, color: egui::Color32, text: &str, dashed: bool) {
@@ -562,8 +567,20 @@ fn draw_chart(
             4.0,
         ));
     }
+    draw_series(&painter, plot, &tokens, &x_of, &y_of);
+    hovered
+}
+
+/// The stored series: lines broken at gaps, a marker per stored value.
+fn draw_series(
+    painter: &egui::Painter,
+    plot: &Plot,
+    tokens: &Tokens,
+    x_of: &dyn Fn(f64) -> f32,
+    y_of: &dyn Fn(usize) -> f32,
+) {
     for (index, series) in plot.series.iter().enumerate() {
-        let color = palette(&tokens, index);
+        let color = palette(tokens, index);
         // A gap breaks the line; nothing is interpolated across it.
         let mut run: Vec<egui::Pos2> = Vec::new();
         for (at, value) in series.values.iter().enumerate() {
@@ -584,7 +601,6 @@ fn draw_chart(
             }
         }
     }
-    hovered
 }
 
 /// About five round steps between `low` and `high`.

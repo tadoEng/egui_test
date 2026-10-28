@@ -15,6 +15,9 @@ pub fn values() -> (Value, Value, Value) {
 }
 
 /// The authored public fixture written to an owned temporary version folder.
+///
+/// # Errors
+/// The temporary folder or its files cannot be created.
 pub fn fixture() -> std::io::Result<(tempfile::TempDir, Value)> {
     let (manifest, calc, source) = values();
     let root = tempfile::tempdir()?;
