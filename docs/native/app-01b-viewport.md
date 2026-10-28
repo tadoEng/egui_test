@@ -69,7 +69,11 @@ examples/support/native_viewport.rs ─┐                 ┌─ talos-native N
   - **Fit** (`F`).
   - Click to pick, Ctrl+click to add or remove, click empty space to clear.
 - Explorer: **Stories** (click to highlight a story; clicking it again clears),
-  then the entity list filtered to that story.
+  then the entity list filtered to that story. Choosing or clearing a story
+  clears the member selection and its ambiguity note (review of `0ed117f`). The
+  behaviour after that is defined, not incidental: a later pick, on any story,
+  is drawn and inspected in place of the story highlight, while the Explorer
+  list stays filtered to the chosen story until the story changes.
 - The Inspector, unchanged from APP-01A (bounded rows, units, backend fidelity
   vs native display), plus the ambiguity warning.
 - The demo project is now the tower:
@@ -103,13 +107,14 @@ Gate on exact head `69ee396` (`evidence/app-01b/gate-01b-69ee396.txt`, script
 
 What the tests cover:
 
-- `talos-native` **29** tests:
-  - state tests, including story highlight, pick ambiguity and per-version
-    geometry keys;
+- `talos-native` **31** tests:
+  - state tests, including story highlight, a story change clearing the member
+    selection, pick ambiguity and per-version geometry keys;
   - headless egui_kittest tests through the real `NativeModelView` without a GPU:
     canvas pick of the L12 slab, Ctrl+click adding a column, empty-space clear,
-    story highlight from the Explorer, camera kept across versions, `F` refit, and
-    a hidden tab doing no view work. All APP-01A UI tests are kept, including
+    story highlight from the Explorer, choosing L1 after picking an L12 member
+    (selection cleared, the L1 story highlighted), camera kept across versions,
+    `F` refit, and a hidden tab doing no view work. All APP-01A UI tests are kept, including
     Inspector paint bounds at 240/320/520 pt × 1.0/1.25/1.5 × dark/light.
 - `lab-viewport` **2** tests:
   - the camera rebase test;
@@ -155,7 +160,8 @@ cargo run --release --locked --offline -p talos-native
    follow each click. Ctrl+click adds; clicking empty space clears. A column in
    front of a slab edge wins over the slab.
 3. Explorer: click `L12 · 56`. That story is highlighted when nothing is selected,
-   and the list shows its 56 entities.
+   and the list shows its 56 entities. Pick a member, then click `L1`: the
+   member and the Inspector clear, and L1 is highlighted.
 4. Switch to `v1` in the header. The view stays where it was, and the selection
    clears. Click the roof slab: `MIDDLE`, `CentredMiddle`. Switch back to `v2`:
    `TOP`, `FlatAtDeclaredFace`.
