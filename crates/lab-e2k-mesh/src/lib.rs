@@ -16,6 +16,7 @@ const EPS: f64 = 1.0e-7;
 mod openings;
 pub mod pick;
 pub mod public_fixture;
+mod triangulate;
 /// Fixed limitations, never inferred model-specific engineering status.
 pub const FIDELITY_LIMITATIONS: [&str; 7] = [
     "project_scene_geometry_assumptions_not_certified",
@@ -86,7 +87,9 @@ pub enum Limitation {
     /// a declared opening (or touching one that has no plane). Withheld by this
     /// viewer rather than painted over the void; the backend draws it.
     OverlapsUnsubtractedOpening,
-    InvalidOrConcaveShell,
+    /// Degenerate, nonplanar or self-intersecting ring; concave simple rings
+    /// are triangulated, not withheld.
+    InvalidShellRing,
 }
 /// The `ext-api` `SceneGeometryFidelity` tiers a frame can take.
 ///
@@ -543,8 +546,11 @@ impl Builder {
         } else if let Some(normal) = convex_normal(points) {
             self.polygon(points, normal, color(class))?;
             None
+        } else if let Some((normal, triangles)) = triangulate::ear_clip(points) {
+            self.triangles(points, &triangles, normal, color(class))?;
+            None
         } else {
-            Some(Limitation::InvalidOrConcaveShell)
+            Some(Limitation::InvalidShellRing)
         };
         self.entities.push(EntityMesh {
             key: shell.key.clone(),
@@ -580,12 +586,22 @@ impl Builder {
         u32::try_from(self.indices.len()).map_err(|_private_error| Error::Budget)
     }
     fn polygon(&mut self, points: &[Point], normal: Point, color: [f32; 3]) -> Result<(), Error> {
-        let count = points
-            .len()
-            .checked_sub(2)
-            .ok_or(Error::InvalidGeometry)?
-            .checked_mul(3)
-            .ok_or(Error::Budget)?;
+        let fan: Vec<[usize; 3]> = (1..points.len().saturating_sub(1))
+            .map(|i| [0, i, i + 1])
+            .collect();
+        self.triangles(points, &fan, normal, color)
+    }
+    fn triangles(
+        &mut self,
+        points: &[Point],
+        triangles: &[[usize; 3]],
+        normal: Point,
+        color: [f32; 3],
+    ) -> Result<(), Error> {
+        if triangles.is_empty() || triangles.iter().flatten().any(|&i| i >= points.len()) {
+            return Err(Error::InvalidGeometry);
+        }
+        let count = triangles.len().checked_mul(3).ok_or(Error::Budget)?;
         let vertices = self
             .vertices
             .len()
@@ -616,10 +632,11 @@ impl Builder {
                 color,
             });
         }
-        for i in 1..points.len() - 1 {
-            let i = u32::try_from(i).map_err(|_private_error| Error::Budget)?;
-            self.indices
-                .extend_from_slice(&[start, start + i, start + i + 1]);
+        for triangle in triangles {
+            for &i in triangle {
+                let i = u32::try_from(i).map_err(|_private_error| Error::Budget)?;
+                self.indices.push(start + i);
+            }
         }
         Ok(())
     }

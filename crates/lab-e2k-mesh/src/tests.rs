@@ -168,11 +168,74 @@ fn invalid_concave_nonplanar_and_self_intersecting_shells_are_withheld() {
     ] {
         assert!(convex_normal(&points).is_none());
     }
-    let source = SOURCE.replace("POINT \"3\" 10 10", "POINT \"3\" 2 2");
-    let mesh = build(source.as_bytes(), Config::default()).expect("frames remain");
+    // Nonplanar and self-intersecting rings stay withheld after ear clipping.
+    for ring in &[
+        vec![[0., 0., 0.], [2., 0., 0.], [2., 2., 1.], [0., 2., 0.]],
+        vec![[0., 0., 0.], [2., 2., 0.], [0., 2., 0.], [2., 0., 0.]],
+        vec![[0., 0., 0.], [1., 0., 0.], [2., 0., 0.]],
+    ] {
+        assert!(triangulate::ear_clip(ring).is_none(), "{ring:?}");
+    }
+    let bowtie = SOURCE
+        .replace("POINT \"3\" 10 10", "POINT \"3\" 0 10")
+        .replace("POINT \"4\" 0 10", "POINT \"4\" 10 10");
+    let mesh = build(bowtie.as_bytes(), Config::default()).expect("frames remain");
     assert_eq!(
         mesh.entities()[2].limitation,
-        Some(Limitation::InvalidOrConcaveShell)
+        Some(Limitation::InvalidShellRing)
+    );
+}
+fn ring_area(mesh: &Mesh, e: &EntityMesh) -> f64 {
+    mesh.indices()[e.indices.start as usize..e.indices.end as usize]
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|t| {
+            let p: [Point; 3] = t.map(|i| mesh.vertices()[i as usize].position.map(f64::from));
+            let n = cross(sub(p[1], p[0]), sub(p[2], p[0]));
+            dot(n, n).sqrt() / 2.0
+        })
+        .sum()
+}
+#[test]
+fn concave_simple_rings_are_ear_clipped_with_exact_area_and_source_winding() {
+    // Dart (0,0) (10,0) (2,2) (0,10) ft: area 20 ft^2, concave at (2,2).
+    let dart = SOURCE.replace("POINT \"3\" 10 10", "POINT \"3\" 2 2");
+    let mesh = build(dart.as_bytes(), Config::default()).expect("source");
+    let shell = &mesh.entities()[2];
+    assert_eq!(
+        (shell.mode, shell.limitation),
+        (DisplayMode::ZeroThicknessSurface, None)
+    );
+    assert!((ring_area(&mesh, shell) - 20.0 * 0.3048 * 0.3048).abs() < 1e-6);
+    // L-shape with a collinear mid-edge vertex, plus its reversed winding.
+    let l_shape = [
+        [0., 0., 0.],
+        [2., 0., 0.],
+        [4., 0., 0.],
+        [4., 2., 0.],
+        [2., 2., 0.],
+        [2., 4., 0.],
+        [0., 4., 0.],
+    ];
+    for ring in [l_shape.to_vec(), l_shape.iter().rev().copied().collect()] {
+        let (normal, triangles) = triangulate::ear_clip(&ring).expect("simple concave ring");
+        let area: f64 = triangles
+            .iter()
+            .map(|t| {
+                let n = cross(sub(ring[t[1]], ring[t[0]]), sub(ring[t[2]], ring[t[0]]));
+                assert!(
+                    dot(n, normal) > 0.0,
+                    "every triangle winds with the ring normal"
+                );
+                dot(n, n).sqrt() / 2.0
+            })
+            .sum();
+        assert!((area - 12.0).abs() < 1e-12, "{area}");
+    }
+    assert_eq!(
+        triangulate::ear_clip(&l_shape).expect("ring").0,
+        [0.0, 0.0, 1.0]
     );
 }
 #[test]
