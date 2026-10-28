@@ -865,3 +865,38 @@ mod picking {
         assert!(selection.entities(b).is_empty(), "empty click clears");
     }
 }
+/// Story "Mezz" sits 0.001 ft (0.3 mm) above "Roof": inside the overlap band,
+/// but a distinct source-story identity.
+fn cross_story_source(void_story: &str) -> String {
+    scoped_opening_source()
+        .replace(
+            " STORY \"Roof\" HEIGHT 10\n",
+            " STORY \"Mezz\" HEIGHT 0.001\n STORY \"Roof\" HEIGHT 10\n",
+        )
+        .replace(
+            "AREAASSIGN \"VOID\" \"Roof\" OPENING \"YES\"",
+            &format!("AREAASSIGN \"VOID\" \"{void_story}\" OPENING \"YES\""),
+        )
+}
+#[test]
+fn an_opening_on_another_story_never_withholds_a_near_coincident_shell() {
+    let mesh = build(cross_story_source("Mezz").as_bytes(), Config::default()).expect("source");
+    assert_eq!(
+        entity(&mesh, "VOID").limitation,
+        Some(Limitation::OpeningVoid)
+    );
+    for shell in ["S", "R", "W"] {
+        assert_eq!(entity(&mesh, shell).limitation, None, "{shell}");
+    }
+    // Same geometry with a same-story partial overlap is still withheld.
+    let partial = cross_story_source("Roof")
+        .replace("POINT \"5\" 4 4", "POINT \"5\" 8 4")
+        .replace("POINT \"6\" 6 4", "POINT \"6\" 12 4")
+        .replace("POINT \"7\" 6 6", "POINT \"7\" 12 6")
+        .replace("POINT \"8\" 4 6", "POINT \"8\" 8 6");
+    let mesh = build(partial.as_bytes(), Config::default()).expect("source");
+    assert_eq!(
+        entity(&mesh, "S").limitation,
+        Some(Limitation::OverlapsUnsubtractedOpening)
+    );
+}

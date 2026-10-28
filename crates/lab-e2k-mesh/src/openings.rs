@@ -6,10 +6,11 @@
 //!   HEAD): same story, both rings planar, coincident planes, and every opening
 //!   vertex inside or on the host ring, with the same relative tolerance in
 //!   source units. A partial overlap is deliberately not a host there.
-//! * [`Opening::withholds`] is this viewer's own conservative band: a shell that
-//!   is coplanar with, and shares interior area with, an opening (or whose
-//!   bounds touch an opening without a plane) is not drawn as solid material,
-//!   because doing so would paint over a declared void.
+//! * [`Opening::withholds`] is this viewer's own conservative band: a shell on
+//!   the opening's own source story that is coplanar with, and shares interior
+//!   area with, it (or whose bounds touch an opening without a plane) is not
+//!   drawn as solid material, because doing so would paint over a declared
+//!   void. The caller applies the story scope.
 use super::{EPS, Point, cross, dot, sub, unit};
 use ext_e2k::{ScenePoint, ShellPolygon};
 

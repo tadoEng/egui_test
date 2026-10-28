@@ -502,11 +502,13 @@ impl Builder {
                     .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // Scoped by exact source story, like the backend host rule: geometry at
+        // another story identity is never this opening's host, however close.
         let openings: Vec<_> = shells
             .iter()
             .zip(&rings)
             .filter(|(shell, _)| shell.opening == Some(true))
-            .map(|(_, ring)| openings::Opening::new(ring))
+            .map(|(shell, ring)| (shell.story.as_str(), openings::Opening::new(ring)))
             .collect();
         let hosts = openings::authoritative_hosts(shells);
         for (index, (shell, ring)) in shells.iter().zip(&rings).enumerate() {
@@ -514,7 +516,10 @@ impl Builder {
                 None
             } else if hosts.contains(&index) {
                 Some(Limitation::HostOpeningSubtractionUnavailable)
-            } else if openings.iter().any(|opening| opening.withholds(ring)) {
+            } else if openings
+                .iter()
+                .any(|(story, opening)| *story == shell.story.as_str() && opening.withholds(ring))
+            {
                 Some(Limitation::OverlapsUnsubtractedOpening)
             } else {
                 None
