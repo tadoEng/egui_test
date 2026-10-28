@@ -1,0 +1,14 @@
+[package]
+name = "lab-fixture-mesh"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+description = "WB-02 validated synthetic fixture mesh conversion; no GPU or engineering source authority"
+
+[dependencies]
+lab-fixture = { path = "../lab-fixture" }
+sha2 = "0.10.9"
+
+[lints]
+workspace = true

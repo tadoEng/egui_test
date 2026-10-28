@@ -1,0 +1,9 @@
+{
+  "measured_source": "dfdb302666f2a80d3ac678a6475b8bcd1c6eeaa7",
+  "documentation_followup_only": true,
+  "compiled_inputs_unchanged": true,
+  "verified_with": "git diff --quiet measured-source -- Cargo manifests/lock/toolchain/check/build/src/crates/examples/tests/benches/assets/.cargo excluding README files",
+  "harness_git_index_preserves_physical_bytes": true,
+  "review_acceptance": "pending independent exact-head review",
+  "gpu_acceptance": false
+}

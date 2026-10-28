@@ -1,0 +1,35 @@
+{
+  "assessment": "PARTIAL",
+  "source_commit": "96faae331b7c8587ffafe9d0945e81f6ab7455fd",
+  "base": "955661a8aea547fb3f186a9c380bf5082597d533",
+  "source_tree": "35bc8d2e620124882229b92815ea62482002ad8b",
+  "cargo_lock_sha256": "ce483569f15967c6e8a0d0115c797b2b503ed951ca1f86ace57b0450b0c58c84",
+  "focused_tests": {
+    "assessment": "PASS",
+    "cpu_tests": 7,
+    "all_five_authored_presets_including_99981": true,
+    "new_manifest_utility_strict_clippy": "PASS",
+    "test_scope": "CPU buffers/keys/counts/bounds/winding/limits only"
+  },
+  "whole_workspace": {
+    "assessment": "BLOCKED",
+    "fmt": "PASS",
+    "native_all_feature_check": "STOPPED_INCOMPLETE",
+    "strict_workspace_clippy": "NOT_RUN",
+    "whole_workspace_tests": "NOT_RUN",
+    "wasm": "NOT_RUN",
+    "reason": "Available system RAM below2GiB; stopped verified owned sequencer only; no owner apps closed"
+  },
+  "public_manifest_csv_emitted": false,
+  "gpu_executed": false,
+  "worker_or_application_changed": false,
+  "production_changed": false,
+  "private_input_used": false,
+  "logs_sha256": {
+    "fixture-mesh-focused-clippy.log": "40facfda60b925c129b05ded80d093885e1ca001b86fb3555be3a078cbeafe21",
+    "fixture-mesh-focused-test.log": "db5c7c34a292e2e37545bacb72e5a09c033b6c6a1a0f8561421541589cdf9415",
+    "fixture-mesh-full-check.log": "06288e3f12400f788b4b451f75da1a48988ccf507fdcc37a129303a4a96f7f00"
+  },
+  "migration_gates_closed": 0,
+  "production": "Tauri"
+}

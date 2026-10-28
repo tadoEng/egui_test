@@ -3376,6 +3376,14 @@ name = "lab-fixture"
 version = "0.1.0"
 
 [[package]]
+name = "lab-fixture-mesh"
+version = "0.1.0"
+dependencies = [
+ "lab-fixture",
+ "sha2",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
