@@ -255,7 +255,13 @@ impl Charts {
                         continue;
                     }
                     if let Ok(action) = self.bridge.event(&raw, state) {
+                        let leaving = matches!(action, Action::SelectWorkspace(_));
                         actions.push(action);
+                        if leaving {
+                            // Later queued events were validated for the old
+                            // Results workspace; do not apply them after navigation.
+                            break;
+                        }
                     }
                 }
             }

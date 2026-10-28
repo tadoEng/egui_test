@@ -19,7 +19,7 @@ window.talos={receive(packet){
  active=packet;
  if(same)chart.setOption({series:[{id:'stored-0',markLine:{silent:true,symbol:'none',data:markers(packet)}}]});
  else chart.setOption(option(packet),{notMerge:true});
-},probe(label){const option=chart.getOption();const stored=(option.series??[]).filter(s=>s.id.startsWith('stored-'));post({type:'probe',label,scope:active?.scope??null,selected:stored[0]?.markLine?.data?.[0]?.yAxis??null,stories:option.yAxis?.[0]?.data??[],values:stored.map(s=>s.data.map(p=>p[0])),width:chart.getWidth(),height:chart.getHeight()});},click(story){
+},probe(label){const option=chart.getOption();const stored=(option.series??[]).filter(s=>/^stored-\d+$/.test(s.id));post({type:'probe',label,scope:active?.scope??null,selected:stored[0]?.markLine?.data?.[0]?.yAxis??null,stories:option.yAxis?.[0]?.data??[],values:stored.map(s=>s.data.map(p=>p[0])),width:chart.getWidth(),height:chart.getHeight()});},click(story){
  const p=active.plot; const at=p.stories.indexOf(story); const value=p.series[0].values[at];
  if(at<0||value===null)throw Error('Public click fixture missing');
  const pixel=chart.convertToPixel({xAxisIndex:0,yAxisIndex:0},[value,story]);

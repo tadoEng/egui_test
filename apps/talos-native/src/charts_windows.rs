@@ -131,12 +131,15 @@ impl Host {
                 "ECharts/WebView2 did not complete its offline bootstrap within 30 seconds".into(),
             );
         }
-        let was_visible = self.visible;
+        // Hiding the HWND can clear Windows focus. Record ownership before
+        // hiding so Model reliably regains focus without stealing it from
+        // another application.
+        let restore_focus = self.visible && !visible && self.own_child_has_focus();
         self.child.place(rect, scale, visible)?;
         self.visible = visible;
         self.rect = rect;
         self.scale = scale;
-        if was_visible && !visible && self.own_child_has_focus() {
+        if restore_focus {
             self.child
                 .webview
                 .focus_parent()
