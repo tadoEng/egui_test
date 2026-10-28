@@ -295,7 +295,20 @@ fn all_supported_length_units_are_converted_to_metres() {
         let source = SOURCE.replace("\"ft\"", &format!("\"{name}\""));
         let mesh = build(source.as_bytes(), Config::default()).expect("supported source units");
         assert!((mesh.stories()[0].elevation_m - 10.0 * factor).abs() < 1e-12);
+        assert_eq!(
+            mesh.source_units().metres_per_length_unit(),
+            factor,
+            "the reported factor is the one applied"
+        );
     }
+    let units = build(SOURCE.as_bytes(), Config::default())
+        .expect("public fixture")
+        .source_units();
+    assert_eq!(
+        (units.force, units.length, units.temperature),
+        (ForceUnit::Kip, LengthUnit::Ft, TempUnit::F),
+        "source units are reported as declared, not as the display unit"
+    );
 }
 #[test]
 fn large_world_origin_is_retained_in_f64_and_gpu_vertices_are_recentered() {
