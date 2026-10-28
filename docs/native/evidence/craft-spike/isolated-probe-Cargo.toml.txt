@@ -1,0 +1,11 @@
+[package]
+name = "craft-ui-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+egui = "0.37.0"
+craft-ui = { git = "https://github.com/storytold/craft-libs", rev = "b4afa6d22ae41bd36524c32dbcab3ff257ae4cdd", default-features = false }
+
+[workspace]
