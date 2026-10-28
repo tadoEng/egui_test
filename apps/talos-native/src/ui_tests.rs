@@ -7,19 +7,22 @@ use crate::loader::{LoadMode, Loader};
 use crate::native_view::NativeModelView;
 use crate::project::{Project, VersionId};
 use crate::state::Action;
-use crate::state::{DocumentState, Metric, Refusal, Workspace};
+use crate::state::{DocumentState, Metric, PanelMode, Refusal, Workspace};
 use crate::view::PlaceholderView;
-use egui::accesskit::Role;
+use egui::accesskit::{Role, Toggled};
 use egui_kittest::{
     Harness,
     kittest::{NodeT as _, Queryable as _},
 };
 
 fn harness(mode: LoadMode) -> Harness<'static, App> {
+    harness_sized(mode, egui::vec2(1280.0, 800.0))
+}
+fn harness_sized(mode: LoadMode, size: egui::Vec2) -> Harness<'static, App> {
     let mut harness = Harness::builder()
         // A loading spinner animates; a settled UI needs far fewer steps.
         .with_max_steps(8)
-        .with_size(egui::vec2(1280.0, 800.0))
+        .with_size(size)
         .build_eframe(move |cc| {
             crate::theme::install(&cc.egui_ctx);
             App::with_parts(
@@ -230,7 +233,9 @@ fn workspace_state_survives_tab_switches() {
     assert!(!harness.state().state().model.explorer_open);
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     harness.run();
-    harness.get_by_label("Metric").click();
+    harness
+        .get_by_role_and_label(Role::ComboBox, "Metric")
+        .click();
     harness.run();
     harness.get_by_label("Story shear").click();
     harness.run();
@@ -242,7 +247,7 @@ fn workspace_state_survives_tab_switches() {
     );
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
     harness.run();
-    assert!(!present(&harness, "All entities"), "explorer stays closed");
+    assert!(!present(&harness, "ALL ENTITIES"), "explorer stays closed");
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     harness.run();
     assert_eq!(
@@ -259,17 +264,17 @@ fn workspace_state_survives_tab_switches() {
 fn explorer_story_and_row_drive_highlight_and_inspector_and_a_switch_clears_selection() {
     let mut harness = harness(LoadMode::Inline);
     assert!(present(&harness, "Nothing selected"));
-    assert!(present(&harness, "All entities (672)"));
+    assert!(present(&harness, "ALL ENTITIES (672)"));
     row(&harness, "L12  ·  56").click();
     settle(&mut harness);
     assert_eq!(harness.state().state().model.story.as_deref(), Some("L12"));
-    assert!(present(&harness, "Entities on L12 (56)"));
+    assert!(present(&harness, "ENTITIES ON L12 (56)"));
     row(&harness, "C0_0  ·  Column  ·  L12").click();
     settle(&mut harness);
     assert!(present(&harness, "0.6096 m (2 ft)"), "C24 above L4, v2");
     select(&mut harness, "|F|L12");
     assert!(
-        present(&harness, "FlatAtDeclaredFace"),
+        present(&harness, "flat at declared face"),
         "v2 roof slab is TOP"
     );
     assert!(present(&harness, "0.2286 m (0.75 ft)"));
@@ -285,8 +290,11 @@ fn explorer_story_and_row_drive_highlight_and_inspector_and_a_switch_clears_sele
         "the story exists in v1 too"
     );
     select(&mut harness, "|F|L12");
-    assert!(present(&harness, "CentredMiddle"), "v1 roof slab is MIDDLE");
-    assert!(!present(&harness, "FlatAtDeclaredFace"));
+    assert!(
+        present(&harness, "centred middle"),
+        "v1 roof slab is MIDDLE"
+    );
+    assert!(!present(&harness, "flat at declared face"));
 }
 
 #[test]
@@ -332,7 +340,7 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
     let scope = harness.state().state().session.scope().expect("ready");
     assert_eq!(harness.state().state().model.selected(scope), [slab]);
     assert!(
-        present(&harness, "FlatAtDeclaredFace"),
+        present(&harness, "flat at declared face"),
         "inspector follows the pick"
     );
 
@@ -344,10 +352,11 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
     assert_eq!(harness.state().state().model.selected(scope), expected);
     assert!(present(&harness, "2 entities selected"));
 
-    // Empty space (a corner of the canvas) clears without toggle.
+    // Empty space (the canvas's left edge, clear of every overlay) clears
+    // without toggle.
     click_at(
         &mut harness,
-        rect.left_top() + egui::vec2(12.0, 12.0),
+        rect.left_center() + egui::vec2(6.0, 0.0),
         egui::Modifiers::NONE,
     );
     assert_eq!(
@@ -396,7 +405,7 @@ fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     let mut harness = harness(LoadMode::Manual);
     assert!(present(&harness, "Loading main/v2"));
     assert!(
-        !present(&harness, "All entities"),
+        !present(&harness, "ALL ENTITIES"),
         "no content before a load"
     );
     choose_version(&mut harness, "v1");
@@ -418,7 +427,7 @@ fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     );
     assert_eq!(app.state().stale_discarded, 2);
     assert_eq!(app.last_refusal(), Some(Refusal::StaleResponse));
-    assert!(present(&harness, "All entities"));
+    assert!(present(&harness, "ALL ENTITIES"));
 }
 
 /// Paint bounds (logical points) of every text label under `root`.
@@ -443,6 +452,21 @@ fn assert_within(labels: &[(String, egui::Rect)], left: f32, right: f32, context
     }
 }
 
+/// The inspector's own pane or card: the smallest pane holding its close button.
+fn inspector_labels(harness: &Harness<'_, App>) -> Vec<(String, egui::Rect)> {
+    let pane = harness
+        .root()
+        .children_recursive()
+        .filter(|node| node.accesskit_node().role() == Role::Pane)
+        .filter(|pane| {
+            pane.children_recursive()
+                .any(|n| n.accesskit_node().label().as_deref() == Some("Hide inspector (I)"))
+        })
+        .min_by_key(|pane| pane.children_recursive().count())
+        .expect("inspector pane");
+    label_rects(pane.children_recursive())
+}
+
 #[test]
 fn inspector_text_stays_inside_its_panel_in_the_app() {
     let mut harness = harness(LoadMode::Inline);
@@ -451,29 +475,30 @@ fn inspector_text_stays_inside_its_panel_in_the_app() {
             choose_version(&mut harness, "v1");
         }
         select(&mut harness, "|F|L12");
-        // The inspector's own pane: the smallest pane holding its heading.
-        let pane = harness
-            .root()
-            .children_recursive()
-            .filter(|node| node.accesskit_node().role() == Role::Pane)
-            .filter(|pane| {
-                pane.children_recursive()
-                    .any(|n| n.accesskit_node().value().as_deref() == Some("Inspector"))
-            })
-            .min_by_key(|pane| pane.children_recursive().count())
-            .expect("inspector pane");
-        let labels = label_rects(pane.children_recursive());
+        let expected = if version == "v2" {
+            "flat at declared face"
+        } else {
+            "centred middle"
+        };
+        // Docked: between the panel's splitter and the window edge.
+        let labels = inspector_labels(&harness);
         let left = harness
             .get_all_by_role(Role::Splitter)
             .map(|splitter| splitter.rect().center().x)
             .fold(f32::MIN, f32::max);
         assert_within(&labels, left, 1280.0, version);
-        let expected = if version == "v2" {
-            "FlatAtDeclaredFace"
-        } else {
-            "CentredMiddle"
-        };
         assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
+        // Floating: inside the card, which sits inside the canvas margin.
+        harness.get_by_label("Floating panels").click();
+        settle(&mut harness);
+        let canvas = harness.get_by_label("3D model view").rect();
+        let right = canvas.right() - crate::pages::model::MARGIN;
+        let left = right - crate::pages::model::pane_widths(canvas.width()).1;
+        let labels = inspector_labels(&harness);
+        assert_within(&labels, left, right, &format!("{version} floating"));
+        assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
+        harness.get_by_label("Docked panels").click();
+        settle(&mut harness);
     }
 }
 
@@ -528,6 +553,7 @@ fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
                             .with_size(egui::vec2(width, 900.0))
                             .with_pixels_per_point(scale)
                             .with_theme(theme)
+                            .with_context_setup(crate::theme::install)
                             .build_ui(move |ui| {
                                 crate::pages::model::inspector(ui, &shown, &[index], 0);
                             });
@@ -566,14 +592,22 @@ fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
 }
 
 #[test]
-fn no_empty_warning_band_when_nothing_is_wrong() {
+fn the_header_is_one_48_point_row_with_no_empty_warning_band() {
     let harness = harness(LoadMode::Inline);
     let version = harness
         .get_by_role_and_label(Role::ComboBox, "Version")
         .rect();
-    let tabs = harness.get_by_label("Model").rect();
-    let gap = tabs.min.y - version.max.y;
-    assert!(gap < 12.0, "{gap} pt between the header and the tabs");
+    let tab = harness.get_by_label("Model").rect();
+    assert!(
+        (version.center().y - tab.center().y).abs() < 1.0,
+        "the version picker and the tabs share one row"
+    );
+    assert!(tab.height() <= 48.5 && tab.bottom() <= 49.5, "{tab:?}");
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(
+        (48.0..=52.0).contains(&canvas.top()),
+        "the canvas starts right under the header: {canvas:?}"
+    );
 }
 
 #[test]
@@ -583,6 +617,7 @@ fn a_failed_load_still_shows_its_warning() {
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
         .with_max_steps(8)
+        .with_context_setup(crate::theme::install)
         .build_eframe(move |cc| {
             App::with_parts(
                 project,
@@ -614,4 +649,208 @@ fn a_hidden_model_tab_lays_out_no_view_and_keeps_the_same_view() {
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
     settle(&mut harness);
     assert!(view(&harness).frames() > hidden, "the same view resumes");
+}
+
+fn selected(harness: &Harness<'_, App>) -> Vec<usize> {
+    let state = harness.state().state();
+    let scope = state.session.scope().expect("ready");
+    state.model.selected(scope).to_vec()
+}
+
+#[test]
+fn panel_modes_keep_the_selection_and_overlays_never_pick_through() {
+    let mut harness = harness(LoadMode::Inline);
+    select(&mut harness, "|F|L12");
+    let slab = selected(&harness);
+    assert_eq!(slab.len(), 1);
+    let toggle = |harness: &Harness<'_, App>, label: &str| {
+        harness.get_by_label(label).accesskit_node().toggled() == Some(Toggled::True)
+    };
+    assert!(toggle(&harness, "Docked panels"));
+    assert!(!toggle(&harness, "Floating panels"));
+
+    harness.get_by_label("Floating panels").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state().model.panels, PanelMode::Floating);
+    assert!(toggle(&harness, "Floating panels"));
+    assert_eq!(selected(&harness), slab, "the mode is presentation only");
+    assert!(present(&harness, "flat at declared face"));
+    assert!(present(&harness, "ALL ENTITIES (672)"));
+
+    // The canvas now spans the page under the cards.
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(canvas.width() > 1270.0, "{canvas:?}");
+    // Empty card space, the version strip and the toolbar's gaps are not
+    // pick targets: a click there would otherwise pick or clear.
+    let close = harness.get_by_label("Hide inspector (I)").rect();
+    let strip = harness.get_by_label("Version v1").rect();
+    for at in [
+        egui::pos2(close.center().x - 120.0, canvas.bottom() - 110.0),
+        egui::pos2(canvas.right() - 60.0, strip.center().y),
+    ] {
+        click_at(&mut harness, at, egui::Modifiers::NONE);
+        assert_eq!(selected(&harness), slab, "a click at {at:?} went through");
+    }
+    // Outside every card the canvas still picks.
+    let column = entity(&harness, "|C0_0|L6");
+    let at = screen_point(&harness, column);
+    let (width, inspector) = crate::pages::model::pane_widths(canvas.width());
+    assert!(
+        at.x > canvas.left() + width + 20.0 && at.x < canvas.right() - inspector - 20.0,
+        "{at:?} is clear of both cards"
+    );
+    click_at(&mut harness, at, egui::Modifiers::NONE);
+    assert_eq!(selected(&harness), [column]);
+
+    harness.get_by_label("Docked panels").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state().model.panels, PanelMode::Docked);
+    assert_eq!(selected(&harness), [column]);
+    assert!(present(&harness, "C0_0"));
+}
+
+#[test]
+fn the_version_strip_and_the_header_picker_are_one_controller() {
+    let mut harness = harness(LoadMode::Inline);
+    let current = |harness: &Harness<'_, App>, label: &str| {
+        harness
+            .get_by_role_and_label(Role::Button, label)
+            .accesskit_node()
+            .toggled()
+            == Some(Toggled::True)
+    };
+    assert!(current(&harness, "Version v2"));
+    assert!(!current(&harness, "Version v1"));
+    harness
+        .get_by_role_and_label(Role::Button, "Version v1")
+        .click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().session.requested(),
+        &VersionId::new("main", "v1")
+    );
+    assert!(current(&harness, "Version v1"));
+    assert!(present(&harness, "v1 · viewing"));
+    choose_version(&mut harness, "v2");
+    assert!(current(&harness, "Version v2"));
+    assert!(!current(&harness, "Version v1"));
+    assert!(
+        present(&harness, "no commit history, dates or analysis runs"),
+        "the strip says what the snapshots are not"
+    );
+}
+
+#[test]
+fn the_explorer_filters_by_text_and_by_type() {
+    let mut harness = harness(LoadMode::Inline);
+    let expected = {
+        let document = harness.state().state().session.ready().expect("ready");
+        document
+            .mesh()
+            .entities()
+            .iter()
+            .filter(|e| e.key.to_string().contains("|C0_0|"))
+            .count()
+    };
+    assert!(expected > 1);
+    harness.get_by_role(Role::TextInput).focus();
+    harness.run();
+    harness.get_by_role(Role::TextInput).type_text("C0_0");
+    settle(&mut harness);
+    assert!(
+        present(&harness, &format!("ALL ENTITIES ({expected})")),
+        "the name filter"
+    );
+    for _ in 0.."C0_0".len() {
+        harness.key_press(egui::Key::Backspace);
+    }
+    settle(&mut harness);
+    assert!(present(&harness, "ALL ENTITIES (672)"));
+    row(&harness, "Beams  ·  372").click();
+    settle(&mut harness);
+    assert!(present(&harness, "ALL ENTITIES (372)"), "the type filter");
+    row(&harness, "Beams  ·  372").click();
+    settle(&mut harness);
+    assert!(
+        present(&harness, "ALL ENTITIES (672)"),
+        "clicking again clears it"
+    );
+    assert_eq!(selected(&harness), [] as [usize; 0], "filters never select");
+}
+
+#[test]
+fn at_900_points_the_header_overflows_into_more_and_shortcuts_still_route() {
+    let mut harness = harness_sized(LoadMode::Inline, egui::vec2(900.0, 700.0));
+    let tabs: Vec<_> = harness
+        .get_all_by_role(Role::Tab)
+        .filter_map(|tab| tab.accesskit_node().label())
+        .collect();
+    assert_eq!(tabs, ["Model", "Results"]);
+    let more = harness.get_by_label("More").rect();
+    for text in ["Read-only", "ETABS not connected"] {
+        assert!(present(&harness, text), "{text} keeps an accessible name");
+    }
+    // Nothing in the row overlaps and nothing runs off the window.
+    let mut row: Vec<egui::Rect> = vec![
+        harness
+            .get_by_role_and_label(Role::ComboBox, "Version")
+            .rect(),
+        harness.get_by_label("Model").rect(),
+        harness.get_by_label("Results").rect(),
+        more,
+    ];
+    row.extend(
+        harness
+            .query_all_by_label("Read-only")
+            .chain(harness.query_all_by_label("ETABS not connected"))
+            .map(|node| node.rect()),
+    );
+    row.sort_by(|a, b| a.left().total_cmp(&b.left()));
+    for pair in row.windows(2) {
+        assert!(pair[0].right() <= pair[1].left() + 0.5, "{pair:?} overlap");
+    }
+    assert!(row.last().expect("items").right() <= 900.0);
+    // The canvas keeps a usable width between the docked panes.
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(canvas.width() >= 380.0, "{canvas:?}");
+
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num3);
+    harness.run();
+    assert_eq!(
+        selected_tabs(&harness),
+        ["Compare"],
+        "the active one stays visible"
+    );
+    harness.get_by_label("More").click();
+    harness.run();
+    harness.get_by_label_contains("History    Ctrl+4").click();
+    harness.run();
+    assert_eq!(selected_tabs(&harness), ["History"]);
+}
+
+#[test]
+fn results_selector_labels_come_before_their_controls() {
+    let mut harness = harness(LoadMode::Inline);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    harness.run();
+    for name in ["Metric", "Case"] {
+        let label = harness
+            .get_all_by_role(Role::Label)
+            .find(|n| n.accesskit_node().value().as_deref() == Some(name))
+            .unwrap_or_else(|| panic!("{name} label"))
+            .rect();
+        let control = harness.get_by_role_and_label(Role::ComboBox, name).rect();
+        assert!(
+            label.right() <= control.left(),
+            "{name}: {label:?} {control:?}"
+        );
+        assert!(
+            (label.center().y - control.center().y).abs() < 2.0,
+            "{name}"
+        );
+    }
+    assert!(present(
+        &harness,
+        "Story drift · X · no case · all stories · main/v2"
+    ));
 }

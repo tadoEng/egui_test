@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 eframe = "0.37.0"
 egui = "0.37.0"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 lab-e2k-mesh = { path = "../../crates/lab-e2k-mesh" }
 lab-viewport = { path = "../../crates/lab-viewport" }
 log = "0.4.34"

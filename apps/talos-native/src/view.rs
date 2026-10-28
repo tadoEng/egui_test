@@ -37,6 +37,10 @@ pub trait ModelView {
     fn show(&mut self, ui: &mut egui::Ui, frame: &ViewFrame<'_>) -> Vec<ViewIntent>;
     /// Reset the camera to frame the whole model (view state only).
     fn fit(&mut self) {}
+    /// The camera's right, up and back axes in world space, for an axis gizmo.
+    fn basis(&self) -> Option<[[f32; 3]; 3]> {
+        None
+    }
     /// For diagnostics and tests that inspect a concrete view.
     fn as_any(&self) -> &dyn std::any::Any;
 }

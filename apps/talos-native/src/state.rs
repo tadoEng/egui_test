@@ -126,7 +126,19 @@ impl Session {
     }
 }
 
+/// How the Model workspace places its Explorer and Inspector.
+///
+/// Docked panes never cover geometry; floating cards give the model the whole
+/// canvas. Both show the same content; neither is a permanent decision
+/// (owner, #52).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PanelMode {
+    Docked,
+    Floating,
+}
+
 pub struct ModelState {
+    pub panels: PanelMode,
     pub explorer_open: bool,
     pub inspector_open: bool,
     /// Highlighted story, by name; kept across versions only if it exists there.
@@ -217,6 +229,7 @@ pub enum Action {
         coincident: usize,
     },
     SelectStory(Option<String>),
+    SetPanelMode(PanelMode),
     SetMetric(Metric),
     SetDirection(Direction),
     SetStoryRange(Option<StoryRange>),
@@ -274,6 +287,7 @@ impl State {
             workspace: Workspace::Model,
             session: Session { project, document },
             model: ModelState {
+                panels: PanelMode::Docked,
                 explorer_open: true,
                 inspector_open: true,
                 story: None,
@@ -322,6 +336,7 @@ impl State {
                 coincident,
             } => self.pick(scope, entity, toggle, coincident)?,
             Action::SelectStory(story) => self.select_story(story)?,
+            Action::SetPanelMode(mode) => self.model.panels = mode,
             Action::SetMetric(metric) => self.results.query.metric = metric,
             Action::SetDirection(direction) => self.results.query.direction = direction,
             Action::SetStoryRange(range) => self.set_story_range(range)?,

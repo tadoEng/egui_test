@@ -152,6 +152,9 @@ impl ModelView for NativeModelView {
     fn fit(&mut self) {
         self.fit_pending = true;
     }
+    fn basis(&self) -> Option<[[f32; 3]; 3]> {
+        self.camera.map(|(_, camera)| camera.basis().into())
+    }
 
     fn show(&mut self, ui: &mut egui::Ui, frame: &ViewFrame<'_>) -> Vec<ViewIntent> {
         let size = ui.available_size();
@@ -213,51 +216,13 @@ impl ModelView for NativeModelView {
                 egui::Color32::GRAY,
             );
         }
-        self.controls(ui, rect);
         intents
     }
 }
 
 impl NativeModelView {
-    /// A small view toolbar over the bottom of the canvas. Only working
-    /// controls are shown.
-    fn controls(&mut self, ui: &mut egui::Ui, rect: egui::Rect) {
-        let bar = egui::Rect::from_center_size(
-            egui::pos2(rect.center().x, rect.bottom() - 28.0),
-            egui::vec2(220.0, 32.0),
-        );
-        let builder = egui::UiBuilder::new()
-            .max_rect(bar)
-            .layout(egui::Layout::left_to_right(egui::Align::Center));
-        ui.scope_builder(builder, |ui| {
-            egui::Frame::new()
-                .fill(ui.visuals().extreme_bg_color.gamma_multiply(0.92))
-                .corner_radius(8.0)
-                .inner_margin(egui::Margin::symmetric(6, 3))
-                .show(ui, |ui| {
-                    if ui
-                        .button("Fit")
-                        .on_hover_text("Frame the whole model (F)")
-                        .clicked()
-                    {
-                        self.fit_pending = true;
-                        ui.ctx().request_repaint();
-                    }
-                    ui.label(
-                        egui::RichText::new("Drag orbit · Shift drag pan · Wheel zoom")
-                            .small()
-                            .weak(),
-                    );
-                });
-        });
-        if let Some(us) = self.last_pick_us {
-            ui.painter().text(
-                rect.right_bottom() + egui::vec2(-10.0, -10.0),
-                egui::Align2::RIGHT_BOTTOM,
-                format!("last pick {us} µs"),
-                egui::FontId::proportional(11.0),
-                egui::Color32::from_gray(120),
-            );
-        }
+    /// CPU time of the last canvas pick, for diagnostics.
+    pub fn last_pick_us(&self) -> Option<u128> {
+        self.last_pick_us
     }
 }
