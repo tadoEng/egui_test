@@ -1,0 +1,31 @@
+"""Native lab-e2k-mesh labels vs the real pinned ext-api classifier, per entity."""
+import json, subprocess, sys
+S = sys.argv[1]
+def camel(n): return n[0].lower() + n[1:]
+def run(paths):
+    totals = dict(entities=0, frame_match=0, frame_mismatch=0, host_match=0, host_mismatch=0, native_stricter=0)
+    details = []
+    for path in paths:
+        oracle = {e['key']: e for e in json.loads(subprocess.check_output([f'{S}/oracle/target/release/ext-api-oracle', path]))['entries']}
+        for line in subprocess.check_output([f'{S}/probe/target/release/native_dump', path], text=True).splitlines():
+            n = json.loads(line); o = oracle.get(n['key']); totals['entities'] += 1
+            if o is None: details.append((path, n['key'], 'missing in oracle')); continue
+            if n['fidelity']:
+                nr = [camel(r) for r in n['reasons'] if r != 'FixedDisplayProxy']
+                ok = n['fidelity'].lower() == o['fidelity'] and nr == o['reasons']
+                totals['frame_match' if ok else 'frame_mismatch'] += 1
+                if not ok: details.append((path, n['key'], f"native {n['fidelity']} {nr} vs ext-api {o['fidelity']} {o['reasons']}"))
+            else:
+                host_n = 'HostOpeningSubtractionUnavailable' in n['limitation']; host_o = 'shellOpeningNotSubtracted' in o['reasons']
+                void_n = 'OpeningVoid' in n['limitation']; void_o = 'shellOpeningRenderedAsSolid' in o['reasons']
+                ok = host_n == host_o and void_n == void_o
+                totals['host_match' if ok else 'host_mismatch'] += 1
+                if not ok: details.append((path, n['key'], f"native {n['limitation']} vs ext-api {o['reasons']}"))
+                elif n['mode'] == 'Withheld' and not (host_n or void_n):
+                    totals['native_stricter'] += 1
+                    details.append((path, n['key'], f"native withholds ({n['limitation']}); ext-api draws it ({o['fidelity']} {o['reasons']})"))
+    return totals, details
+if __name__ == '__main__':
+    totals, details = run(sys.argv[2:])
+    print(json.dumps(totals))
+    for d in details: print(*d, sep=' | ')

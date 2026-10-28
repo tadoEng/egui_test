@@ -1,0 +1,75 @@
+//! Synthetic (authored, public) grid-building E2K at 1k/10k/50k/100k source
+//! entities: CPU parse+mesh time and CPU pick latency. Not GPU, not presented
+//! frames, not click-to-visible-highlight latency.
+use lab_e2k_mesh::pick::{PickIndex, Ray};
+use std::{fmt::Write as _, time::Instant};
+
+fn e2k(grid: usize, stories: usize) -> String {
+    let mut s = String::from("$ PROGRAM INFORMATION\n PROGRAM \"ETABS\" VERSION \"23.2.0\"\n$ CONTROLS\n UNITS \"Kip\" \"ft\" \"F\"\n$ FRAME SECTIONS\n FRAMESECTION \"COL\" MATERIAL \"C\" SHAPE \"Concrete Rectangular\" D 2 B 2\n FRAMESECTION \"BM\" MATERIAL \"C\" SHAPE \"Concrete Rectangular\" D 2.5 B 1.5\n$ STORIES - IN SEQUENCE FROM TOP\n");
+    for k in (1..=stories).rev() { writeln!(s, " STORY \"S{k}\" HEIGHT 12").unwrap(); }
+    s.push_str(" STORY \"Base\" ELEV 0\n$ POINT COORDINATES\n");
+    let p = |i: usize, j: usize| i * grid + j;
+    for i in 0..grid { for j in 0..grid { writeln!(s, " POINT \"{}\" {} {}", p(i, j), i * 30, j * 30).unwrap(); } }
+    s.push_str("$ LINE CONNECTIVITIES\n");
+    let (mut lines, mut areas) = (Vec::new(), Vec::new());
+    for i in 0..grid { for j in 0..grid {
+        writeln!(s, " LINE \"C{}\" COLUMN \"{}\" \"{}\" 1", p(i, j), p(i, j), p(i, j)).unwrap(); lines.push((format!("C{}", p(i, j)), "COL"));
+        if i + 1 < grid { writeln!(s, " LINE \"BX{}\" BEAM \"{}\" \"{}\" 0", p(i, j), p(i, j), p(i + 1, j)).unwrap(); lines.push((format!("BX{}", p(i, j)), "BM")); }
+        if j + 1 < grid { writeln!(s, " LINE \"BY{}\" BEAM \"{}\" \"{}\" 0", p(i, j), p(i, j), p(i, j + 1)).unwrap(); lines.push((format!("BY{}", p(i, j)), "BM")); }
+    } }
+    s.push_str("$ AREA CONNECTIVITIES\n");
+    for i in 0..grid - 1 { for j in 0..grid - 1 {
+        writeln!(s, " AREA \"F{}\" FLOOR 4 \"{}\" \"{}\" \"{}\" \"{}\" 0 0 0 0", p(i, j), p(i, j), p(i + 1, j), p(i + 1, j + 1), p(i, j + 1)).unwrap(); areas.push(format!("F{}", p(i, j)));
+        if j == 0 { writeln!(s, " AREA \"W{}\" PANEL 4 \"{}\" \"{}\" \"{}\" \"{}\" 0 0 0 0", p(i, j), p(i, j), p(i + 1, j), p(i + 1, j), p(i, j)).unwrap(); areas.push(format!("W{}", p(i, j))); }
+    } }
+    s.push_str("$ LINE ASSIGNS\n");
+    for k in 1..=stories { for (l, sec) in &lines { writeln!(s, " LINEASSIGN \"{l}\" \"S{k}\" SECTION \"{sec}\"").unwrap(); } }
+    s.push_str("$ AREA ASSIGNS\n");
+    for k in 1..=stories { for a in &areas { writeln!(s, " AREAASSIGN \"{a}\" \"S{k}\" OPENING \"NO\"").unwrap(); } }
+    s.push_str("$ END OF MODEL FILE\n");
+    s
+}
+fn pct(v: &mut [f64], q: f64) -> f64 { v.sort_by(f64::total_cmp); v[((v.len() - 1) as f64 * q).round() as usize] }
+fn main() {
+    let presets = [("1k", 6, 7), ("10k", 11, 22), ("50k", 21, 29), ("100k", 21, 58)];
+    println!("preset,run,entities,frames,shells,withheld,vertices,triangles,buffer_bytes,build_ms,index_ms,picks,hits,pick_p50_us,pick_p95_us,pick_p99_us,pick_max_us");
+    for (name, grid, stories) in presets {
+        let src = e2k(grid, stories);
+        let t = Instant::now();
+        let (model, _) = ext_e2k::parse_str_with_sources(&src).expect("parse");
+        let parse_ms = t.elapsed().as_secs_f64() * 1e3;
+        let t = Instant::now();
+        let _scene = ext_e2k::project_scene(&model);
+        eprintln!("{name}: upstream parse_str_with_sources {parse_ms:.1} ms, project_scene {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+        for run in 1..=3 {
+            let config = lab_e2k_mesh::Config { max_entities: 200_000, ..Default::default() };
+            let t = Instant::now();
+            let mesh = lab_e2k_mesh::build(src.as_bytes(), config).expect("build");
+            let build_ms = t.elapsed().as_secs_f64() * 1e3;
+            let t = Instant::now();
+            let index = PickIndex::new(mesh.vertices(), mesh.indices(), mesh.entities());
+            let index_ms = t.elapsed().as_secs_f64() * 1e3;
+            let b = mesh.local_bounds_m();
+            let (mut times, mut hits) = (Vec::new(), 0);
+            let mut seed = 0x9E37_79B9_7F4A_7C15_u64 ^ run as u64;
+            let mut rnd = || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; (seed >> 11) as f64 / (1u64 << 53) as f64 };
+            let eye = [b.max[0] * 3.0, b.min[1] * 3.0, b.max[2] * 1.5];
+            for _ in 0..400 {
+                let target: [f64; 3] = std::array::from_fn(|i| b.min[i] + rnd() * (b.max[i] - b.min[i]));
+                let d: [f64; 3] = std::array::from_fn(|i| target[i] - eye[i]);
+                let n = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                let ray = Ray { origin: eye, direction: d.map(|v| v / n), min_distance: 0.01, max_distance: 1e5 };
+                let t = Instant::now();
+                let hit = index.pick(mesh.vertices(), mesh.indices(), mesh.entities(), &ray, |_| true);
+                times.push(t.elapsed().as_secs_f64() * 1e6);
+                hits += usize::from(hit.is_some());
+            }
+            let frames = mesh.entities().iter().filter(|e| e.frame.is_some()).count();
+            let withheld = mesh.entities().iter().filter(|e| e.indices.is_empty()).count();
+            let max = times.iter().copied().fold(0.0, f64::max);
+            println!("{name},{run},{},{frames},{},{withheld},{},{},{},{build_ms:.1},{index_ms:.1},{},{hits},{:.0},{:.0},{:.0},{max:.0}",
+                mesh.entities().len(), mesh.entities().len() - frames, mesh.vertices().len(), mesh.indices().len() / 3, mesh.buffer_bytes(), times.len(),
+                pct(&mut times.clone(), 0.5), pct(&mut times.clone(), 0.95), pct(&mut times, 0.99));
+        }
+    }
+}

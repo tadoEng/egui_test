@@ -1,0 +1,11 @@
+[package]
+name = "ext-api-oracle"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+ext-api = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba" }
+tokio = { version = "1", features = ["rt", "macros"] }
+serde_json = "1"
+tempfile = "3"
+[workspace]
