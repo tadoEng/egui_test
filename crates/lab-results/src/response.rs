@@ -32,7 +32,10 @@ impl Response {
             Self::SeismicDrift => "Story drift · seismic",
             Self::WindDisplacement => "Story displacement · wind",
             Self::StoryShear => "Story shear",
-            Self::StoryMoment => "Overturning moment",
+            // The stored Mx and My components, side by side. Which component
+            // is the overturning moment for a direction is a convention this
+            // viewer has not verified, so it names fields, not physics.
+            Self::StoryMoment => "Story moment · stored Mx, My",
         }
     }
     /// Envelope rows carry a group as well as a case; case profiles do not.
@@ -101,7 +104,9 @@ impl Snapshot {
             .collect()
     }
 
-    /// The groups and cases stored for one response and direction.
+    /// The groups stored for one response and direction, and the cases that
+    /// have rows for `group` (all cases when `group` is `None` or the
+    /// response has no groups), so a group/case pair offered always plots.
     ///
     /// # Errors
     /// The response is not in these cached results.
@@ -109,7 +114,9 @@ impl Snapshot {
         &self,
         response: Response,
         direction: Direction,
+        group: Option<&str>,
     ) -> Result<Choices, String> {
+        let in_group = |name: &String| group.is_none_or(|g| name == g);
         let sorted = |items: Vec<&String>| {
             items
                 .into_iter()
@@ -125,11 +132,24 @@ impl Snapshot {
             {
                 Source::Drift(drift) => Choices {
                     groups: sorted(drift.rows.iter().map(|r| &r.group_name).collect()),
-                    cases: sorted(drift.rows.iter().map(|r| &r.output_case).collect()),
+                    cases: sorted(
+                        drift
+                            .rows
+                            .iter()
+                            .filter(|r| in_group(&r.group_name))
+                            .map(|r| &r.output_case)
+                            .collect(),
+                    ),
                 },
                 Source::Displacement(disp) => Choices {
                     groups: sorted(disp.rows.iter().map(|r| &r.group_name).collect()),
-                    cases: sorted(disp.rows.iter().map(|r| &r.output_case).collect()),
+                    cases: sorted(
+                        disp.rows
+                            .iter()
+                            .filter(|r| in_group(&r.group_name))
+                            .map(|r| &r.output_case)
+                            .collect(),
+                    ),
                 },
                 Source::Profiles(profiles, _) => Choices {
                     groups: Vec::new(),
@@ -250,27 +270,32 @@ impl Snapshot {
                     .ok_or("No cached profile for this case")?;
                 validate_membership(order, profile.rows.iter().map(|r| &r.story))?;
                 type Row = ext_calc::output::StoryForceCaseRow;
-                let (field, unit, read): (&str, &str, fn(&Row) -> f64) = match (response, direction)
-                {
-                    (Response::StoryShear, Direction::X) => {
-                        ("Vx", &units.force, |r: &Row| r.vx_kip)
-                    }
-                    (Response::StoryShear, Direction::Y) => {
-                        ("Vy", &units.force, |r: &Row| r.vy_kip)
-                    }
-                    (_, Direction::X) => ("Mx", &units.moment, |r: &Row| r.mx_kip_ft),
-                    (_, Direction::Y) => ("My", &units.moment, |r: &Row| r.my_kip_ft),
+                // The direction picks the stored X or Y profile list; the
+                // fields read are named, never re-labelled as a physical axis.
+                let fields: &[(&str, fn(&Row) -> f64)] = match (response, direction) {
+                    (Response::StoryShear, Direction::X) => &[("Vx", |r: &Row| r.vx_kip)],
+                    (Response::StoryShear, Direction::Y) => &[("Vy", |r: &Row| r.vy_kip)],
+                    _ => &[("Mx", |r: &Row| r.mx_kip_ft), ("My", |r: &Row| r.my_kip_ft)],
                 };
-                let values = column(order, &profile.rows, |r| &r.story, read);
-                finite(&values)?;
-                Ok(Plot {
-                    title: format!("{} · stored {field} · {case}", response.label()),
-                    unit: unit.to_owned(),
-                    stories: order.to_vec(),
-                    series: vec![Series {
+                let unit = if response == Response::StoryShear {
+                    &units.force
+                } else {
+                    &units.moment
+                };
+                let mut series = Vec::new();
+                for (field, read) in fields {
+                    let values = column(order, &profile.rows, |r| &r.story, read);
+                    finite(&values)?;
+                    series.push(Series {
                         name: format!("{field} (stored)"),
                         values,
-                    }],
+                    });
+                }
+                Ok(Plot {
+                    title: format!("{} · {axis}-direction profiles · {case}", response.label()),
+                    unit: unit.clone(),
+                    stories: order.to_vec(),
+                    series,
                     reference: None,
                 })
             }

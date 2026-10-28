@@ -1095,3 +1095,91 @@ fn compact_panels_keep_a_narrow_inspector_at_every_scale_and_height() {
         }
     }
 }
+
+fn results_demo() -> Harness<'static, App> {
+    let mut harness = Harness::builder()
+        .with_max_steps(8)
+        .with_size(egui::vec2(1280.0, 800.0))
+        .with_context_setup(crate::theme::install)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                Project::public_results_fixture(),
+                Box::new(NativeModelView::new(None)),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+        });
+    settle(&mut harness);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    harness
+}
+
+#[test]
+fn results_chart_and_story_table_show_stored_values_and_link_selection() {
+    let mut harness = results_demo();
+    assert!(
+        present(&harness, "Story drift · wind X · G · W"),
+        "chart title"
+    );
+    assert!(present(&harness, "Cached · freshness not verified"));
+    assert!(present(&harness, "Authored fixture"));
+    // Table rows carry the stored values, signs kept, in stored order.
+    let roof = "Roof  ·  0.00200  ·  -0.00250";
+    assert!(present(&harness, roof), "Roof row");
+    assert!(present(&harness, "L1  ·  0.00100  ·  -0.00150"), "L1 row");
+    assert!(present(&harness, "Stored allowable 0.01000"));
+    harness.get_by_label(roof).click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().results.story.as_deref(),
+        Some("Roof")
+    );
+    assert_eq!(
+        harness.get_by_label(roof).accesskit_node().toggled(),
+        Some(Toggled::True),
+        "the row's state is in the accessibility tree"
+    );
+    harness.get_by_label(roof).click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().results.story,
+        None,
+        "a second click clears"
+    );
+    // Only the stored responses are offered.
+    harness
+        .get_by_role_and_label(Role::ComboBox, "Metric")
+        .click();
+    settle(&mut harness);
+    assert!(present(&harness, "Story shear"));
+    assert!(!present(&harness, "Story drift · seismic"), "not stored");
+    assert!(
+        !present(&harness, "Story displacement · wind"),
+        "not stored"
+    );
+    harness.get_by_label("Story moment · stored Mx, My").click();
+    settle(&mut harness);
+    assert!(present(&harness, "Mx (stored)") && present(&harness, "My (stored)"));
+    assert!(
+        !present(&harness, "Overturning"),
+        "no axis convention is claimed"
+    );
+    assert!(!present(&harness, "Group"), "profiles have no group");
+}
+
+#[test]
+fn the_tower_still_says_it_has_no_cached_results() {
+    let mut harness = harness(LoadMode::Inline);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    assert!(present(&harness, "No cached results for main/v2"));
+    assert!(present(
+        &harness,
+        "This synthetic snapshot has no cached results."
+    ));
+    assert!(
+        !present(&harness, "Story table"),
+        "no table without results"
+    );
+    assert!(!present(&harness, "Cached · freshness not verified"));
+}

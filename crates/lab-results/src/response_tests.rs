@@ -32,14 +32,14 @@ fn only_stored_responses_are_offered() {
             .is_err()
     );
     let choices = snapshot
-        .response_choices(Response::WindDrift, Direction::X)
+        .response_choices(Response::WindDrift, Direction::X, None)
         .expect("drift");
     assert_eq!(
         (choices.groups, choices.cases),
         (vec!["G".into()], vec!["W".into()])
     );
     let choices = snapshot
-        .response_choices(Response::StoryShear, Direction::Y)
+        .response_choices(Response::StoryShear, Direction::Y, None)
         .expect("profiles");
     assert_eq!(choices.cases, ["FX"]);
     assert!(choices.groups.is_empty());
@@ -78,11 +78,17 @@ fn profiles_read_the_named_stored_field() {
     assert_eq!(shear.series[0].values, [Some(7.0), Some(-2.0)]);
     assert_eq!(shear.series[0].name, "Vx (stored)");
     assert_eq!(shear.unit, "kip");
-    let moment = snapshot
-        .response(Response::StoryMoment, Direction::Y, None, "FX")
-        .expect("moment");
-    assert_eq!(moment.series[0].name, "My (stored)");
-    assert_eq!(moment.unit, "kip·ft");
+    // Moments: both stored components, named as fields, in both directions;
+    // no overturning axis is chosen for the user.
+    for direction in [Direction::X, Direction::Y] {
+        let moment = snapshot
+            .response(Response::StoryMoment, direction, None, "FX")
+            .expect("moment");
+        let names: Vec<_> = moment.series.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["Mx (stored)", "My (stored)"]);
+        assert_eq!(moment.unit, "kip·ft");
+        assert!(!moment.title.contains("Overturning"), "{}", moment.title);
+    }
 }
 
 #[test]
@@ -124,28 +130,82 @@ fn a_named_local_version_folder_loads_through_the_same_checks() {
     let snapshot = Snapshot::load(std::path::Path::new(&folder)).expect("cached results load");
     for response in Response::ALL {
         for direction in [Direction::X, Direction::Y] {
-            let status = snapshot.response_choices(response, direction).map_or_else(
-                |_| "absent".to_owned(),
-                |choices| {
-                    let ok = choices.cases.iter().all(|case| {
-                        let groups: Vec<Option<&str>> = if response.grouped() {
-                            choices.groups.iter().map(|g| Some(g.as_str())).collect()
+            let status = snapshot
+                .response_choices(response, direction, None)
+                .map_or_else(
+                    |_| "absent".to_owned(),
+                    |choices| {
+                        let ok = choices.cases.iter().all(|case| {
+                            let groups: Vec<Option<&str>> = if response.grouped() {
+                                choices.groups.iter().map(|g| Some(g.as_str())).collect()
+                            } else {
+                                vec![None]
+                            };
+                            groups.iter().any(|group| {
+                                snapshot.response(response, direction, *group, case).is_ok()
+                            })
+                        });
+                        if ok {
+                            "every case plots"
                         } else {
-                            vec![None]
-                        };
-                        groups.iter().any(|group| {
-                            snapshot.response(response, direction, *group, case).is_ok()
-                        })
-                    });
-                    if ok {
-                        "every case plots"
-                    } else {
-                        "some case refused"
-                    }
-                    .to_owned()
-                },
-            );
+                            "some case refused"
+                        }
+                        .to_owned()
+                    },
+                );
             println!("{response:?} {direction:?}: {status}");
         }
     }
+}
+
+#[test]
+fn stored_moment_components_keep_their_own_values_and_signs() {
+    let snapshot = load(|calc| {
+        for (index, (mx, my)) in [(-30.0, 12.5), (40.0, -8.0)].into_iter().enumerate() {
+            calc["storyForces"]["xProfiles"][0]["rows"][index]["mxKipFt"] = json!(mx);
+            calc["storyForces"]["xProfiles"][0]["rows"][index]["myKipFt"] = json!(my);
+        }
+    })
+    .expect("authored moments");
+    let plot = snapshot
+        .response(Response::StoryMoment, Direction::X, None, "FX")
+        .expect("moment");
+    // Rows are stored L1 then Roof; the profile follows the stored story order.
+    assert_eq!(plot.stories, ["Roof", "L1"]);
+    assert_eq!(
+        plot.series[0].values,
+        [Some(40.0), Some(-30.0)],
+        "Mx as stored"
+    );
+    assert_eq!(
+        plot.series[1].values,
+        [Some(-8.0), Some(12.5)],
+        "My as stored"
+    );
+}
+
+#[test]
+fn only_cases_with_rows_for_the_chosen_group_are_offered() {
+    let snapshot = load(|calc| {
+        let mut extra = calc["driftWind"]["x"]["rows"][0].clone();
+        extra["groupName"] = json!("H");
+        extra["outputCase"] = json!("W2");
+        calc["driftWind"]["x"]["rows"]
+            .as_array_mut()
+            .expect("rows")
+            .push(extra);
+    })
+    .expect("two groups");
+    let all = snapshot
+        .response_choices(Response::WindDrift, Direction::X, None)
+        .expect("choices");
+    assert_eq!(all.groups, ["G", "H"]);
+    let g = snapshot
+        .response_choices(Response::WindDrift, Direction::X, Some("G"))
+        .expect("G");
+    assert_eq!(g.cases, ["W"], "W2 has no rows in G, so it is not offered");
+    let h = snapshot
+        .response_choices(Response::WindDrift, Direction::X, Some("H"))
+        .expect("H");
+    assert_eq!(h.cases, ["W2"]);
 }

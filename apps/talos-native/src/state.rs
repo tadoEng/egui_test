@@ -247,6 +247,17 @@ pub struct ResultsQuery {
     /// `None` is every story in the version.
     pub stories: Option<StoryRange>,
 }
+/// The Results page's content for the current query.
+#[derive(Debug, PartialEq)]
+pub enum Shown {
+    /// The stored profile, cut to the requested story range.
+    Plot(lab_results::data::Plot),
+    /// The requested range names stories (these) the cached profile lacks.
+    RangeMismatch(Vec<String>),
+    /// No cached results, or nothing stored for this query.
+    Unavailable,
+}
+
 pub struct ResultsState {
     pub query: ResultsQuery,
     /// Why the query changed without the user asking, e.g. a story range that
@@ -436,6 +447,8 @@ impl State {
         self.model.selection = Selection::default();
         self.model.context = Context::Explorer;
         self.model.ambiguous = 0;
+        // A highlighted result story belongs to the version it was picked in.
+        self.results.story = None;
         Ok(vec![Effect::Load { ticket, entry }])
     }
 
@@ -608,6 +621,38 @@ impl State {
         )
     }
 
+    /// What the Results page shows for the query: the stored profile cut to
+    /// the story range, or why it cannot. A range the cached profile does not
+    /// name is a mismatch, never silently widened to every story.
+    pub fn shown_profile(&self) -> Shown {
+        let Ok(mut plot) = self.profile() else {
+            return Shown::Unavailable;
+        };
+        let Some(range) = &self.results.query.stories else {
+            return Shown::Plot(plot);
+        };
+        let at = |name: &str| plot.stories.iter().position(|s| s == name);
+        match (at(&range.top), at(&range.bottom)) {
+            (Some(a), Some(b)) => {
+                let (from, to) = (a.min(b), a.max(b));
+                plot.stories = plot.stories[from..=to].to_vec();
+                for series in &mut plot.series {
+                    series.values = series.values[from..=to].to_vec();
+                }
+                Shown::Plot(plot)
+            }
+            (top, bottom) => Shown::RangeMismatch(
+                [(top, &range.top), (bottom, &range.bottom)]
+                    .into_iter()
+                    .filter(|(found, _)| found.is_none())
+                    .map(|(_, name)| name.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+            ),
+        }
+    }
+
     fn set_metric(&mut self, metric: Metric) -> Result<(), Refusal> {
         if let Some(snapshot) = self.cached()
             && !snapshot.responses().contains(&metric)
@@ -620,11 +665,14 @@ impl State {
         Ok(())
     }
 
+    /// A group or a case, only ever one the cached results pair with the
+    /// rest of the query; a new group keeps the case only if it has rows.
     fn set_choice(&mut self, group: Option<String>, case: Option<String>) -> Result<(), Refusal> {
-        let snapshot = self.cached().ok_or(Refusal::NotInResults)?;
+        let snapshot = self.cached_arc().ok_or(Refusal::NotInResults)?;
         let query = &self.results.query;
+        let group_for_cases = group.as_deref().or(query.group.as_deref());
         let choices = snapshot
-            .response_choices(query.metric, query.direction.cached())
+            .response_choices(query.metric, query.direction.cached(), group_for_cases)
             .map_err(|_| Refusal::NotInResults)?;
         if group.as_ref().is_some_and(|g| !choices.groups.contains(g))
             || case.as_ref().is_some_and(|c| !choices.cases.contains(c))
@@ -638,6 +686,7 @@ impl State {
         if case.is_some() {
             query.case = case;
         }
+        self.reconcile_results(Some(&snapshot));
         Ok(())
     }
 
@@ -676,9 +725,11 @@ impl State {
         } else {
             query.metric
         };
-        let choices = snapshot
-            .response_choices(metric, query.direction.cached())
-            .unwrap_or_default();
+        let direction = query.direction.cached();
+        let groups = snapshot
+            .response_choices(metric, direction, None)
+            .unwrap_or_default()
+            .groups;
         let keep = |current: &Option<String>,
                     options: &[String],
                     what: &str,
@@ -693,8 +744,17 @@ impl State {
                 }
             }
         };
-        let group = keep(&query.group, &choices.groups, "Group", &mut notices);
-        let case = keep(&query.case, &choices.cases, "Case", &mut notices);
+        let group = if metric.grouped() {
+            keep(&query.group, &groups, "Group", &mut notices)
+        } else {
+            None
+        };
+        // Only cases with rows for that group, so the pair always plots.
+        let cases = snapshot
+            .response_choices(metric, direction, group.as_deref())
+            .unwrap_or_default()
+            .cases;
+        let case = keep(&query.case, &cases, "Case", &mut notices);
         let story_kept = self.results.story.clone();
         let query = &mut self.results.query;
         query.metric = metric;

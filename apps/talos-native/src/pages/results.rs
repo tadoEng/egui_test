@@ -7,7 +7,7 @@
 //! says why and plots nothing.
 use crate::document::{Document, Results};
 use crate::icons::{self, Icon};
-use crate::state::{Action, Direction, Metric, ResultsQuery, State, StoryRange};
+use crate::state::{Action, Direction, Metric, ResultsQuery, Shown, State, StoryRange};
 use crate::theme::{self, Tokens};
 use lab_results::data::Plot;
 
@@ -43,9 +43,8 @@ pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
                 });
             }
             ui.add_space(12.0);
-            match state.profile() {
-                Ok(plot) => {
-                    let plot = visible(plot, query.stories.as_ref());
+            match state.shown_profile() {
+                Shown::Plot(plot) => {
                     let selected = state.results.story.as_deref();
                     let area = ui.available_rect_before_wrap();
                     let (chart, table) = if area.width() >= SIDE_TABLE {
@@ -70,7 +69,10 @@ pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
                     chart_card(ui, chart, document, &plot, selected, &mut actions);
                     table_card(ui, table, &plot, selected, &mut actions);
                 }
-                Err(_) => empty_card(ui, document, query),
+                Shown::RangeMismatch(missing) => {
+                    mismatch_card(ui, document, query, &missing, &mut actions);
+                }
+                Shown::Unavailable => empty_card(ui, document, query),
             }
         });
     actions
@@ -170,8 +172,12 @@ fn selectors(
     });
     let choices = cached
         .and_then(|c| {
-            c.response_choices(query.metric, query.direction.cached())
-                .ok()
+            c.response_choices(
+                query.metric,
+                query.direction.cached(),
+                query.group.as_deref(),
+            )
+            .ok()
         })
         .unwrap_or_default();
     if query.metric.grouped() {
@@ -277,22 +283,6 @@ fn stories(
     pick(ui, "results-story-bottom", "to", bottom, false);
 }
 
-/// The profile cut to the story range, by position in the stored order. A
-/// range whose ends the profile does not name shows the whole profile.
-fn visible(mut plot: Plot, range: Option<&StoryRange>) -> Plot {
-    let Some(range) = range else { return plot };
-    let at = |name: &str| plot.stories.iter().position(|s| s == name);
-    let (Some(a), Some(b)) = (at(&range.top), at(&range.bottom)) else {
-        return plot;
-    };
-    let (from, to) = (a.min(b), a.max(b));
-    plot.stories = plot.stories[from..=to].to_vec();
-    for series in &mut plot.series {
-        series.values = series.values[from..=to].to_vec();
-    }
-    plot
-}
-
 fn card(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
     let tokens = Tokens::of(ui);
     ui.scope_builder(
@@ -347,6 +337,32 @@ fn chart_card(
                 ))
                 .color(tokens.muted),
             );
+            // Same version name is not the same story set: say when the
+            // cached profile names stories this version's model does not.
+            let model: std::collections::BTreeSet<&str> = document.story_names().collect();
+            let foreign = plot
+                .stories
+                .iter()
+                .filter(|story| !model.contains(story.as_str()))
+                .count();
+            if foreign > 0 {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "{foreign} cached {} not in this version's model",
+                        if foreign == 1 {
+                            "story is"
+                        } else {
+                            "stories are"
+                        }
+                    ))
+                    .size(theme::SMALL)
+                    .color(tokens.warning_text),
+                )
+                .on_hover_text(
+                    "The cached results and the model list different stories, so these \
+                     results may not belong to this model geometry.",
+                );
+            }
             for (index, series) in plot.series.iter().enumerate() {
                 legend(ui, palette(&tokens, index), &series.name, false);
             }
@@ -674,6 +690,59 @@ fn table_card(
                     }
                 }
             });
+    });
+}
+
+/// The requested story range names stories the cached profile lacks: say so,
+/// and widen only when the user asks.
+fn mismatch_card(
+    ui: &mut egui::Ui,
+    document: &Document,
+    query: &ResultsQuery,
+    missing: &[String],
+    actions: &mut Vec<Action>,
+) {
+    let tokens = Tokens::of(ui);
+    let area = ui.available_rect_before_wrap();
+    card(ui, area, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space((ui.available_height() * 0.3).max(0.0));
+            icons::show(ui, Icon::Warning, 22.0, tokens.warning_text);
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new("Story range not in these cached results")
+                    .family(theme::semibold())
+                    .size(theme::TITLE)
+                    .color(tokens.text),
+            );
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(format!(
+                        "{} {} in {}'s model but not in this cached profile, so the \
+                         requested range cannot be shown. Nothing is widened or matched \
+                         by guesswork.",
+                        missing.join(", "),
+                        if missing.len() == 1 { "is" } else { "are" },
+                        document.version()
+                    ))
+                    .color(tokens.muted),
+                )
+                .wrap(),
+            );
+            ui.add_space(6.0);
+            if ui
+                .button("Show every cached story")
+                .on_hover_text("Clears the story range; the profile is shown as stored.")
+                .clicked()
+            {
+                actions.push(Action::SetStoryRange(None));
+            }
+            ui.label(
+                egui::RichText::new(format!("Query: {}", describe(query)))
+                    .size(theme::SMALL)
+                    .color(tokens.faint),
+            );
+        });
     });
 }
 
