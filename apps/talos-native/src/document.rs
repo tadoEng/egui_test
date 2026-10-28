@@ -3,7 +3,8 @@
 //! Geometry, source attribution and fidelity come only from `lab-e2k-mesh`
 //! (which projects through the pinned `ext-e2k`); nothing here parses E2K.
 use crate::project::{Source, VersionEntry, VersionId};
-use lab_e2k_mesh::{ForceUnit, LengthUnit, Mesh, Revision, SourceUnits, TempUnit};
+use lab_e2k_mesh::pick::PickIndex;
+use lab_e2k_mesh::{ForceUnit, LengthUnit, Mesh, Revision, SourceUnits, TempUnit, Vertex};
 
 /// Which version a document was loaded for, and the exact bytes and geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,6 +16,8 @@ pub struct DocumentId<'a> {
 pub struct Document {
     version: VersionId,
     mesh: Mesh,
+    /// Built with the mesh on the loader thread, never on the UI thread.
+    pick: PickIndex,
 }
 impl Document {
     /// # Errors
@@ -23,9 +26,11 @@ impl Document {
         let Source::Embedded(bytes) = entry.source;
         let mesh = lab_e2k_mesh::build(bytes, lab_e2k_mesh::Config::default())
             .map_err(|error| error.to_string())?;
+        let pick = PickIndex::new(mesh.vertices(), mesh.indices(), mesh.entities());
         Ok(Self {
             version: entry.id.clone(),
             mesh,
+            pick,
         })
     }
     pub fn id(&self) -> DocumentId<'_> {
@@ -42,6 +47,36 @@ impl Document {
     }
     pub fn story_names(&self) -> impl Iterator<Item = &str> {
         self.mesh.stories().iter().map(|story| story.name.as_str())
+    }
+    pub fn pick_index(&self) -> &PickIndex {
+        &self.pick
+    }
+    /// Local display bounds (metres, origin-recentred), as the renderer uses them.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "bounds of already validated f32 display vertices"
+    )]
+    pub fn display_bounds(&self) -> lab_viewport::Bounds {
+        let bounds = self.mesh.local_bounds_m();
+        lab_viewport::Bounds {
+            min: bounds.min.map(|v| v as f32),
+            max: bounds.max.map(|v| v as f32),
+        }
+    }
+}
+
+/// The renderer reads the document's own buffers; nothing is copied. The GPU
+/// key is the geometry digest, so byte-identical geometry reuses the resident
+/// buffers while selection scope still changes with the load generation.
+impl lab_viewport::GpuGeometry for Document {
+    fn key(&self) -> lab_viewport::MeshKey {
+        lab_viewport::MeshKey::SourceGeometry(self.mesh.revision().geometry_sha256)
+    }
+    fn vertices(&self) -> &[Vertex] {
+        self.mesh.vertices()
+    }
+    fn indices(&self) -> &[u32] {
+        self.mesh.indices()
     }
 }
 

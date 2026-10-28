@@ -1,73 +1,18 @@
-//! Shared GPU viewport, extracted from the reviewed renderer example.
+//! Shared GPU viewport host for the examples. The camera, shader, GPU mesh
+//! residency and paint callback live in `lab-viewport` (also used by
+//! `talos-native`); this file keeps the examples' own picking, story highlight,
+//! inspector overlay and synthetic lab mesh.
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
 };
 
-#[cfg(not(feature = "real-geometry"))]
-use bytemuck::{Pod, Zeroable};
 use eframe::egui_wgpu;
-use egui_wgpu::wgpu;
-#[cfg(feature = "real-geometry")]
-use lab_e2k_mesh::Vertex;
-use wgpu::util::DeviceExt as _;
-
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
-const BACKGROUND: egui::Color32 = egui::Color32::from_rgb(18, 25, 35);
-/// Vertical field of view shared by drawing and picking.
-const FIELD_OF_VIEW_DEGREES: f32 = 50.0;
-
-const SHADER: &str = r"
-struct Camera {
-    view_proj: mat4x4<f32>,
+pub(crate) use lab_viewport::GpuStats;
+use lab_viewport::math::{add, cross, normalized, scale, sub};
+use lab_viewport::{
+    BACKGROUND, Bounds, GpuCounters, MeshKey, OrbitCamera, Vertex, ViewportCallback,
 };
-
-@group(0) @binding(0)
-var<uniform> camera: Camera;
-
-struct VertexInput {
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) color: vec3<f32>,
-};
-
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) normal: vec3<f32>,
-    @location(1) color: vec3<f32>,
-};
-
-@vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    output.clip_position = camera.view_proj * vec4<f32>(input.position, 1.0);
-    output.normal = input.normal;
-    output.color = input.color;
-    return output;
-}
-
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-    let normal = normalize(input.normal);
-    let light = normalize(vec3<f32>(0.35, -0.55, 0.76));
-    let diffuse = 0.28 + 0.72 * abs(dot(normal, light));
-    return vec4<f32>(input.color * diffuse, 1.0);
-}
-
-@fragment
-fn fs_selected(input: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1.0, 0.72, 0.12, 1.0);
-}
-";
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-#[cfg(not(feature = "real-geometry"))]
-struct Vertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    color: [f32; 3],
-}
 
 #[cfg(feature = "real-geometry")]
 #[expect(
@@ -96,13 +41,6 @@ fn source_mesh(source: lab_e2k_mesh::Mesh) -> MeshData {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum MeshKey {
-    Lab(u64),
-    #[cfg(feature = "real-geometry")]
-    SourceGeometry([u8; 32]),
-}
-
 #[derive(Clone, Debug)]
 struct MeshData {
     // A geometry revision, not an entity ID. Immutable meshes with different geometry
@@ -120,36 +58,15 @@ struct MeshData {
     bounds: Bounds,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Bounds {
-    min: [f32; 3],
-    max: [f32; 3],
-}
-
-impl Default for Bounds {
-    fn default() -> Self {
-        Self {
-            min: [f32::INFINITY; 3],
-            max: [f32::NEG_INFINITY; 3],
-        }
+impl lab_viewport::GpuGeometry for MeshData {
+    fn key(&self) -> MeshKey {
+        self.key
     }
-}
-
-impl Bounds {
-    fn include(&mut self, point: [f32; 3]) {
-        for (axis, value) in point.into_iter().enumerate() {
-            self.min[axis] = self.min[axis].min(value);
-            self.max[axis] = self.max[axis].max(value);
-        }
+    fn vertices(&self) -> &[Vertex] {
+        &self.vertices
     }
-
-    fn center(self) -> [f32; 3] {
-        std::array::from_fn(|axis| self.min[axis].midpoint(self.max[axis]))
-    }
-
-    fn radius(self) -> f32 {
-        let diagonal = sub(self.max, self.min);
-        (dot(diagonal, diagonal).sqrt() * 0.5).max(0.01)
+    fn indices(&self) -> &[u32] {
+        &self.indices
     }
 }
 
@@ -308,457 +225,6 @@ fn synthetic_structure() -> MeshData {
     mesh.finish(1)
 }
 
-#[derive(Clone, Copy, Debug)]
-struct OrbitCamera {
-    /// Orbit pivot; panning moves it, Fit returns it to `center`.
-    target: [f32; 3],
-    /// Model bounds centre. Clip planes are placed about the model, not the
-    /// pivot, so panning never clips (or makes unpickable) drawn geometry.
-    center: [f32; 3],
-    yaw: f32,
-    pitch: f32,
-    distance: f32,
-    radius: f32,
-}
-
-impl OrbitCamera {
-    fn fit(bounds: Bounds, aspect: f32) -> Self {
-        let radius = bounds.radius();
-        let vertical_half = 25.0_f32.to_radians();
-        let horizontal_half = (vertical_half.tan() * aspect.max(0.001)).atan();
-        let limiting_half = vertical_half.min(horizontal_half);
-        Self {
-            target: bounds.center(),
-            center: bounds.center(),
-            yaw: -0.7,
-            pitch: 0.55,
-            distance: (radius / limiting_half.sin() * 1.1).max(0.1),
-            radius,
-        }
-    }
-
-    fn orbit(&mut self, delta: egui::Vec2) {
-        self.yaw = (self.yaw + delta.x * 0.008).rem_euclid(std::f32::consts::TAU);
-        let limit = std::f32::consts::FRAC_PI_2 - 0.01;
-        self.pitch = (self.pitch + delta.y * 0.008).clamp(-limit, limit);
-    }
-
-    /// Move the pivot in the view's right/up plane so the model follows the
-    /// pointer: one screen point is the world size of one point at the pivot
-    /// depth. The pivot stays within three model radii of the model centre.
-    fn pan(&mut self, delta: egui::Vec2, viewport_height: f32) {
-        let (right, up, _) = self.basis();
-        let world_per_point =
-            2.0 * self.distance * (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan()
-                / viewport_height.max(1.0);
-        let moved = add(
-            self.target,
-            add(
-                scale(right, -delta.x * world_per_point),
-                scale(up, delta.y * world_per_point),
-            ),
-        );
-        let offset = sub(moved, self.center);
-        let length = dot(offset, offset).sqrt();
-        let limit = self.radius * 3.0;
-        self.target = if length > limit {
-            add(self.center, scale(offset, limit / length))
-        } else {
-            moved
-        };
-    }
-
-    fn zoom(&mut self, delta: f32) {
-        self.distance =
-            (self.distance * (-delta * 0.0015).exp()).clamp(self.radius * 0.4, self.radius * 20.0);
-    }
-
-    fn basis(self) -> ([f32; 3], [f32; 3], [f32; 3]) {
-        let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
-        let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
-        let back = normalized([-sin_yaw * cos_pitch, -cos_yaw * cos_pitch, sin_pitch])
-            .unwrap_or([0.0, -1.0, 0.0]);
-        let right = normalized([cos_yaw, -sin_yaw, 0.0]).unwrap_or([1.0, 0.0, 0.0]);
-        let up = normalized(cross(back, right)).unwrap_or([0.0, 0.0, 1.0]);
-        (right, up, back)
-    }
-
-    fn eye(self) -> [f32; 3] {
-        add(self.target, scale(self.basis().2, self.distance))
-    }
-
-    /// Near/far view depths about the model centre (identical to the old
-    /// pivot-based window when unpanned); picking clips with exactly this.
-    fn clip_planes(self) -> (f32, f32) {
-        let back = self.basis().2;
-        let depth = dot(sub(self.center, self.eye()), scale(back, -1.0));
-        let near = (depth - self.radius * 2.0)
-            .max(self.distance * 0.001)
-            .max(0.001);
-        (near, (depth + self.radius * 2.0).max(near + 0.01))
-    }
-
-    /// World ray through normalized device coordinates (x right, y up), with
-    /// the distance window that maps to the drawn near/far depth range.
-    #[cfg(feature = "real-workbench")]
-    fn ray(self, aspect: f32, ndc: [f32; 2]) -> Option<lab_e2k_mesh::pick::Ray> {
-        let (right, up, back) = self.basis();
-        let half = (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan();
-        let direction = normalized(add(
-            add(
-                scale(right, ndc[0] * half * aspect.max(0.001)),
-                scale(up, ndc[1] * half),
-            ),
-            scale(back, -1.0),
-        ))?;
-        let forward = -dot(direction, back);
-        let (near, far) = self.clip_planes();
-        Some(lab_e2k_mesh::pick::Ray {
-            origin: self.eye().map(f64::from),
-            direction: direction.map(f64::from),
-            min_distance: f64::from(near / forward),
-            max_distance: f64::from(far / forward),
-        })
-    }
-
-    fn view_projection(self, aspect: f32) -> [[f32; 4]; 4] {
-        let (right, up, back) = self.basis();
-        let eye = self.eye();
-        let view = [
-            [right[0], up[0], back[0], 0.0],
-            [right[1], up[1], back[1], 0.0],
-            [right[2], up[2], back[2], 0.0],
-            [-dot(right, eye), -dot(up, eye), -dot(back, eye), 1.0],
-        ];
-        let (near, far) = self.clip_planes();
-        let f = 1.0 / (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan();
-        let projection = [
-            [f / aspect.max(0.001), 0.0, 0.0, 0.0],
-            [0.0, f, 0.0, 0.0],
-            [0.0, 0.0, far / (near - far), -1.0],
-            [0.0, 0.0, near * far / (near - far), 0.0],
-        ];
-        multiply(projection, view)
-    }
-}
-
-struct GpuMesh {
-    vertex: wgpu::Buffer,
-    index: wgpu::Buffer,
-    index_count: u32,
-}
-
-struct RendererCore {
-    pipeline: wgpu::RenderPipeline,
-    #[cfg(feature = "real-workbench")]
-    selection_pipeline: wgpu::RenderPipeline,
-    #[cfg(feature = "real-workbench")]
-    selection: Option<(Arc<Vec<u32>>, wgpu::Buffer)>,
-    uniform: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
-    mesh: Option<GpuMesh>,
-    uploaded_key: Option<MeshKey>,
-    stats: Arc<GpuCounters>,
-}
-
-#[derive(Default)]
-struct GpuCounters {
-    uploads: AtomicU64,
-    vertex_bytes: AtomicU64,
-    index_bytes: AtomicU64,
-    draw_records: AtomicU64,
-    buffer_creation_cpu_ns: AtomicU64,
-    #[cfg(feature = "real-workbench")]
-    selection_uploads: AtomicU64,
-    #[cfg(feature = "real-workbench")]
-    selection_bytes: AtomicU64,
-    #[cfg(feature = "real-workbench")]
-    selection_draw_records: AtomicU64,
-}
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct GpuStats {
-    pub(crate) uploads: u64,
-    pub(crate) vertex_bytes: u64,
-    pub(crate) index_bytes: u64,
-    pub(crate) draw_records: u64,
-    pub(crate) buffer_creation_cpu_ns: u64,
-    #[cfg(feature = "real-workbench")]
-    pub(crate) selection_uploads: u64,
-    #[cfg(feature = "real-workbench")]
-    pub(crate) selection_bytes: u64,
-    #[cfg(feature = "real-workbench")]
-    pub(crate) selection_draw_records: u64,
-}
-
-impl RendererCore {
-    fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("native_renderer_shader"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
-        });
-        let uniform = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("native_renderer_camera"),
-            size: 64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("native_renderer_bind_group_layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("native_renderer_bind_group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            }],
-        });
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("native_renderer_pipeline_layout"),
-            bind_group_layouts: &[Some(&bind_group_layout)],
-            immediate_size: 0,
-        });
-        let pipeline =
-            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, false);
-        #[cfg(feature = "real-workbench")]
-        let selection_pipeline =
-            Self::create_pipeline(device, target_format, &pipeline_layout, &shader, true);
-        Self {
-            pipeline,
-            #[cfg(feature = "real-workbench")]
-            selection_pipeline,
-            #[cfg(feature = "real-workbench")]
-            selection: None,
-            uniform,
-            bind_group,
-            mesh: None,
-            uploaded_key: None,
-            stats: Arc::new(GpuCounters::default()),
-        }
-    }
-
-    fn create_pipeline(
-        device: &wgpu::Device,
-        target_format: wgpu::TextureFormat,
-        pipeline_layout: &wgpu::PipelineLayout,
-        shader: &wgpu::ShaderModule,
-        highlighted: bool,
-    ) -> wgpu::RenderPipeline {
-        let attributes = wgpu::vertex_attr_array![
-            0 => Float32x3,
-            1 => Float32x3,
-            2 => Float32x3
-        ];
-        let descriptor = wgpu::RenderPipelineDescriptor {
-            label: Some(if highlighted {
-                "native_source_story_highlight"
-            } else {
-                "native_renderer_pipeline"
-            }),
-            layout: Some(pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: shader,
-                entry_point: Some("vs_main"),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as u64,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &attributes,
-                })],
-                compilation_options: Default::default(),
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(!highlighted),
-                depth_compare: Some(if highlighted {
-                    wgpu::CompareFunction::LessEqual
-                } else {
-                    wgpu::CompareFunction::Less
-                }),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: shader,
-                entry_point: Some(if highlighted {
-                    "fs_selected"
-                } else {
-                    "fs_main"
-                }),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: Default::default(),
-            }),
-            multiview_mask: None,
-            cache: None,
-        };
-        device.create_render_pipeline(&descriptor)
-    }
-
-    fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        mesh: &MeshData,
-        view_projection: &[[f32; 4]; 4],
-    ) {
-        if self.uploaded_key != Some(mesh.key) {
-            #[cfg(feature = "real-workbench")]
-            {
-                self.selection = None;
-                self.stats.selection_bytes.store(0, Ordering::Relaxed);
-            }
-            let started = web_time::Instant::now();
-            let vertex = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("native_renderer_vertices"),
-                contents: bytemuck::cast_slice(&mesh.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            let index = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("native_renderer_indices"),
-                contents: bytemuck::cast_slice(&mesh.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-            self.mesh = Some(GpuMesh {
-                vertex,
-                index,
-                index_count: u32::try_from(mesh.indices.len()).unwrap_or(u32::MAX),
-            });
-            self.uploaded_key = Some(mesh.key);
-            self.stats.uploads.fetch_add(1, Ordering::Relaxed);
-            self.stats.vertex_bytes.store(
-                self.mesh.as_ref().map_or(0, |m| m.vertex.size()),
-                Ordering::Relaxed,
-            );
-            self.stats.index_bytes.store(
-                self.mesh.as_ref().map_or(0, |m| m.index.size()),
-                Ordering::Relaxed,
-            );
-            self.stats.buffer_creation_cpu_ns.store(
-                u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
-                Ordering::Relaxed,
-            );
-        }
-        queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(view_projection));
-    }
-
-    fn paint(&self, pass: &mut wgpu::RenderPass<'_>) {
-        let Some(mesh) = &self.mesh else {
-            return;
-        };
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.bind_group, &[]);
-        pass.set_vertex_buffer(0, mesh.vertex.slice(..));
-        pass.set_index_buffer(mesh.index.slice(..), wgpu::IndexFormat::Uint32);
-        pass.draw_indexed(0..mesh.index_count, 0, 0..1);
-        self.stats.draw_records.fetch_add(1, Ordering::Relaxed);
-        #[cfg(feature = "real-workbench")]
-        if let Some((indices, buffer)) = &self.selection {
-            pass.set_pipeline(&self.selection_pipeline);
-            pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
-            pass.draw_indexed(0..u32::try_from(indices.len()).unwrap_or(0), 0, 0..1);
-            self.stats
-                .selection_draw_records
-                .fetch_add(1, Ordering::Relaxed);
-        }
-    }
-
-    #[cfg(feature = "real-workbench")]
-    fn prepare_selection(&mut self, device: &wgpu::Device, indices: &Arc<Vec<u32>>) {
-        if self
-            .selection
-            .as_ref()
-            .is_some_and(|(old, _)| Arc::ptr_eq(old, indices))
-        {
-            return;
-        }
-        if indices.is_empty() {
-            self.selection = None;
-            self.stats.selection_bytes.store(0, Ordering::Relaxed);
-            return;
-        }
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("source_story_highlight_indices"),
-            contents: bytemuck::cast_slice(indices.as_slice()),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        self.stats.selection_uploads.fetch_add(1, Ordering::Relaxed);
-        self.stats
-            .selection_bytes
-            .store(buffer.size(), Ordering::Relaxed);
-        self.selection = Some((Arc::clone(indices), buffer));
-    }
-}
-
-struct ViewportCallback {
-    mesh: Arc<MeshData>,
-    #[cfg(feature = "real-workbench")]
-    selection: Arc<Vec<u32>>,
-    view_projection: [[f32; 4]; 4],
-    paints: Arc<AtomicU64>,
-}
-
-impl egui_wgpu::CallbackTrait for ViewportCallback {
-    fn prepare(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
-        _encoder: &mut wgpu::CommandEncoder,
-        resources: &mut egui_wgpu::CallbackResources,
-    ) -> Vec<wgpu::CommandBuffer> {
-        if let Some(renderer) = resources.get_mut::<RendererCore>() {
-            renderer.prepare(device, queue, &self.mesh, &self.view_projection);
-            #[cfg(feature = "real-workbench")]
-            renderer.prepare_selection(device, &self.selection);
-        }
-        Vec::new()
-    }
-
-    fn paint(
-        &self,
-        info: egui::PaintCallbackInfo,
-        pass: &mut wgpu::RenderPass<'static>,
-        resources: &egui_wgpu::CallbackResources,
-    ) {
-        let Some(renderer) = resources.get::<RendererCore>() else {
-            return;
-        };
-        let viewport = info.viewport_in_pixels();
-        if viewport.width_px == 0 || viewport.height_px == 0 {
-            return;
-        }
-        pass.set_viewport(
-            viewport.left_px as f32,
-            viewport.top_px as f32,
-            viewport.width_px as f32,
-            viewport.height_px as f32,
-            0.0,
-            1.0,
-        );
-        renderer.paint(pass);
-        self.paints.fetch_add(1, Ordering::Relaxed);
-    }
-}
-
 pub(crate) struct NativeViewport {
     mesh: Arc<MeshData>,
     camera: OrbitCamera,
@@ -856,13 +322,7 @@ impl NativeViewport {
             .wgpu_render_state
             .as_ref()
             .ok_or_else(|| "native_renderer requires eframe's wgpu renderer".to_owned())?;
-        let renderer = RendererCore::new(&render_state.device, render_state.target_format);
-        let stats = Arc::clone(&renderer.stats);
-        render_state
-            .renderer
-            .write()
-            .callback_resources
-            .insert(renderer);
+        let stats = lab_viewport::install(render_state);
         Ok(Self {
             camera: OrbitCamera::fit(mesh.bounds, 1.0),
             mesh,
@@ -885,19 +345,7 @@ impl NativeViewport {
 
 impl NativeViewport {
     pub(crate) fn gpu_stats(&self) -> GpuStats {
-        GpuStats {
-            uploads: self.stats.uploads.load(Ordering::Relaxed),
-            vertex_bytes: self.stats.vertex_bytes.load(Ordering::Relaxed),
-            index_bytes: self.stats.index_bytes.load(Ordering::Relaxed),
-            draw_records: self.stats.draw_records.load(Ordering::Relaxed),
-            buffer_creation_cpu_ns: self.stats.buffer_creation_cpu_ns.load(Ordering::Relaxed),
-            #[cfg(feature = "real-workbench")]
-            selection_uploads: self.stats.selection_uploads.load(Ordering::Relaxed),
-            #[cfg(feature = "real-workbench")]
-            selection_bytes: self.stats.selection_bytes.load(Ordering::Relaxed),
-            #[cfg(feature = "real-workbench")]
-            selection_draw_records: self.stats.selection_draw_records.load(Ordering::Relaxed),
-        }
+        self.stats.snapshot()
     }
     /// Callback records, not presented/completed frames or GPU draw-call timing.
     pub(crate) fn callback_paints(&self) -> u64 {
@@ -911,28 +359,11 @@ impl NativeViewport {
         (self.mesh.vertices.len(), self.mesh.indices.len() / 3)
     }
 
-    /// Left (or right) drag orbits; middle drag, or Shift + left drag for
-    /// trackpads, pans; the wheel zooms. Fit resets pivot and distance.
+    /// Shared input mapping (`lab_viewport::navigate`). Fit resets pivot and
+    /// distance.
     fn navigate(&mut self, ui: &egui::Ui, response: &egui::Response, viewport_height: f32) {
-        let delta = ui.input(|input| input.pointer.delta());
-        let shift = ui.input(|input| input.modifiers.shift);
-        if response.dragged_by(egui::PointerButton::Middle)
-            || (shift && response.dragged_by(egui::PointerButton::Primary))
-        {
-            self.camera.pan(delta, viewport_height);
+        if lab_viewport::navigate(&mut self.camera, ui, response, viewport_height) {
             ui.ctx().request_repaint();
-        } else if response.dragged_by(egui::PointerButton::Primary)
-            || response.dragged_by(egui::PointerButton::Secondary)
-        {
-            self.camera.orbit(delta);
-            ui.ctx().request_repaint();
-        }
-        if response.hovered() {
-            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
-            if scroll.abs() > f32::EPSILON {
-                self.camera.zoom(scroll);
-                ui.ctx().request_repaint();
-            }
         }
     }
 
@@ -995,9 +426,11 @@ impl NativeViewport {
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(
             rect,
             ViewportCallback {
-                mesh: Arc::clone(&self.mesh),
+                mesh: Arc::clone(&self.mesh) as Arc<dyn lab_viewport::GpuGeometry>,
                 #[cfg(feature = "real-workbench")]
                 selection: Arc::clone(&self.selection),
+                #[cfg(not(feature = "real-workbench"))]
+                selection: Arc::default(),
                 view_projection: self.camera.view_projection(aspect),
                 paints: Arc::clone(&self.paints),
             },
@@ -1235,48 +668,12 @@ fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
     )
 }
 
-fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-}
-
-fn sub(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-fn scale(v: [f32; 3], factor: f32) -> [f32; 3] {
-    [v[0] * factor, v[1] * factor, v[2] * factor]
-}
-
-fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn normalized(v: [f32; 3]) -> Option<[f32; 3]> {
-    let length = dot(v, v).sqrt();
-    (length.is_finite() && length > 1e-8).then(|| scale(v, 1.0 / length))
-}
-
-fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
-    let mut result = [[0.0; 4]; 4];
-    for (column, values) in result.iter_mut().enumerate() {
-        for (row, value) in values.iter_mut().enumerate() {
-            *value = (0..4).map(|index| a[index][row] * b[column][index]).sum();
-        }
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui_wgpu::wgpu;
+    use lab_viewport::math::dot;
+    use lab_viewport::{DEPTH_FORMAT, RendererCore};
 
     #[test]
     fn structural_geometry_has_finite_unit_normals_and_valid_indices() {
@@ -1590,15 +987,10 @@ mod tests {
         let depth_view = depth.create_view(&Default::default());
         let mut renderer = RendererCore::new(&device, format);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
-        let resident_vertex = renderer
-            .mesh
-            .as_ref()
-            .expect("resident mesh")
-            .vertex
-            .clone();
+        let resident_vertex = renderer.resident().expect("resident mesh").vertex.clone();
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(0.5));
         assert_eq!(
-            renderer.mesh.as_ref().expect("resident mesh").vertex,
+            renderer.resident().expect("resident mesh").vertex,
             resident_vertex,
             "orbit/resize must reuse the resident buffer"
         );
@@ -1686,14 +1078,14 @@ mod tests {
                 .expect("save synthetic offscreen capture");
         }
 
-        let resident_index = renderer.mesh.as_ref().expect("resident mesh").index.clone();
+        let resident_index = renderer.resident().expect("resident mesh").index.clone();
         let mut replacement = mesh.clone();
         replacement.key = MeshKey::Lab(100);
         replacement.vertices[0].position[0] += 0.25;
         replacement.indices.truncate(3);
         renderer.prepare(&device, &queue, &replacement, &camera.view_projection(1.0));
-        let uploaded = renderer.mesh.as_ref().expect("replacement mesh");
-        assert_eq!(renderer.uploaded_key, Some(replacement.key));
+        let uploaded = renderer.resident().expect("replacement mesh");
+        assert_eq!(renderer.uploaded_key(), Some(replacement.key));
         assert_ne!(
             uploaded.vertex, resident_vertex,
             "new revision replaces vertices"
@@ -1997,24 +1389,25 @@ mod tests {
         let camera = OrbitCamera::fit(mesh.bounds, 1.0);
         let mut renderer = RendererCore::new(&device, wgpu::TextureFormat::Rgba8Unorm);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
-        let resident = renderer.mesh.as_ref().expect("resident").vertex.clone();
+        let resident = renderer.resident().expect("resident").vertex.clone();
         let selected = Arc::new(story_indices(&mesh, Some("Roof")).expect("source indices"));
         renderer.prepare_selection(&device, &selected);
         let selected_buffer = renderer
-            .selection
-            .as_ref()
+            .resident_selection()
             .expect("highlight buffer")
-            .1
             .clone();
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
         renderer.prepare_selection(&device, &selected);
-        assert_eq!(renderer.mesh.as_ref().expect("resident").vertex, resident);
+        assert_eq!(renderer.resident().expect("resident").vertex, resident);
         assert_eq!(
-            renderer.selection.as_ref().expect("highlight").1,
+            *renderer.resident_selection().expect("highlight"),
             selected_buffer
         );
-        assert_eq!(renderer.stats.uploads.load(Ordering::Relaxed), 1);
-        assert_eq!(renderer.stats.selection_uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(renderer.stats().uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            renderer.stats().selection_uploads.load(Ordering::Relaxed),
+            1
+        );
         let highlighted = read_public_rgba(&device, &queue, &renderer);
         let gold = |bytes: &[u8]| {
             bytes
@@ -2031,15 +1424,15 @@ mod tests {
                 .expect("public capture");
         }
         renderer.prepare_selection(&device, &Arc::new(Vec::new()));
-        assert!(renderer.selection.is_none());
-        assert_eq!(renderer.stats.selection_bytes.load(Ordering::Relaxed), 0);
+        assert!(renderer.resident_selection().is_none());
+        assert_eq!(renderer.stats().selection_bytes.load(Ordering::Relaxed), 0);
         let cleared = read_public_rgba(&device, &queue, &renderer);
         assert!(
             gold(&cleared) < gold(&highlighted),
             "clear restores unhighlighted geometry"
         );
         assert_eq!(
-            renderer.stats.uploads.load(Ordering::Relaxed),
+            renderer.stats().uploads.load(Ordering::Relaxed),
             1,
             "selection never reuploads vertices"
         );
@@ -2160,8 +1553,8 @@ mod tests {
         let camera = OrbitCamera::fit(mesh.bounds, 1.0);
         let mut renderer = RendererCore::new(&device, wgpu::TextureFormat::Rgba8Unorm);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
-        let resident = renderer.mesh.as_ref().expect("resident").vertex.clone();
-        let resident_index = renderer.mesh.as_ref().expect("resident").index.clone();
+        let resident = renderer.resident().expect("resident").vertex.clone();
+        let resident_index = renderer.resident().expect("resident").index.clone();
         let comment_only = format!(
             "{}\n$ public metadata comment\n",
             lab_e2k_mesh::public_fixture::E2K
@@ -2172,12 +1565,9 @@ mod tests {
         let same_mesh = source_mesh(same);
         assert_eq!(mesh.key, same_mesh.key);
         renderer.prepare(&device, &queue, &same_mesh, &camera.view_projection(0.5));
-        assert_eq!(renderer.mesh.as_ref().expect("resident").vertex, resident);
-        assert_eq!(
-            renderer.mesh.as_ref().expect("resident").index,
-            resident_index
-        );
-        assert_eq!(renderer.stats.uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(renderer.resident().expect("resident").vertex, resident);
+        assert_eq!(renderer.resident().expect("resident").index, resident_index);
+        assert_eq!(renderer.stats().uploads.load(Ordering::Relaxed), 1);
         assert_eq!(resident.size() + resident_index.size(), expected_bytes);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
 
@@ -2273,7 +1663,7 @@ mod tests {
             "source geometry must reach actual GPU readback"
         );
         assert_eq!(&data[..4], &[0, 0, 0, 255]);
-        assert_eq!(renderer.stats.draw_records.load(Ordering::Relaxed), 1);
+        assert_eq!(renderer.stats().draw_records.load(Ordering::Relaxed), 1);
         if let Some(path) = std::env::var_os("E2K_PUBLIC_GPU_CAPTURE") {
             image::save_buffer(path, &data, size, size, image::ColorType::Rgba8)
                 .expect("save public fixture capture");
@@ -2289,16 +1679,13 @@ mod tests {
         changed.key = MeshKey::SourceGeometry(digest);
         renderer.prepare(&device, &queue, &changed, &camera.view_projection(1.0));
         assert_eq!(
-            renderer.stats.uploads.load(Ordering::Relaxed),
+            renderer.stats().uploads.load(Ordering::Relaxed),
             2,
             "full digest including last byte invalidates buffers"
         );
+        assert_ne!(renderer.resident().expect("replacement").vertex, resident);
         assert_ne!(
-            renderer.mesh.as_ref().expect("replacement").vertex,
-            resident
-        );
-        assert_ne!(
-            renderer.mesh.as_ref().expect("replacement").index,
+            renderer.resident().expect("replacement").index,
             resident_index
         );
     }

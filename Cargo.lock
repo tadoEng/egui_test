@@ -1573,6 +1573,7 @@ dependencies = [
  "ext-sidecar",
  "image",
  "lab-e2k-mesh",
+ "lab-viewport",
  "log",
  "pollster",
  "serde",
@@ -3374,6 +3375,18 @@ dependencies = [
 [[package]]
 name = "lab-fixture"
 version = "0.1.0"
+
+[[package]]
+name = "lab-viewport"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "egui",
+ "egui-wgpu",
+ "lab-e2k-mesh",
+ "pollster",
+ "web-time",
+]
 
 [[package]]
 name = "lazy_static"
@@ -7088,7 +7101,9 @@ dependencies = [
  "egui_kittest",
  "env_logger",
  "lab-e2k-mesh",
+ "lab-viewport",
  "log",
+ "web-time",
 ]
 
 [[package]]

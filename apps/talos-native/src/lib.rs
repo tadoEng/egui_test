@@ -7,6 +7,7 @@
 pub mod app;
 pub mod document;
 pub mod loader;
+pub mod native_view;
 pub mod pages;
 pub mod project;
 pub mod state;

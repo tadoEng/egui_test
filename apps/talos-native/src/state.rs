@@ -129,6 +129,11 @@ impl Session {
 pub struct ModelState {
     pub explorer_open: bool,
     pub inspector_open: bool,
+    /// Highlighted story, by name; kept across versions only if it exists there.
+    pub story: Option<String>,
+    /// Other visible entities hit at the same depth by the last accepted view
+    /// pick: the winner is then not decided by depth and must be disclosed.
+    pub ambiguous: usize,
     selection: Selection,
 }
 impl ModelState {
@@ -208,7 +213,10 @@ pub enum Action {
         scope: Scope,
         entity: Option<usize>,
         toggle: bool,
+        /// Other entities at the same depth (0 for explorer picks).
+        coincident: usize,
     },
+    SelectStory(Option<String>),
     SetMetric(Metric),
     SetDirection(Direction),
     SetStoryRange(Option<StoryRange>),
@@ -268,6 +276,8 @@ impl State {
             model: ModelState {
                 explorer_open: true,
                 inspector_open: true,
+                story: None,
+                ambiguous: 0,
                 selection: Selection::default(),
             },
             results: ResultsState {
@@ -309,7 +319,9 @@ impl State {
                 scope,
                 entity,
                 toggle,
-            } => self.pick(scope, entity, toggle)?,
+                coincident,
+            } => self.pick(scope, entity, toggle, coincident)?,
+            Action::SelectStory(story) => self.select_story(story)?,
             Action::SetMetric(metric) => self.results.query.metric = metric,
             Action::SetDirection(direction) => self.results.query.direction = direction,
             Action::SetStoryRange(range) => self.set_story_range(range)?,
@@ -336,6 +348,7 @@ impl State {
         };
         self.session.document = DocumentState::Loading(ticket.clone());
         self.model.selection = Selection::default();
+        self.model.ambiguous = 0;
         Ok(vec![Effect::Load { ticket, entry }])
     }
 
@@ -364,6 +377,14 @@ impl State {
         self.session.document = match result {
             Ok(document) => {
                 self.revalidate_results(&document);
+                if self
+                    .model
+                    .story
+                    .as_deref()
+                    .is_some_and(|story| !document.story_names().any(|name| name == story))
+                {
+                    self.model.story = None;
+                }
                 DocumentState::Ready {
                     ticket: ticket.clone(),
                     document,
@@ -377,7 +398,13 @@ impl State {
         Ok(())
     }
 
-    fn pick(&mut self, scope: Scope, entity: Option<usize>, toggle: bool) -> Result<(), Refusal> {
+    fn pick(
+        &mut self,
+        scope: Scope,
+        entity: Option<usize>,
+        toggle: bool,
+        coincident: usize,
+    ) -> Result<(), Refusal> {
         let document = self.session.ready().ok_or(Refusal::NoDocument)?;
         if self.session.scope() != Some(scope) {
             return Err(Refusal::StaleSelection);
@@ -386,6 +413,25 @@ impl State {
             return Err(Refusal::UnknownEntity);
         }
         self.model.selection.click(scope, entity, toggle);
+        self.model.ambiguous = if entity.is_some() { coincident } else { 0 };
+        Ok(())
+    }
+
+    fn select_story(&mut self, story: Option<String>) -> Result<(), Refusal> {
+        let document = self.session.ready().ok_or(Refusal::NoDocument)?;
+        if story
+            .as_deref()
+            .is_some_and(|story| !document.story_names().any(|name| name == story))
+        {
+            return Err(Refusal::UnknownStory);
+        }
+        // Choosing (or clearing) a story is a new question: a member picked
+        // under the previous one, and its ambiguity note, no longer apply.
+        if self.model.story != story {
+            self.model.selection = Selection::default();
+            self.model.ambiguous = 0;
+        }
+        self.model.story = story;
         Ok(())
     }
 

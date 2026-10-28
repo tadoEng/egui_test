@@ -1,9 +1,10 @@
 //! Project and version identity, and the public synthetic demo project.
 //!
-//! The demo is two independently authored E2K snapshots that differ in one
-//! source-backed way (the roof slab's insertion point). It is a public
-//! demonstration of version routing, never an `EtabExtension` commit: real
-//! project, branch and committed-version state comes from `ext-api` (APP-01D).
+//! The demo is the independently authored public synthetic tower: two E2K
+//! snapshots that differ in two source-backed ways (the L12 slab's insertion
+//! point and the L1-L2 perimeter beam depth). It is a public demonstration of
+//! version routing, never an `EtabExtension` commit: real project, branch and
+//! committed-version state comes from `ext-api` (APP-01D).
 use std::fmt;
 
 /// Where the project and version list come from.
@@ -69,25 +70,25 @@ pub struct Project {
     pub versions: Vec<VersionEntry>,
 }
 impl Project {
-    /// `main/v1` and `main/v2`: the committed REAL-03 `middle` and `top`
-    /// fixtures (see `docs/native/evidence/real03-shells/fixtures.sha256`).
+    /// `main/v1` and `main/v2`: the public synthetic tower
+    /// (`docs/native/fixtures/tower`, sha256 in `fixtures.sha256`).
     pub fn public_demo() -> Self {
         Self {
-            name: "Public demo project".to_owned(),
+            name: "Public demo tower".to_owned(),
             authority: Authority::PublicSyntheticDemo,
             versions: vec![
                 VersionEntry {
                     id: VersionId::new("main", "v1"),
-                    summary: "Roof slab S inserted at MIDDLE",
+                    summary: "Roof slab MIDDLE · podium beams 2.5 ft",
                     source: Source::Embedded(include_bytes!(
-                        "../../../docs/native/evidence/real03-shells/fixtures/middle.e2k"
+                        "../../../docs/native/fixtures/tower/tower-v1.e2k"
                     )),
                 },
                 VersionEntry {
                     id: VersionId::new("main", "v2"),
-                    summary: "Roof slab S inserted at TOP",
+                    summary: "Roof slab TOP · podium beams 3 ft",
                     source: Source::Embedded(include_bytes!(
-                        "../../../docs/native/evidence/real03-shells/fixtures/top.e2k"
+                        "../../../docs/native/fixtures/tower/tower-v2.e2k"
                     )),
                 },
             ],

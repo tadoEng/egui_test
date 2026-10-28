@@ -1,8 +1,8 @@
 //! Model: an immersive view with an optional explorer and inspector.
 //!
-//! The view (a placeholder in APP-01A, the native GPU viewport from APP-01B)
-//! fills the page. Explorer picks and view picks both become the same
-//! [`Action::Pick`], so the shell is the only owner of the selection.
+//! The native GPU view fills the page. Explorer picks and view picks both
+//! become the same [`Action::Pick`], and the story highlight is
+//! [`Action::SelectStory`], so the shell is the only owner of what is selected.
 use crate::document::{self, Document};
 use crate::state::{Action, State};
 use crate::view::{ModelView, ViewFrame, ViewIntent};
@@ -47,7 +47,14 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .default_size(240.0)
             .size_range(180.0..=420.0)
             .show(ui, |ui| {
-                explorer(ui, document, scope, selected, &mut actions);
+                explorer(
+                    ui,
+                    document,
+                    scope,
+                    selected,
+                    state.model.story.as_deref(),
+                    &mut actions,
+                );
             });
     }
     if state.model.inspector_open {
@@ -55,25 +62,30 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .resizable(true)
             .default_size(320.0)
             .size_range(240.0..=520.0)
-            .show(ui, |ui| inspector(ui, document, selected));
+            .show(ui, |ui| {
+                inspector(ui, document, selected, state.model.ambiguous);
+            });
     }
     egui::CentralPanel::no_frame().show(ui, |ui| {
         let frame = ViewFrame {
             document,
             scope,
             selected,
+            story: state.model.story.as_deref(),
             picking_allowed: true,
         };
         for ViewIntent::Pick {
             scope,
             entity,
             toggle,
+            coincident,
         } in view.show(ui, &frame)
         {
             actions.push(Action::Pick {
                 scope,
                 entity,
                 toggle,
+                coincident,
             });
         }
     });
@@ -85,25 +97,55 @@ fn explorer(
     document: &Document,
     scope: Scope,
     selected: &[usize],
+    story: Option<&str>,
     actions: &mut Vec<Action>,
 ) {
     let tokens = crate::theme::Tokens::of(ui);
     ui.add_space(6.0);
     ui.strong("Explorer");
     ui.label(
-        egui::RichText::new("Source entities · Ctrl+click adds to the selection")
+        egui::RichText::new("Click a story to highlight it · Ctrl+click adds an entity")
             .small()
             .color(tokens.muted),
     );
     ui.separator();
     let entities = document.mesh().entities();
+    egui::CollapsingHeader::new("Stories")
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("explorer-stories")
+                .max_height(ui.available_height() * 0.4)
+                .show(ui, |ui| {
+                    for name in document.story_names() {
+                        let count = entities.iter().filter(|e| e.story == name).count();
+                        let on = story == Some(name);
+                        if ui
+                            .selectable_label(on, format!("{name}  ·  {count}"))
+                            .clicked()
+                        {
+                            actions.push(Action::SelectStory((!on).then(|| name.to_owned())));
+                        }
+                    }
+                });
+        });
+    let rows: Vec<usize> = (0..entities.len())
+        .filter(|&index| story.is_none_or(|story| entities[index].story == story))
+        .collect();
+    ui.label(
+        egui::RichText::new(match story {
+            Some(story) => format!("Entities on {story} ({})", rows.len()),
+            None => format!("All entities ({})", rows.len()),
+        })
+        .small()
+        .color(tokens.muted),
+    );
     let row_height = ui.spacing().interact_size.y;
-    egui::ScrollArea::vertical().auto_shrink(false).show_rows(
-        ui,
-        row_height,
-        entities.len(),
-        |ui, rows| {
-            for index in rows {
+    egui::ScrollArea::vertical()
+        .id_salt("explorer-entities")
+        .auto_shrink(false)
+        .show_rows(ui, row_height, rows.len(), |ui, range| {
+            for &index in &rows[range] {
                 let entity = &entities[index];
                 let mut text = format!(
                     "{}  ·  {}  ·  {}",
@@ -121,29 +163,41 @@ fn explorer(
                         scope,
                         entity: Some(index),
                         toggle,
+                        coincident: 0,
                     });
                 }
             }
-        },
-    );
+        });
 }
 
-pub(crate) fn inspector(ui: &mut egui::Ui, document: &Document, selected: &[usize]) {
+pub(crate) fn inspector(
+    ui: &mut egui::Ui,
+    document: &Document,
+    selected: &[usize],
+    ambiguous: usize,
+) {
     let tokens = crate::theme::Tokens::of(ui);
     ui.add_space(6.0);
     ui.strong("Inspector");
     ui.separator();
     if selected.is_empty() {
         ui.label(
-            egui::RichText::new(
-                "Nothing selected. Pick an entity in the explorer; from APP-01B also in the viewport.",
-            )
-            .color(tokens.muted),
+            egui::RichText::new("Nothing selected. Click the model or an entity in the explorer.")
+                .color(tokens.muted),
         );
         return;
     }
     if selected.len() > 1 {
         ui.label(format!("{} entities selected", selected.len()));
+    }
+    if ambiguous > 0 {
+        ui.label(
+            egui::RichText::new(format!(
+                "{ambiguous} other entit{} at the same depth: this pick is ambiguous.",
+                if ambiguous == 1 { "y" } else { "ies" }
+            ))
+            .color(tokens.warning_text),
+        );
     }
     egui::ScrollArea::vertical()
         .auto_shrink(false)

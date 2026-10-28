@@ -1,0 +1,21 @@
+[package]
+name = "lab-viewport"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT OR Apache-2.0"
+description = "Experimental shared native wgpu viewport core: orbit camera, GPU mesh residency and egui paint callback"
+publish = false
+
+[dependencies]
+bytemuck = "1.25.2"
+egui = "0.37.0"
+egui-wgpu = "0.37.0"
+lab-e2k-mesh = { path = "../lab-e2k-mesh", features = ["render-layout"] }
+web-time = "1.1.0"
+
+[dev-dependencies]
+pollster = "1.0.0"
+
+[lints]
+workspace = true
