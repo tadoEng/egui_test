@@ -137,10 +137,26 @@ pub enum PanelMode {
     Floating,
 }
 
+/// Which panel a compact window shows when it can show only one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Context {
+    Explorer,
+    Inspector,
+}
+
 pub struct ModelState {
     pub panels: PanelMode,
+    /// The user's intent for each panel. A compact window shows at most one
+    /// of them (see [`ModelState::shows_explorer`]) without changing either,
+    /// so widening the window again restores what the user asked for.
     pub explorer_open: bool,
     pub inspector_open: bool,
+    /// The window is below the compact width (owner, #54 review): one
+    /// contextual panel at a time. Reported by the page, never by a load.
+    pub compact: bool,
+    /// The panel a compact window prefers: Explorer by default, Inspector
+    /// after a member pick, or whichever the user last asked for.
+    pub context: Context,
     /// Highlighted story, by name; kept across versions only if it exists there.
     pub story: Option<String>,
     /// Other visible entities hit at the same depth by the last accepted view
@@ -149,6 +165,44 @@ pub struct ModelState {
     selection: Selection,
 }
 impl ModelState {
+    /// Whether the Explorer is drawn: the user's intent when wide; when
+    /// compact, only if it is the context (or the Inspector is closed).
+    pub fn shows_explorer(&self) -> bool {
+        self.explorer_open
+            && (!self.compact || self.context == Context::Explorer || !self.inspector_open)
+    }
+    /// Whether the Inspector is drawn; compact windows never draw both.
+    pub fn shows_inspector(&self) -> bool {
+        self.inspector_open
+            && (!self.compact || self.context == Context::Inspector || !self.explorer_open)
+    }
+    /// E / the explorer buttons. Compact and showing the Inspector instead:
+    /// swap to the Explorer, keeping both intents. Otherwise a plain toggle.
+    fn toggle_explorer(&mut self) {
+        if self.compact && self.explorer_open && !self.shows_explorer() {
+            self.context = Context::Explorer;
+        } else if self.compact && self.shows_explorer() && self.inspector_open {
+            self.context = Context::Inspector;
+        } else {
+            self.explorer_open ^= true;
+            if self.explorer_open {
+                self.context = Context::Explorer;
+            }
+        }
+    }
+    /// I / the inspector buttons, the mirror of [`Self::toggle_explorer`].
+    fn toggle_inspector(&mut self) {
+        if self.compact && self.inspector_open && !self.shows_inspector() {
+            self.context = Context::Inspector;
+        } else if self.compact && self.shows_inspector() && self.explorer_open {
+            self.context = Context::Explorer;
+        } else {
+            self.inspector_open ^= true;
+            if self.inspector_open {
+                self.context = Context::Inspector;
+            }
+        }
+    }
     /// Selected entity indices, only for the scope they were made in.
     pub fn selected(&self, scope: Scope) -> &[usize] {
         self.selection.entities(scope)
@@ -220,6 +274,8 @@ pub enum Action {
     },
     ToggleExplorer,
     ToggleInspector,
+    /// The page's width class changed (below or above the compact width).
+    SetCompact(bool),
     /// From a view or the explorer, made in `scope`; refused in any other.
     Pick {
         scope: Scope,
@@ -290,6 +346,8 @@ impl State {
                 panels: PanelMode::Floating,
                 explorer_open: true,
                 inspector_open: true,
+                compact: false,
+                context: Context::Explorer,
                 story: None,
                 ambiguous: 0,
                 selection: Selection::default(),
@@ -327,8 +385,9 @@ impl State {
             Action::PreviousWorkspace => self.workspace = self.workspace.step(false),
             Action::SwitchVersion(version) => return self.switch_version(&version),
             Action::Loaded { ticket, result } => self.loaded(&ticket, result)?,
-            Action::ToggleExplorer => self.model.explorer_open ^= true,
-            Action::ToggleInspector => self.model.inspector_open ^= true,
+            Action::ToggleExplorer => self.model.toggle_explorer(),
+            Action::ToggleInspector => self.model.toggle_inspector(),
+            Action::SetCompact(compact) => self.model.compact = compact,
             Action::Pick {
                 scope,
                 entity,
@@ -363,6 +422,7 @@ impl State {
         };
         self.session.document = DocumentState::Loading(ticket.clone());
         self.model.selection = Selection::default();
+        self.model.context = Context::Explorer;
         self.model.ambiguous = 0;
         Ok(vec![Effect::Load { ticket, entry }])
     }
@@ -429,6 +489,13 @@ impl State {
         }
         self.model.selection.click(scope, entity, toggle);
         self.model.ambiguous = if entity.is_some() { coincident } else { 0 };
+        // A member pick makes the Inspector the compact context; clearing the
+        // selection hands it back to the Explorer.
+        self.model.context = if self.model.selection.entities(scope).is_empty() {
+            Context::Explorer
+        } else {
+            Context::Inspector
+        };
         Ok(())
     }
 
@@ -445,6 +512,7 @@ impl State {
         if self.model.story != story {
             self.model.selection = Selection::default();
             self.model.ambiguous = 0;
+            self.model.context = Context::Explorer;
         }
         self.model.story = story;
         Ok(())

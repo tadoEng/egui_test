@@ -40,11 +40,19 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
     let selected = model.selected(scope);
     let docked = model.panels == PanelMode::Docked;
     let total = ui.available_width();
+    // Below the compact width only one contextual panel is drawn (owner,
+    // #54): the width class is reported to the state, which keeps the user's
+    // panel intent apart from what this width can show.
+    let compact = total < crate::app::COMPACT_WIDTH;
+    if compact != model.compact {
+        actions.push(Action::SetCompact(compact));
+        ui.ctx().request_repaint();
+    }
     let (explorer_width, inspector_width) = pane_widths(total);
     let pane = egui::Frame::new()
         .fill(tokens.chrome)
         .inner_margin(egui::Margin::same(12));
-    if docked && model.explorer_open {
+    if docked && model.shows_explorer() {
         egui::Panel::left("model-explorer")
             .frame(pane.stroke(egui::Stroke::new(1.0, tokens.chrome_line)))
             .resizable(true)
@@ -54,14 +62,20 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
                 explorer(ui, document, scope, selected, state, &mut actions);
             });
     }
-    if docked && model.inspector_open {
+    if docked && model.shows_inspector() {
         egui::Panel::right("model-inspector")
             .frame(pane.stroke(egui::Stroke::new(1.0, tokens.chrome_line)))
             .resizable(true)
             .default_size(inspector_width)
             .size_range(260.0..=(total * 0.32).max(260.0))
             .show(ui, |ui| {
-                if inspector(ui, document, selected, model.ambiguous) {
+                if inspector(
+                    ui,
+                    document,
+                    selected,
+                    model.ambiguous,
+                    model.compact && model.explorer_open,
+                ) {
                     actions.push(Action::ToggleInspector);
                 }
             });
@@ -122,13 +136,13 @@ fn layout(canvas: egui::Rect, state: &State) -> Layout {
     );
     let column_bottom = strip.top() - MARGIN;
     let (explorer_width, inspector_width) = pane_widths(canvas.width());
-    let explorer = (floating && model.explorer_open).then(|| {
+    let explorer = (floating && model.shows_explorer()).then(|| {
         egui::Rect::from_min_max(
             canvas.left_top() + egui::vec2(MARGIN, MARGIN),
             egui::pos2(canvas.left() + MARGIN + explorer_width, column_bottom),
         )
     });
-    let inspector = (floating && model.inspector_open).then(|| {
+    let inspector = (floating && model.shows_inspector()).then(|| {
         egui::Rect::from_min_max(
             egui::pos2(
                 canvas.right() - MARGIN - inspector_width,
@@ -213,13 +227,19 @@ fn overlays(
     }
     if let Some(rect) = layout.inspector {
         floating_card(ui, "Inspector", rect, |ui| {
-            if inspector(ui, document, selected, model.ambiguous) {
+            if inspector(
+                ui,
+                document,
+                selected,
+                model.ambiguous,
+                model.compact && model.explorer_open,
+            ) {
                 actions.push(Action::ToggleInspector);
             }
         });
     }
     // Reopen buttons for closed panels, in either mode.
-    if !model.explorer_open {
+    if !model.shows_explorer() {
         let rect = egui::Rect::from_min_size(
             canvas.left_top() + egui::vec2(MARGIN, MARGIN),
             egui::vec2(40.0, 36.0),
@@ -234,7 +254,7 @@ fn overlays(
                 });
         });
     }
-    if !model.inspector_open {
+    if !model.shows_inspector() {
         let rect = egui::Rect::from_min_size(
             egui::pos2(canvas.right() - MARGIN - 40.0, canvas.top() + MARGIN),
             egui::vec2(40.0, 36.0),
@@ -249,9 +269,9 @@ fn overlays(
                 });
         });
     }
-    gizmo(ui, &layout, view);
+    gizmo(ui, &layout, !model.shows_inspector(), view);
     view_toolbar(ui, &layout, state, view, actions);
-    fidelity_chip(ui, &layout, !model.explorer_open, document, &tokens);
+    fidelity_chip(ui, &layout, !model.shows_explorer(), document, &tokens);
     version_strip(ui, layout.strip, state, actions);
 }
 
@@ -301,14 +321,16 @@ fn view_toolbar(
     });
 }
 
-/// The camera's axes, from the view's real camera basis.
-fn gizmo(ui: &egui::Ui, layout: &Layout, view: &dyn ModelView) {
+/// The camera's axes, from the view's real camera basis. `after_reopen`:
+/// the Inspector's reopen button holds the top-right corner, so move left.
+fn gizmo(ui: &egui::Ui, layout: &Layout, after_reopen: bool, view: &dyn ModelView) {
     let Some([right, up, _back]) = view.basis() else {
         return;
     };
     let tokens = Tokens::of(ui);
+    let inset = if after_reopen { MARGIN + 48.0 } else { MARGIN };
     let center = egui::pos2(
-        layout.free.right() - MARGIN - 34.0,
+        layout.free.right() - inset - 34.0,
         layout.free.top() + MARGIN + 34.0,
     );
     // Like every overlay, the gizmo is not a pick target for the model under it.
@@ -602,7 +624,9 @@ struct ExplorerFilter {
 }
 
 /// "Explorer", the entity count and the hide button; true when hidden.
-fn explorer_title(ui: &mut egui::Ui, count: usize) -> bool {
+/// "Explorer", the entity count and its header button; true when clicked.
+/// `swap`: a compact window, where the button switches to the Inspector.
+fn explorer_title(ui: &mut egui::Ui, count: usize, swap: bool) -> bool {
     let tokens = Tokens::of(ui);
     ui.horizontal(|ui| {
         ui.label(
@@ -617,7 +641,12 @@ fn explorer_title(ui: &mut egui::Ui, count: usize) -> bool {
                 .color(tokens.muted),
         );
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            icons::button(ui, Icon::PanelLeft, "Hide explorer (E)", false).clicked()
+            let (icon, label) = if swap {
+                (Icon::PanelRight, "Switch to inspector (E)")
+            } else {
+                (Icon::PanelLeft, "Hide explorer (E)")
+            };
+            icons::button(ui, icon, label, false).clicked()
         })
         .inner
     })
@@ -636,7 +665,8 @@ fn explorer(
     let entities = document.mesh().entities();
     let filter_id = egui::Id::unique("talos-explorer-filter");
     let mut filter: ExplorerFilter = ui.data(|d| d.get_temp(filter_id)).unwrap_or_default();
-    if explorer_title(ui, entities.len()) {
+    let swap = state.model.compact && state.model.inspector_open;
+    if explorer_title(ui, entities.len(), swap) {
         actions.push(Action::ToggleExplorer);
     }
     ui.add(
@@ -839,11 +869,14 @@ fn units(ui: &mut egui::Ui, document: &Document) {
 }
 
 /// Returns whether the user asked to hide the inspector.
+/// Returns true when its header button is clicked: hide, or with `swap`
+/// (a compact window) switch to the Explorer.
 pub(crate) fn inspector(
     ui: &mut egui::Ui,
     document: &Document,
     selected: &[usize],
     ambiguous: usize,
+    swap: bool,
 ) -> bool {
     let tokens = Tokens::of(ui);
     let entities = document.mesh().entities();
@@ -853,7 +886,12 @@ pub(crate) fn inspector(
         .collect();
     let close = |ui: &mut egui::Ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            icons::button(ui, Icon::Close, "Hide inspector (I)", false)
+            let (icon, label) = if swap {
+                (Icon::PanelLeft, "Switch to explorer (I)")
+            } else {
+                (Icon::Close, "Hide inspector (I)")
+            };
+            icons::button(ui, icon, label, false)
         })
         .inner
         .clicked()

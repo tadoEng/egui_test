@@ -5,6 +5,10 @@ use crate::project::Project;
 use crate::state::{Action, DocumentState, Refusal, State, Workspace};
 use crate::view::ModelView;
 
+/// Below this window width the header collapses and Model shows one
+/// contextual panel at a time.
+pub const COMPACT_WIDTH: f32 = 1100.0;
+
 pub struct App {
     state: State,
     view: Box<dyn ModelView>,
@@ -100,7 +104,6 @@ impl App {
     /// Below `COMPACT_WIDTH` the project name and status text collapse and the
     /// later workspaces move into More.
     fn header(&self, ui: &mut egui::Ui) -> Vec<Action> {
-        const COMPACT_WIDTH: f32 = 1100.0;
         let mut actions = Vec::new();
         let session = &self.state.session;
         let tokens = crate::theme::Tokens::of(ui);

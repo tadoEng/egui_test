@@ -553,7 +553,7 @@ fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
                             .with_theme(theme)
                             .with_context_setup(crate::theme::install)
                             .build_ui(move |ui| {
-                                crate::pages::model::inspector(ui, &shown, &[index], 0);
+                                crate::pages::model::inspector(ui, &shown, &[index], 0, false);
                             });
                         let context = format!(
                             "width {width} scale {scale} {theme:?} {} entity {index}",
@@ -920,5 +920,83 @@ fn choosing_another_story_drops_the_member_picked_on_the_old_one() {
     assert_eq!(
         crate::native_view::highlight_indices(&frame).len(),
         expected
+    );
+}
+
+/// Extent of a floating card, by its accessible name: the union of what it
+/// draws (an egui scope node carries no bounds of its own).
+fn card(harness: &Harness<'_, App>, name: &str) -> Option<egui::Rect> {
+    let pane = harness.root().children_recursive().find(|node| {
+        node.accesskit_node().role() == Role::Pane
+            && node.accesskit_node().label().as_deref() == Some(name)
+    })?;
+    pane.children_recursive()
+        .filter(|node| node.accesskit_node().bounding_box().is_some())
+        .map(|node| node.rect())
+        .reduce(|a, b| a.union(b))
+}
+/// The widest part of the canvas between the visible cards, above the strip.
+fn unobscured(harness: &Harness<'_, App>) -> egui::Rect {
+    let canvas = harness.get_by_label("3D model view").rect();
+    let strip = harness.get_by_label("Version v1").rect();
+    let left = card(harness, "Explorer").map_or_else(|| canvas.left(), |r| r.right());
+    let right = card(harness, "Inspector").map_or_else(|| canvas.right(), |r| r.left());
+    egui::Rect::from_min_max(
+        egui::pos2(left, canvas.top()),
+        egui::pos2(right, strip.top() - 14.0),
+    )
+}
+
+#[test]
+fn at_900_points_one_contextual_panel_leaves_the_model_unobscured() {
+    let mut harness = harness_sized(LoadMode::Inline, egui::vec2(900.0, 700.0));
+    // Default: Explorer only.
+    assert!(card(&harness, "Explorer").is_some());
+    assert!(card(&harness, "Inspector").is_none());
+    let free = unobscured(&harness);
+    assert!(free.width() >= 560.0 && free.height() >= 450.0, "{free:?}");
+    assert!(
+        present(&harness, "Show inspector (I)"),
+        "the hidden panel is one click away"
+    );
+
+    // A member pick: the Inspector replaces the Explorer, with its tier chip.
+    select(&mut harness, "|F|L12");
+    assert!(card(&harness, "Explorer").is_none());
+    assert!(card(&harness, "Inspector").is_some());
+    assert!(present(&harness, "flat at declared face"));
+    assert!(present(&harness, "Switch to explorer (I)"));
+    let free = unobscured(&harness);
+    assert!(free.width() >= 560.0 && free.height() >= 450.0, "{free:?}");
+
+    // Keyboard swaps both ways and keeps the pick.
+    let picked = selected(&harness);
+    harness.key_press(egui::Key::I);
+    settle(&mut harness);
+    assert!(card(&harness, "Explorer").is_some() && card(&harness, "Inspector").is_none());
+    harness.key_press(egui::Key::E);
+    settle(&mut harness);
+    assert!(card(&harness, "Inspector").is_some() && card(&harness, "Explorer").is_none());
+    assert_eq!(selected(&harness), picked);
+
+    // 900 -> 1280 -> 900: both panels return, nothing reloads, the pick stays.
+    let generation = harness.state().state().session.scope().expect("ready");
+    harness.set_size(egui::vec2(1280.0, 800.0));
+    settle(&mut harness);
+    assert!(card(&harness, "Explorer").is_some() && card(&harness, "Inspector").is_some());
+    harness.set_size(egui::vec2(900.0, 700.0));
+    settle(&mut harness);
+    assert!(card(&harness, "Inspector").is_some() && card(&harness, "Explorer").is_none());
+    assert_eq!(harness.state().state().session.scope(), Some(generation));
+    assert_eq!(selected(&harness), picked);
+
+    // Docked at 900 shows the same single panel beside a wide canvas.
+    set_mode(&mut harness, "Docked panels");
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(canvas.width() >= 560.0, "{canvas:?}");
+    assert!(present(&harness, "Switch to explorer (I)"));
+    assert!(
+        !present(&harness, "ALL ENTITIES"),
+        "the Explorer is not drawn"
     );
 }

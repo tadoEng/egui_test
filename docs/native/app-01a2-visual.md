@@ -71,12 +71,23 @@ selection.
   share of the window. At 900 pt the canvas keeps about 390 pt, including after
   shrinking from a wider window.
 
-**Known cost:** at 900 pt, Floating leaves about 360 pt between the cards, and
-the inspector card covers the right side of the model. Picking never goes
-through it, but the geometry is hidden until you orbit, close the card or
-switch to Docked. One way to fix this is for Fit to frame the model in the free
-area instead of the whole canvas. That is a camera change for a follow-up, and
-it is open for your decision against the "never over critical geometry" rule.
+**Compact windows (below 1100 pt, owner decision on #54).** One contextual
+panel at a time, in both modes:
+- the Explorer by default;
+- a member pick makes the Inspector the context, replacing the Explorer;
+- clearing the selection, a story change or a version switch hands the context
+  back to the Explorer.
+
+The visible panel's header button switches to the other panel: **Switch to
+explorer (I)** / **Switch to inspector (E)**. The hidden one keeps a corner
+button (**Show explorer (E)** / **Show inspector (I)**). E and I do the same
+from the keyboard, and an explicit toggle always works.
+
+The user's panel intent (`explorer_open` / `inspector_open`) is kept apart from
+what the width can show (`ModelState::shows_explorer` / `shows_inspector`).
+Resizing 1280 → 900 → 1280 restores both panels, keeps the selection, project
+and version, and loads nothing. Fit is unchanged: per the owner, a
+viewport-aware Fit is a separate camera-and-picking task.
 
 ### Canvas overlays
 
@@ -131,7 +142,7 @@ values are plotted or invented.
 | Rule | Where it holds |
 |---|---|
 | Docked vs floating is not a permanent mode | Toolbar toggle; `PanelMode` is presentation-only; the test keeps the selection across both |
-| Never place the inspector over critical geometry or picking | Floating cards and every overlay block picks under them (tested), and the canvas still picks outside them (tested). Docked never covers geometry. At 900 pt, Floating does cover part of the model (see **Known cost**) |
+| Never place the inspector over critical geometry or picking | Floating cards and every overlay block picks under them (tested), and the canvas still picks outside them (tested). Docked never covers geometry. Below 1100 pt only one panel shows; the 900 pt unobscured model region is tested in the default and selected states |
 | 48 pt header target; validate at 900 pt and 100/125/150 % | One-row header (tested). 900 pt overflow, no overlaps, Ctrl+3 (tested). Real-binary captures at 1×, 1.25× and 1.5×, including 900 × 700 |
 | No microtext for engineering values | 12 pt floor for values and warnings |
 | Timeline: no invented data; synced with the header; no second controller | The strip sends the header's `SwitchVersion`; both reflect `session.requested()` (tested); the "no commit history" note is shown or named |
@@ -140,12 +151,19 @@ values are plotted or invented.
 
 ## Tests
 
-There are 37 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
+There are 39 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
 `NativeModelView` through egui's AccessKit tree. Seven are new or rewritten
 for A.2:
 
 - Floating is the default; panel modes keep the selection; overlays never pick
   through in either mode; the canvas still picks outside them;
+- compact (state): one panel shown, a pick switches to the Inspector, E/I swap,
+  intents survive widening, a closed Inspector stays closed, a version switch
+  resets the context;
+- compact (UI, 900 × 700): the unobscured model region is at least 560 × 450 pt
+  with the default Explorer and with the Inspector after a pick. Also checked:
+  the keyboard swap, 900 → 1280 → 900 with the same scope and pick, and Docked
+  at 900;
 - the version strip and the header picker act as one controller;
 - the explorer text filter and type filter;
 - at 900 pt: the More overflow, no header overlaps, shortcuts still route, and
@@ -163,8 +181,9 @@ chips.
 - `capture_talos.py`: the real binary under Xvfb + Mesa lavapipe with real
   XTest clicks, at 1, 1.25 and 1.5. It captures Model floating (the default), a
   real pick, the same pick docked, Results, then the window resized to
-  900 × 700 (docked, then floating).
-- `*.png`: those 18 frames, all public synthetic tower data.
+  900 × 700 with one contextual panel (the Inspector for the pick, then the
+  Explorer, floating and docked).
+- `*.png`: those 21 frames, all public synthetic tower data.
 - `gate.sh.txt` and `gate-a2-d7fab97.txt`: the clean-worktree gate at
   `d7fab97`. Every step is green except the known G-ENV-1 whole-workspace Clippy
   exception (`webview_stage_a.rs:393` `eprintln!`). Results:

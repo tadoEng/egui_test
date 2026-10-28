@@ -6,8 +6,9 @@ Linux container only: Xvfb + Mesa lavapipe (software Vulkan), ImageMagick
 data only. Not Windows evidence: the owner's Windows check stays required.
 
 For each scale: Model with floating panels (the default), a real pick, the
-same pick docked, Results, then the window resized to 900 x 700 points
-(Model, docked and floating).
+same pick docked, Results, then the window resized to 900 x 700 points: one
+contextual panel (Inspector for the pick, then the Explorer), floating and
+docked.
 Coordinates are logical points of the default 1280 x 800 layout.
 
     python3 -I capture_talos.py <talos-native binary> <out-dir>
@@ -105,17 +106,22 @@ for scale in ("1", "1.25", "1.5"):
         click(handle, 640 * s, 26 * s)
         time.sleep(3)
         shot(f"results-{tag}", width, height)
-        # Back to Model (still docked: the mode is kept), then the 900 x 700
-        # minimum, docked and floating.
+        # Back to Model (still docked), Floating again, then the 900 x 700
+        # minimum: one contextual panel. The pick is kept, so the Inspector
+        # shows; its header button switches to the Explorer; then Docked.
         click(handle, 548 * s, 26 * s)
+        time.sleep(2)
+        click(handle, 629 * s, 691 * s)
         time.sleep(2)
         resize_top_level(handle, 900 * s, 700 * s)
         time.sleep(4)
-        shot(f"model-900-docked-{tag}", round(900 * s), round(700 * s))
-        # The toolbar's Floating panels toggle at 900 x 700, docked layout.
-        click(handle, 439 * s, 591 * s)
+        shot(f"model-900-floating-inspector-{tag}", round(900 * s), round(700 * s))
+        click(handle, 858 * s, 91 * s)
         time.sleep(3)
-        shot(f"model-900-floating-{tag}", round(900 * s), round(700 * s))
+        shot(f"model-900-floating-explorer-{tag}", round(900 * s), round(700 * s))
+        click(handle, 553 * s, 592 * s)
+        time.sleep(3)
+        shot(f"model-900-docked-explorer-{tag}", round(900 * s), round(700 * s))
     finally:
         app.terminate()
         app.wait(timeout=10)
