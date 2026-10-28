@@ -1,0 +1,16 @@
+//! Native classification dump for oracle parity: one JSON object per entity.
+fn main() {
+    let bytes = std::fs::read(std::env::args().nth(1).expect("path")).expect("read");
+    let mesh = lab_e2k_mesh::build(&bytes, lab_e2k_mesh::Config::default()).expect("build");
+    for e in mesh.entities() {
+        let (fidelity, reasons) = if let Some(f) = &e.frame {
+            (format!("{:?}", f.fidelity), f.reasons.iter().map(|r| format!("{r:?}")).collect::<Vec<_>>())
+        } else if let Some(s) = &e.shell {
+            (format!("shell:{:?}", s.fidelity), s.reasons.iter().map(|r| format!("{r:?}")).collect::<Vec<_>>())
+        } else {
+            (String::new(), vec![])
+        };
+        println!("{{\"key\":\"{}\",\"fidelity\":\"{fidelity}\",\"reasons\":{:?},\"limitation\":\"{:?}\",\"mode\":\"{:?}\"}}",
+            e.key.as_stable_str().replace('\\', "\\\\").replace('"', "\\\""), reasons, e.limitation, e.mode);
+    }
+}

@@ -1,0 +1,29 @@
+"""Native lab-e2k-mesh labels vs the real pinned ext-api classifier, per entity."""
+import json, subprocess, sys
+S = sys.argv[1]
+def camel(n): return n[0].lower() + n[1:]
+def run(paths):
+    totals = dict(entities=0, frame_match=0, frame_mismatch=0, shell_match=0, shell_mismatch=0, native_stricter=0)
+    details = []
+    for path in paths:
+        oracle = {e['key']: e for e in json.loads(subprocess.check_output([f'{S}/oracle/target/release/ext-api-oracle', path]))['entries']}
+        for line in subprocess.check_output([f'{S}/probe/target/release/native_dump', path], text=True).splitlines():
+            n = json.loads(line); o = oracle.get(n['key']); totals['entities'] += 1
+            if o is None: details.append((path, n['key'], 'missing in oracle')); continue
+            fid = n['fidelity']
+            nr = [camel(r) for r in n['reasons'] if r != 'FixedDisplayProxy']
+            shell = fid.startswith('shell:')
+            fid = fid.removeprefix('shell:')
+            ok = fid.lower() == o['fidelity'] and nr == o['reasons']
+            kind = 'shell' if shell else 'frame'
+            totals[f'{kind}_match' if ok else f'{kind}_mismatch'] += 1
+            if not ok:
+                details.append((path, n['key'], f"native {fid} {nr} vs ext-api {o['fidelity']} {o['reasons']}"))
+            elif shell and n['mode'] == 'Withheld' and 'OpeningVoid' not in n['limitation'] and 'HostOpening' not in n['limitation']:
+                totals['native_stricter'] += 1
+                details.append((path, n['key'], f"native withholds ({n['limitation']}); ext-api draws it ({o['fidelity']} {o['reasons']})"))
+    return totals, details
+if __name__ == '__main__':
+    totals, details = run(sys.argv[2:])
+    print(json.dumps(totals))
+    for d in details: print(*d, sep=' | ')

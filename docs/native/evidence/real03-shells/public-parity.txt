@@ -1,0 +1,2 @@
+{"entities": 102, "frame_match": 54, "frame_mismatch": 0, "shell_match": 48, "shell_mismatch": 0, "native_stricter": 1}
+partial.e2k | inst|sh|S|Roof | native withholds (Some(OverlapsUnsubtractedOpening)); ext-api draws it (exact [])
