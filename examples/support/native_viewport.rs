@@ -310,7 +310,11 @@ fn synthetic_structure() -> MeshData {
 
 #[derive(Clone, Copy, Debug)]
 struct OrbitCamera {
+    /// Orbit pivot; panning moves it, Fit returns it to `center`.
     target: [f32; 3],
+    /// Model bounds centre. Clip planes are placed about the model, not the
+    /// pivot, so panning never clips (or makes unpickable) drawn geometry.
+    center: [f32; 3],
     yaw: f32,
     pitch: f32,
     distance: f32,
@@ -325,6 +329,7 @@ impl OrbitCamera {
         let limiting_half = vertical_half.min(horizontal_half);
         Self {
             target: bounds.center(),
+            center: bounds.center(),
             yaw: -0.7,
             pitch: 0.55,
             distance: (radius / limiting_half.sin() * 1.1).max(0.1),
@@ -336,6 +341,31 @@ impl OrbitCamera {
         self.yaw = (self.yaw + delta.x * 0.008).rem_euclid(std::f32::consts::TAU);
         let limit = std::f32::consts::FRAC_PI_2 - 0.01;
         self.pitch = (self.pitch + delta.y * 0.008).clamp(-limit, limit);
+    }
+
+    /// Move the pivot in the view's right/up plane so the model follows the
+    /// pointer: one screen point is the world size of one point at the pivot
+    /// depth. The pivot stays within three model radii of the model centre.
+    fn pan(&mut self, delta: egui::Vec2, viewport_height: f32) {
+        let (right, up, _) = self.basis();
+        let world_per_point =
+            2.0 * self.distance * (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan()
+                / viewport_height.max(1.0);
+        let moved = add(
+            self.target,
+            add(
+                scale(right, -delta.x * world_per_point),
+                scale(up, delta.y * world_per_point),
+            ),
+        );
+        let offset = sub(moved, self.center);
+        let length = dot(offset, offset).sqrt();
+        let limit = self.radius * 3.0;
+        self.target = if length > limit {
+            add(self.center, scale(offset, limit / length))
+        } else {
+            moved
+        };
     }
 
     fn zoom(&mut self, delta: f32) {
@@ -357,12 +387,15 @@ impl OrbitCamera {
         add(self.target, scale(self.basis().2, self.distance))
     }
 
-    /// Near/far view depths; picking must clip with exactly the drawn window.
+    /// Near/far view depths about the model centre (identical to the old
+    /// pivot-based window when unpanned); picking clips with exactly this.
     fn clip_planes(self) -> (f32, f32) {
-        let near = (self.distance - self.radius * 2.0)
+        let back = self.basis().2;
+        let depth = dot(sub(self.center, self.eye()), scale(back, -1.0));
+        let near = (depth - self.radius * 2.0)
             .max(self.distance * 0.001)
             .max(0.001);
-        (near, (self.distance + self.radius * 2.0).max(near + 0.01))
+        (near, (depth + self.radius * 2.0).max(near + 0.01))
     }
 
     /// World ray through normalized device coordinates (x right, y up), with
@@ -878,6 +911,31 @@ impl NativeViewport {
         (self.mesh.vertices.len(), self.mesh.indices.len() / 3)
     }
 
+    /// Left (or right) drag orbits; middle drag, or Shift + left drag for
+    /// trackpads, pans; the wheel zooms. Fit resets pivot and distance.
+    fn navigate(&mut self, ui: &egui::Ui, response: &egui::Response, viewport_height: f32) {
+        let delta = ui.input(|input| input.pointer.delta());
+        let shift = ui.input(|input| input.modifiers.shift);
+        if response.dragged_by(egui::PointerButton::Middle)
+            || (shift && response.dragged_by(egui::PointerButton::Primary))
+        {
+            self.camera.pan(delta, viewport_height);
+            ui.ctx().request_repaint();
+        } else if response.dragged_by(egui::PointerButton::Primary)
+            || response.dragged_by(egui::PointerButton::Secondary)
+        {
+            self.camera.orbit(delta);
+            ui.ctx().request_repaint();
+        }
+        if response.hovered() {
+            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
+            if scroll.abs() > f32::EPSILON {
+                self.camera.zoom(scroll);
+                ui.ctx().request_repaint();
+            }
+        }
+    }
+
     /// `load_generation` is the host's load identity; a change expires the
     /// element selection even when the new load has byte-identical geometry.
     /// `selection_allowed` is false while source provenance is not validated
@@ -920,7 +978,6 @@ impl NativeViewport {
         }
         #[cfg(not(feature = "real-workbench"))]
         let _unused_selection = selected_story;
-        let ctx = ui.ctx().clone();
         let size = ui.available_size();
         if !size.is_finite() || size.x < 1.0 || size.y < 1.0 {
             return;
@@ -931,17 +988,7 @@ impl NativeViewport {
             self.camera = OrbitCamera::fit(self.mesh.bounds, aspect);
             self.fit_pending = false;
         }
-        if response.dragged() {
-            self.camera.orbit(ui.input(|input| input.pointer.delta()));
-            ctx.request_repaint();
-        }
-        if response.hovered() {
-            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
-            if scroll.abs() > f32::EPSILON {
-                self.camera.zoom(scroll);
-                ctx.request_repaint();
-            }
-        }
+        self.navigate(ui, &response, rect.height());
         #[cfg(feature = "real-workbench")]
         self.interact(ui, &response, rect, aspect);
         ui.painter().rect_filled(rect, 0.0, BACKGROUND);
@@ -963,6 +1010,13 @@ impl NativeViewport {
         );
         #[cfg(not(feature = "real-workbench"))]
         let selection_label = "";
+        ui.painter().with_clip_rect(rect).text(
+            rect.right_top() + egui::vec2(-10.0, 8.0),
+            egui::Align2::RIGHT_TOP,
+            "Drag: orbit · Middle-drag / Shift+drag: pan · Wheel: zoom",
+            egui::FontId::proportional(11.0),
+            egui::Color32::GRAY,
+        );
         ui.painter().with_clip_rect(rect).text(
             rect.left_bottom() + egui::vec2(10.0, -8.0),
             egui::Align2::LEFT_BOTTOM,
@@ -1357,6 +1411,96 @@ mod tests {
         }
     }
 
+    fn project_point(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 4] {
+        std::array::from_fn(|row| (0..3).map(|c| m[c][row] * p[c]).sum::<f32>() + m[3][row])
+    }
+
+    #[test]
+    fn pan_moves_the_pivot_in_the_view_plane_and_the_model_follows_the_pointer() {
+        let mesh = synthetic_structure();
+        let mut camera = OrbitCamera::fit(mesh.bounds, 1.0);
+        camera.orbit(egui::vec2(60.0, -40.0));
+        let before = camera;
+        let height = 600.0;
+        // A drag of 60 points right should move the model centre about 60
+        // points right on screen, with unchanged depth and orientation.
+        camera.pan(egui::vec2(60.0, 0.0), height);
+        let (_, _, back) = camera.basis();
+        assert_eq!(
+            (camera.yaw, camera.pitch, camera.distance),
+            (before.yaw, before.pitch, before.distance)
+        );
+        assert!(
+            dot(sub(camera.target, before.target), back).abs() < 1e-4,
+            "pan stays in the view plane"
+        );
+        let screen_x = |c: OrbitCamera| {
+            let clip = project_point(c.view_projection(1.0), before.center);
+            clip[0] / clip[3] * height * 0.5
+        };
+        let moved = screen_x(camera) - screen_x(before);
+        assert!((moved - 60.0).abs() < 1.0, "model moved {moved} points");
+        // Vertical drag down moves the model down (screen y grows downward).
+        let mut down = before;
+        down.pan(egui::vec2(0.0, 40.0), height);
+        let clip = project_point(down.view_projection(1.0), before.center);
+        let base = project_point(before.view_projection(1.0), before.center);
+        assert!(
+            clip[1] / clip[3] < base[1] / base[3],
+            "model moves down in NDC"
+        );
+        // Unbounded drags keep the pivot within three radii; Fit restores it.
+        for _ in 0..1000 {
+            camera.pan(egui::vec2(5000.0, -5000.0), height);
+        }
+        let offset = sub(camera.target, camera.center);
+        assert!(dot(offset, offset).sqrt() <= camera.radius * 3.0 + 1e-3);
+        assert!(
+            camera
+                .view_projection(1.0)
+                .into_iter()
+                .flatten()
+                .all(f32::is_finite)
+        );
+        assert_eq!(
+            OrbitCamera::fit(mesh.bounds, 1.0).target,
+            mesh.bounds.center()
+        );
+    }
+
+    #[test]
+    fn panned_cameras_keep_every_vertex_inside_the_clip_window() {
+        let mesh = synthetic_structure();
+        let mut camera = OrbitCamera::fit(mesh.bounds, 1.0);
+        let unpanned = camera.clip_planes();
+        assert!(
+            (unpanned.0
+                - (camera.distance - camera.radius * 2.0)
+                    .max(camera.distance * 0.001)
+                    .max(0.001))
+            .abs()
+                < 1e-4
+        );
+        for _ in 0..200 {
+            camera.pan(egui::vec2(400.0, 250.0), 600.0);
+        }
+        // A pure pan keeps the model's depth; orbiting about the displaced
+        // pivot then swings the model toward or away from the eye.
+        for turn in 0..8 {
+            let tilt = if turn % 2 == 0 { 30.0 } else { -45.0 };
+            camera.orbit(egui::vec2(25.0, tilt) / 0.08);
+            let (_, _, back) = camera.basis();
+            let (near, far) = camera.clip_planes();
+            for v in &mesh.vertices {
+                let depth = dot(sub(v.position, camera.eye()), scale(back, -1.0));
+                assert!(
+                    depth >= near - 1e-3 && depth <= far + 1e-3,
+                    "vertex clipped after pan + orbit {turn}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn fit_contains_every_fixture_vertex_in_tall_and_wide_viewports() {
         let mesh = synthetic_structure();
@@ -1398,6 +1542,7 @@ mod tests {
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let camera = OrbitCamera {
             target: [0.0, 0.0, 0.0],
+            center: [0.0, 0.0, 0.0],
             yaw: 0.0,
             pitch: 0.0,
             distance: 8.0,
@@ -1600,14 +1745,16 @@ mod tests {
     fn pick_rays_pass_through_drawn_pixels_inside_the_drawn_depth_window() {
         let mesh = synthetic_structure();
         let mut checked = 0;
-        for (aspect, yaw, pitch, zoom) in [
-            (1.0, 0.0, 0.0, 0.0),
-            (1.8, 1.1, 0.7, 300.0),
-            (0.45, -2.4, -0.9, -500.0),
+        for (aspect, yaw, pitch, zoom, pan) in [
+            (1.0, 0.0, 0.0, 0.0, egui::Vec2::ZERO),
+            (1.8, 1.1, 0.7, 300.0, egui::vec2(-120.0, 80.0)),
+            (0.45, -2.4, -0.9, -500.0, egui::vec2(90.0, -150.0)),
+            (1.3, 0.4, 0.2, 0.0, egui::vec2(260.0, 40.0)),
         ] {
             let mut camera = OrbitCamera::fit(mesh.bounds, aspect);
             camera.orbit(egui::vec2(yaw / 0.008, pitch / 0.008));
             camera.zoom(zoom);
+            camera.pan(pan, 600.0);
             let m = camera.view_projection(aspect);
             for p in mesh.vertices.iter().step_by(5).map(|v| v.position) {
                 let ndc = project(m, p);
@@ -1642,7 +1789,7 @@ mod tests {
         .expect("public source");
         let mesh = source_mesh(source);
         let aspect = 1.5;
-        let camera = OrbitCamera::fit(mesh.bounds, aspect);
+        let fitted = OrbitCamera::fit(mesh.bounds, aspect);
         let floor = mesh
             .source_entities
             .iter()
@@ -1658,13 +1805,24 @@ mod tests {
                 .sum::<f32>()
                 / 3.0
         });
-        let ndc = project(camera.view_projection(aspect), p);
-        let hit = pick_at(&mesh, camera, aspect, [ndc[0], ndc[1]]).expect("floor hit");
-        assert_eq!(hit.entity, floor);
-        assert_eq!(
-            pick_at(&mesh, camera, aspect, [0.99, 0.99]),
-            None,
-            "empty corner"
+        // Panned left and down, away from the empty top-right corner.
+        let mut panned = fitted;
+        panned.pan(egui::vec2(-150.0, 90.0), 600.0);
+        let fitted_ndc = project(fitted.view_projection(aspect), p);
+        for camera in [fitted, panned] {
+            let ndc = project(camera.view_projection(aspect), p);
+            let hit = pick_at(&mesh, camera, aspect, [ndc[0], ndc[1]]).expect("floor hit");
+            assert_eq!(hit.entity, floor);
+            assert_eq!(
+                pick_at(&mesh, camera, aspect, [0.99, 0.99]),
+                None,
+                "empty corner"
+            );
+        }
+        let panned_ndc = project(panned.view_projection(aspect), p);
+        assert!(
+            panned_ndc[0] < fitted_ndc[0] - 0.1,
+            "the pan moved the floor on screen"
         );
         let described = describe(&mesh.source_entities[floor]);
         assert!(described.contains("FloorShell") && described.contains("not drawn"));
