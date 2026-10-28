@@ -854,3 +854,16 @@ fn results_selector_labels_come_before_their_controls() {
         "Story drift · X · no case · all stories · main/v2"
     ));
 }
+
+#[test]
+fn shrinking_a_wide_window_to_900_points_narrows_the_docked_panes() {
+    let mut harness = harness(LoadMode::Inline);
+    let wide = harness.get_by_label("3D model view").rect().width();
+    harness.set_size(egui::vec2(900.0, 700.0));
+    settle(&mut harness);
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(
+        canvas.width() >= 380.0,
+        "panes sized for {wide} pt of canvas kept {canvas:?}"
+    );
+}

@@ -49,7 +49,7 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .frame(pane.stroke(egui::Stroke::new(1.0, tokens.chrome_line)))
             .resizable(true)
             .default_size(explorer_width)
-            .size_range(220.0..=(total * 0.3).max(220.0))
+            .size_range(220.0..=(total * 0.25).max(220.0))
             .show(ui, |ui| {
                 explorer(ui, document, scope, selected, state, &mut actions);
             });
@@ -59,7 +59,7 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .frame(pane.stroke(egui::Stroke::new(1.0, tokens.chrome_line)))
             .resizable(true)
             .default_size(inspector_width)
-            .size_range(260.0..=(total * 0.38).max(260.0))
+            .size_range(260.0..=(total * 0.32).max(260.0))
             .show(ui, |ui| {
                 if inspector(ui, document, selected, model.ambiguous) {
                     actions.push(Action::ToggleInspector);
@@ -359,6 +359,13 @@ fn fidelity_chip(
     let inset = if after_reopen { MARGIN + 48.0 } else { MARGIN };
     let origin = egui::pos2(layout.free.left() + inset, layout.free.top() + MARGIN);
     let rect = egui::Rect::from_min_size(origin, egui::vec2(420.0, 32.0));
+    // A narrow canvas (900 pt, floating) keeps the dots and numbers and moves
+    // the words into the tooltip and the accessible name, clear of the gizmo.
+    let compact = layout.free.width() < 540.0;
+    let summary = format!(
+        "{} exact, {} resolved, {} approximate, {} symbolic, {} withheld",
+        counts[0], counts[1], counts[2], counts[3], counts[4]
+    );
     place(ui, rect, |ui| {
         theme::card(ui)
             .corner_radius(255)
@@ -376,6 +383,11 @@ fn fidelity_chip(
                         if count == 0 && matches!(label, "symbolic") {
                             continue;
                         }
+                        let text = if compact && color.is_some() {
+                            count.to_string()
+                        } else {
+                            format!("{count} {label}")
+                        };
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 5.0;
                             if let Some(color) = color {
@@ -386,7 +398,7 @@ fn fidelity_chip(
                                 ui.painter().circle_filled(dot.center(), 3.5, color);
                             }
                             ui.label(
-                                egui::RichText::new(format!("{count} {label}"))
+                                egui::RichText::new(text)
                                     .size(theme::SMALL)
                                     .color(tokens.muted),
                             );
@@ -394,10 +406,10 @@ fn fidelity_chip(
                     }
                 })
                 .response
-                .on_hover_text(
-                    "Backend fidelity, a mirror of the EtabExtension classification. \
-                     Withheld entities are not drawn.",
-                );
+                .on_hover_text(format!(
+                    "Backend fidelity, a mirror of the EtabExtension classification: \
+                     {summary}. Withheld entities are not drawn."
+                ));
             });
     });
 }
@@ -526,10 +538,13 @@ fn version_node(
             );
         }
         ui.vertical(|ui| {
-            ui.label(
-                egui::RichText::new(title)
-                    .family(theme::semibold())
-                    .color(tokens.text),
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(title)
+                        .family(theme::semibold())
+                        .color(tokens.text),
+                )
+                .extend(),
             );
             if summaries {
                 ui.add(
