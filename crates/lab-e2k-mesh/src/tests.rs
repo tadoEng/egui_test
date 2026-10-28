@@ -1355,3 +1355,48 @@ mod shell_bodies {
         );
     }
 }
+/// The REAL-03 owner procedure opens committed public fixtures; fail the gate
+/// if any manifest entry is missing or changed, or the report names a fixture
+/// that is not in the tree (the repository ignores *.e2k by default).
+#[test]
+fn published_real03_fixtures_exist_match_their_manifest_and_build() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/native");
+    let dir = root.join("evidence/real03-shells/fixtures");
+    let manifest = std::fs::read_to_string(root.join("evidence/real03-shells/fixtures.sha256"))
+        .expect("fixture manifest");
+    let mut names = Vec::new();
+    for line in manifest.lines().filter(|l| !l.trim().is_empty()) {
+        let (hash, name) = line.split_once("  ").expect("sha256sum line");
+        let bytes =
+            std::fs::read(dir.join(name)).unwrap_or_else(|_| panic!("{name} is not committed"));
+        let actual = Sha256::digest(&bytes)
+            .iter()
+            .fold(String::new(), |mut hex, b| {
+                use std::fmt::Write as _;
+                let _ok = write!(hex, "{b:02x}");
+                hex
+            });
+        assert_eq!(actual, hash, "{name} bytes differ from the manifest");
+        build(&bytes, Config::default()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        names.push(name.to_owned());
+    }
+    assert_eq!(names.len(), 22, "manifest entries");
+    let report =
+        std::fs::read_to_string(root.join("real03-shell-verification.md")).expect("report");
+    for referenced in report
+        .split(|c: char| {
+            !(c.is_ascii_alphanumeric() || c == '.' || c == '/' || c == '-' || c == '_')
+        })
+        .filter(|w| {
+            std::path::Path::new(w)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("e2k"))
+        })
+    {
+        let name = referenced.rsplit('/').next().expect("file name");
+        assert!(
+            names.iter().any(|n| n == name),
+            "report references {referenced}, not in the manifest"
+        );
+    }
+}
