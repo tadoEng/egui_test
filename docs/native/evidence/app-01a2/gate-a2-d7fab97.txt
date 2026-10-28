@@ -1,0 +1,71 @@
+SHA=d7fab97348149b3b5a4ed11b30e481011dae6436 dirty=0 rustc=rustc 1.99.1 (58cf8f9c3 2026-10-13) jobs=2 target=/home/user/egui_01b/.codex-target sccache=absent nextest=absent os=Linux 6.18.44-fc-v180
+start=2026-10-28T14:11:13Z
+### STEP check: cargo check --workspace --all-targets --locked --offline --target-dir .codex-target -j 2
+### RC check=0
+### STEP fmt: cargo fmt --all -- --check
+### RC fmt=0
+### STEP clippy: cargo clippy --workspace --all-targets --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+error: use of `eprintln!`
+   --> examples/webview_stage_a.rs:393:5
+error: could not compile `eframe_template` (example "webview_stage_a") due to 1 previous error
+### RC clippy=101
+### STEP clippy-talos: cargo clippy -p talos-native -p lab-viewport -p lab-e2k-mesh -p lab-fixture --all-targets --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings -W clippy::all
+### RC clippy-talos=0
+### STEP clippy-root: cargo clippy -p eframe_template --lib --bins --tests --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-root=0
+### STEP clippy-ex-native_workbench: cargo clippy -p eframe_template --example native_workbench --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-native_workbench=0
+### STEP clippy-ex-native_dashboard: cargo clippy -p eframe_template --example native_dashboard --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-native_dashboard=0
+### STEP clippy-ex-native_results: cargo clippy -p eframe_template --example native_results --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-native_results=0
+### STEP clippy-ex-native_renderer: cargo clippy -p eframe_template --example native_renderer --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-native_renderer=0
+### STEP clippy-ex-native_e2k: cargo clippy -p eframe_template --example native_e2k --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-native_e2k=0
+### STEP clippy-ex-stress: cargo clippy -p eframe_template --example stress --all-features --locked --offline --target-dir .codex-target -j 2 -- -D warnings
+### RC clippy-ex-stress=0
+### STEP test: cargo test --workspace --all-targets --all-features --locked --offline --target-dir .codex-target -j 2
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 20 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 1.54s
+test result: ok. 15 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.45s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.82s
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.64s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### RC test=0
+### STEP doctest: cargo test --workspace --doc --all-features --locked --offline --target-dir .codex-target -j 2
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### RC doctest=0
+### STEP gpu: env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test -p talos-native -p lab-viewport --all-features --locked --offline --target-dir .codex-target -j 2 -- --include-ignored
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+### RC gpu=0
+### STEP gpu-examples: env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --example native_e2k --example native_renderer --all-features --locked --offline --target-dir .codex-target -j 2 -- --include-ignored
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+### RC gpu-examples=0
+### STEP wasm: cargo check --workspace --all-features --lib --target wasm32-unknown-unknown --locked --offline --target-dir .codex-target -j 2
+### RC wasm=0
+end=2026-10-28T14:11:44Z
+dirty_after=0
+
+# totals (from the step logs)
+test: passed=159 failed=0 ignored=7
+gpu: passed=39 failed=0 ignored=0
+gpu-examples: passed=41 failed=0 ignored=0
+# clippy=101 is only G-ENV-1: examples/webview_stage_a.rs:393 eprintln!

@@ -165,7 +165,14 @@ chips.
   real pick, the same pick docked, Results, then the window resized to
   900 × 700 (docked, then floating).
 - `*.png`: those 18 frames, all public synthetic tower data.
-- `gate.sh.txt` and `gate-a2-<sha>.txt`: the clean-worktree gate.
+- `gate.sh.txt` and `gate-a2-d7fab97.txt`: the clean-worktree gate at
+  `d7fab97`. Every step is green except the known G-ENV-1 whole-workspace Clippy
+  exception (`webview_stage_a.rs:393` `eprintln!`). Results:
+  - workspace tests: 159 passed, 0 failed, 7 ignored;
+  - Mesa GPU, `talos-native` + `lab-viewport`: 39 passed;
+  - GPU examples: 41 passed.
+
+  The commit after it adds only this receipt.
 
 Not verified here: Windows rendering and fonts at real DPI, Narrator, and
 keyboard focus under a window manager (Xvfb has none, so the captures click
