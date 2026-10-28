@@ -9,7 +9,7 @@ non-derived conclusions are stated.
 | Item | Value |
 |---|---|
 | Base | `main` @ `4f89a4588907e77d7e895aea087be046cd9e8acb` (merged #47) |
-| Code head | `16ba799dc0e12a2d786bbb2766a1537bf864c241` (review repair; first review at `7521511`) |
+| Code head | `e6008ebf09078db2f2e087c788ae0ecc2ca0578b` (review repairs; first review at `7521511`) |
 | Backend pin | EtabExtension `9eb1c8792a1d41f3f81c60428afe89f1655782ba` (unchanged) |
 | `Cargo.lock` / manifests | unchanged |
 | Toolchain / host | Rust 1.99.1; Linux 6.18, 4 vCPU, no GPU; `--locked --offline -j 2`, clean detached worktree |
@@ -92,6 +92,13 @@ pass; tests **120 passed, 0 failed, 6 ignored** (GPU-only, not run);
 whole-workspace strict Clippy exit 101 from the recorded `webview_stage_a`
 exception only, every other target clean. The 22 fixtures are now committed
 (a narrow `.gitignore` exception; they were silently ignored at `a78a30e`).
+
+Final code head `e6008eb` adds a test that fails the gate if any fixture in
+`fixtures.sha256` is missing, changed or unbuildable, or if this report names
+an `.e2k` that is not in the manifest. Clean-worktree gate @ `e6008eb`
+(`evidence/real03-shells/gate-e6008eb.txt`): tests **121 passed, 0 failed,
+6 ignored**; check, fmt, doc tests and WASM pass; whole-workspace Clippy exit
+101 from the recorded exception only, every other target clean.
 
 The original receipt for the first review follows.
 
