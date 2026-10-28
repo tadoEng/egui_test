@@ -1183,3 +1183,37 @@ fn the_tower_still_says_it_has_no_cached_results() {
     );
     assert!(!present(&harness, "Cached · freshness not verified"));
 }
+
+#[test]
+fn results_fit_a_900_point_window() {
+    let mut harness = Harness::builder()
+        .with_max_steps(8)
+        .with_size(egui::vec2(900.0, 700.0))
+        .with_context_setup(crate::theme::install)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                Project::public_results_fixture(),
+                Box::new(NativeModelView::new(None)),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+        });
+    settle(&mut harness);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    for node in harness.root().children_recursive() {
+        if node.accesskit_node().bounding_box().is_none() {
+            continue;
+        }
+        let rect = node.rect();
+        let name = node
+            .accesskit_node()
+            .label()
+            .or_else(|| node.accesskit_node().value())
+            .unwrap_or_default();
+        assert!(
+            rect.right() <= 900.5,
+            "{:?} {name:?} at {rect:?} runs off a 900 pt window",
+            node.accesskit_node().role()
+        );
+    }
+}

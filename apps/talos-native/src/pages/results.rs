@@ -30,7 +30,9 @@ pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
                 .inner_margin(egui::Margin::symmetric(22, 18)),
         )
         .show(ui, |ui| {
-            ui.horizontal_wrapped(|ui| selectors(ui, state, document, query, &mut actions));
+            context(ui, state, document);
+            ui.add_space(8.0);
+            selectors(ui, state, document, query, &mut actions);
             if let Some(notice) = &state.results.notice {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
@@ -128,6 +130,10 @@ fn choice(
     });
 }
 
+/// Below this page width the selectors take two fixed rows; a wrapping row
+/// cannot move a whole pill, so the split is explicit.
+const TWO_ROWS: f32 = 1150.0;
+
 fn selectors(
     ui: &mut egui::Ui,
     state: &State,
@@ -135,7 +141,30 @@ fn selectors(
     query: &ResultsQuery,
     actions: &mut Vec<Action>,
 ) {
-    let tokens = Tokens::of(ui);
+    let two_rows = ui.available_width() < TWO_ROWS;
+    let (choices, two_rows) = ui
+        .horizontal(|ui| {
+            let (choices, two_rows) = primary(ui, state, query, two_rows, actions);
+            if !two_rows {
+                secondary(ui, document, query, &choices, actions);
+            }
+            (choices, two_rows)
+        })
+        .inner;
+    if two_rows {
+        ui.add_space(6.0);
+        ui.horizontal(|ui| secondary(ui, document, query, &choices, actions));
+    }
+}
+
+/// Metric, direction and (for envelopes) group; returns the stored choices.
+fn primary(
+    ui: &mut egui::Ui,
+    state: &State,
+    query: &ResultsQuery,
+    two_rows: bool,
+    actions: &mut Vec<Action>,
+) -> (lab_results::response::Choices, bool) {
     let cached = state.cached();
     // Only the responses these cached results hold; all of them, disabled,
     // when there are none, so the request is visible but nothing is implied.
@@ -190,6 +219,18 @@ fn selectors(
             actions,
         );
     }
+    (choices, two_rows)
+}
+
+/// Case and story range: on the first row when the page is wide, on a row
+/// of their own below `TWO_ROWS` points.
+fn secondary(
+    ui: &mut egui::Ui,
+    document: &Document,
+    query: &ResultsQuery,
+    choices: &lab_results::response::Choices,
+    actions: &mut Vec<Action>,
+) {
     choice(
         ui,
         "Case",
@@ -201,32 +242,45 @@ fn selectors(
     group(ui, "Stories", |ui| {
         stories(ui, document, query.stories.as_ref(), actions);
     });
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        let authority = state.session.project.authority;
-        theme::pill(
-            ui,
-            authority.label(),
-            tokens.synthetic,
-            tokens.synthetic_weak,
-            authority.detail(),
+}
+
+/// The page's own context line: what is shown, for which version, and how
+/// far to trust it. On its own row so the selectors never collide with it.
+fn context(ui: &mut egui::Ui, state: &State, document: &Document) {
+    let tokens = Tokens::of(ui);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new("Story response")
+                .family(theme::semibold())
+                .size(theme::TITLE)
+                .color(tokens.text),
         );
-        if cached.is_some() {
-            theme::pill(
-                ui,
-                "Cached · freshness not verified",
-                tokens.warning_text,
-                tokens.warning_fill,
-                "Stored result values as written in results/calc_output.json. They are not \
-                 recalculated, and nothing proves they match the current model.",
-            );
-        }
         ui.label(
             egui::RichText::new(document.version().to_string())
                 .family(theme::semibold())
-                .color(tokens.text),
+                .color(tokens.muted),
         )
         .on_hover_text("Results follow the version selected in the header.");
-        ui.label(egui::RichText::new("for").color(tokens.muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let authority = state.session.project.authority;
+            theme::pill(
+                ui,
+                authority.label(),
+                tokens.synthetic,
+                tokens.synthetic_weak,
+                authority.detail(),
+            );
+            if state.cached().is_some() {
+                theme::pill(
+                    ui,
+                    "Cached · freshness not verified",
+                    tokens.warning_text,
+                    tokens.warning_fill,
+                    "Stored result values as written in results/calc_output.json. They are not \
+                     recalculated, and nothing proves they match the current model.",
+                );
+            }
+        });
     });
 }
 
