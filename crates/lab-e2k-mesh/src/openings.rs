@@ -181,17 +181,28 @@ const RELATIVE_EPSILON: f64 = 1e-9;
 /// Indices of shells the pinned `ext-api` rule names as hosting an opening the
 /// projection did not subtract. Source units, exactly as the backend runs it.
 pub(super) fn authoritative_hosts(shells: &[ShellPolygon]) -> std::collections::BTreeSet<usize> {
-    let rings: Vec<_> = shells.iter().map(|s| PlanarRing::of(&s.points)).collect();
+    // Grouped by story first and empty without openings, as in the backend, so
+    // a model without voids costs one pass and no ring is built.
+    let mut openings: std::collections::BTreeMap<&str, Vec<PlanarRing>> = Default::default();
+    for shell in shells.iter().filter(|s| s.opening == Some(true)) {
+        if let Some(ring) = PlanarRing::of(&shell.points) {
+            openings.entry(shell.story.as_str()).or_default().push(ring);
+        }
+    }
     let mut hosts = std::collections::BTreeSet::new();
-    for (index, (candidate, host)) in shells.iter().zip(&rings).enumerate() {
-        let Some(host) = host.as_ref().filter(|_| candidate.opening != Some(true)) else {
+    if openings.is_empty() {
+        return hosts;
+    }
+    for (index, candidate) in shells.iter().enumerate() {
+        if candidate.opening == Some(true) {
+            continue;
+        }
+        let Some(story_openings) = openings.get(candidate.story.as_str()) else {
             continue;
         };
-        if shells.iter().zip(&rings).any(|(opening, ring)| {
-            opening.opening == Some(true)
-                && opening.story == candidate.story
-                && ring.as_ref().is_some_and(|ring| host.contains(ring))
-        }) {
+        if PlanarRing::of(&candidate.points)
+            .is_some_and(|host| story_openings.iter().any(|ring| host.contains(ring)))
+        {
             hosts.insert(index);
         }
     }
