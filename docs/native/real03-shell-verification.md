@@ -9,7 +9,7 @@ non-derived conclusions are stated.
 | Item | Value |
 |---|---|
 | Base | `main` @ `4f89a4588907e77d7e895aea087be046cd9e8acb` (merged #47) |
-| Code head | `75215113f4eece0b555ca5b7355ca60adab13e83` |
+| Code head | `16ba799dc0e12a2d786bbb2766a1537bf864c241` (review repair; first review at `7521511`) |
 | Backend pin | EtabExtension `9eb1c8792a1d41f3f81c60428afe89f1655782ba` (unchanged) |
 | `Cargo.lock` / manifests | unchanged |
 | Toolchain / host | Rust 1.99.1; Linux 6.18, 4 vCPU, no GPU; `--locked --offline -j 2`, clean detached worktree |
@@ -85,6 +85,15 @@ reported separately.
 | Inspector | thickness shown as "(not drawn)" | thickness source, placement, drawn/not drawn, canonical reasons |
 
 ## Exact-head test receipts (agent-reported)
+
+**After the review repair**, clean-worktree gate @ `16ba799`
+(`evidence/real03-shells/gate-16ba799.txt`): check, fmt, doc tests and WASM
+pass; tests **120 passed, 0 failed, 6 ignored** (GPU-only, not run);
+whole-workspace strict Clippy exit 101 from the recorded `webview_stage_a`
+exception only, every other target clean. The 22 fixtures are now committed
+(a narrow `.gitignore` exception; they were silently ignored at `a78a30e`).
+
+The original receipt for the first review follows.
 
 Clean-worktree gate @ `7521511` (`evidence/real03-shells/gate-7521511.txt`):
 
