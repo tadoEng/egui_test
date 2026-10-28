@@ -17,8 +17,10 @@ for ex in native_workbench native_dashboard native_results native_renderer nativ
 done
 step test cargo test --workspace --all-targets --all-features $T
 step doctest cargo test --workspace --doc --all-features $T
-step gpu env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test -p talos-native -p lab-viewport --all-features $T -- --include-ignored
-step gpu-examples env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --example native_e2k --example native_renderer --all-features $T -- --include-ignored
+# One workspace-wide GPU run (superset of the former talos/lab-viewport and
+# example GPU steps): -p scoping now builds a separate ext-calc/Polars copy per
+# step, which no longer fits this container's disk.
+step gpu env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --workspace --all-targets --all-features $T -- --include-ignored
 step wasm cargo check --workspace --all-features --lib --target wasm32-unknown-unknown $T
 echo "end=$(date -u +%FT%TZ)"
 echo "dirty_after=$(git status --porcelain | wc -l)"
