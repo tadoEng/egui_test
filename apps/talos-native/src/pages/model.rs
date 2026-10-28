@@ -577,9 +577,13 @@ fn version_node(
             if summaries {
                 ui.add(
                     egui::Label::new(
-                        egui::RichText::new(if loading { "loading…" } else { entry.summary })
-                            .size(theme::SMALL)
-                            .color(tokens.muted),
+                        egui::RichText::new(if loading {
+                            "loading…"
+                        } else {
+                            entry.summary.as_str()
+                        })
+                        .size(theme::SMALL)
+                        .color(tokens.muted),
                     )
                     .truncate(),
                 );

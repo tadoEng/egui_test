@@ -13,6 +13,7 @@ egui = "0.37.0"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 lab-e2k-mesh = { path = "../../crates/lab-e2k-mesh" }
 lab-viewport = { path = "../../crates/lab-viewport" }
+lab-results = { path = "../../crates/lab-results" }
 log = "0.4.34"
 web-time = "1.1.0"
 

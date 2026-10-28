@@ -110,7 +110,7 @@ opt-level = 2
 workspace = true
 
 [workspace]
-members = ["crates/lab-fixture", "crates/lab-e2k-mesh", "crates/lab-viewport", "apps/talos-native"]
+members = ["crates/lab-fixture", "crates/lab-e2k-mesh", "crates/lab-viewport", "crates/lab-results", "apps/talos-native"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"

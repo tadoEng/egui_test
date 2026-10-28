@@ -1,9 +1,9 @@
 //! Explicit read-only cached-result artifact viewer, without project operations.
 #[cfg(target_os = "windows")]
-#[path = "native_results/data.rs"]
+#[path = "../crates/lab-results/src/data.rs"]
 mod data;
 #[cfg(target_os = "windows")]
-#[path = "native_results/fixture.rs"]
+#[path = "../crates/lab-results/src/fixture.rs"]
 mod fixture;
 #[cfg(target_os = "windows")]
 #[path = "native_results/host.rs"]

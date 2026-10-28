@@ -240,15 +240,15 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
 
 #[test]
 fn identical_bytes_as_another_version_still_expire_the_selection() {
-    let source = Project::public_demo().versions[0].source;
+    let source = Project::public_demo().versions[0].source.clone();
     let project = Project {
         name: "Same bytes".to_owned(),
         authority: Authority::PublicSyntheticDemo,
         versions: ["a", "b"]
             .map(|name| VersionEntry {
                 id: v(name),
-                summary: "same bytes",
-                source,
+                summary: "same bytes".to_owned(),
+                source: source.clone(),
             })
             .to_vec(),
     };
@@ -345,13 +345,15 @@ fn the_results_query_is_validated_against_the_version_and_never_invents_a_case()
     assert_eq!(state.results.query.stories, range("L12", "L12"));
     assert_eq!(
         crate::pages::results::describe(&state.results.query),
-        "Story drift · X · no case · L12–L12 · main/v2"
+        "Story drift · wind · X · no case · L12–L12 · main/v2"
     );
 }
 
 #[test]
 fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
-    let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
+    let Source::Embedded(bytes) = Project::public_demo().versions[0].source else {
+        panic!("the tower is embedded")
+    };
     let renamed = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\"L12\"", "\"Level 13\"");
@@ -405,7 +407,9 @@ fn story_highlight_is_validated_and_survives_only_where_the_story_exists() {
 
     // A version without that story drops the highlight instead of keeping a
     // name that no longer resolves.
-    let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
+    let Source::Embedded(bytes) = Project::public_demo().versions[0].source else {
+        panic!("the tower is embedded")
+    };
     let renamed = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\"L12\"", "\"Level 13\"");
