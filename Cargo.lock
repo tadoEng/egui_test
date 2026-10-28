@@ -7117,6 +7117,8 @@ dependencies = [
  "lab-results",
  "lab-viewport",
  "log",
+ "serde_json",
+ "tempfile",
  "web-time",
 ]
 
