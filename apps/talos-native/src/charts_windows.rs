@@ -78,6 +78,11 @@ impl Host {
             smoke: None,
         })
     }
+    pub(super) fn fail_smoke(&mut self, ctx: &egui::Context, error: &str) {
+        if let Some(mut smoke) = self.smoke.take() {
+            smoke.finish(ctx, false, error);
+        }
+    }
     pub(super) fn messages(&self) -> Vec<String> {
         self.child.pending_messages()
     }
@@ -109,6 +114,15 @@ impl Host {
         scale: f32,
         visible: bool,
     ) -> Result<(), String> {
+        if self
+            .child
+            .navigation
+            .lock()
+            .map_err(|_| "WebView2 navigation state unavailable")?
+            .contains(&"denied navigation")
+        {
+            return Err("WebView2 refused unexpected navigation".into());
+        }
         if let Some(error) = &self.browser_error {
             return Err(error.clone());
         }

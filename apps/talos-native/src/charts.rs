@@ -278,6 +278,7 @@ impl Charts {
             if let Err(error) = host.update(packet.as_ref(), rect, ctx.pixels_per_point(), show) {
                 // Dropping the failed child also removes its HWND: never leave an
                 // unhideable child over Model or replace it with another renderer.
+                host.fail_smoke(ctx, &error);
                 self.error = Some(error);
                 self.host = None;
                 self.bridge.suspend();
