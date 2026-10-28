@@ -588,3 +588,54 @@ fn a_compact_window_shows_one_panel_and_keeps_the_panel_intent() {
     let _load = switch(&mut state, "v1");
     assert_eq!(state.model.context, crate::state::Context::Explorer);
 }
+
+#[test]
+fn show_in_explorer_moves_the_filter_to_the_selection_and_keeps_it() {
+    let mut state = ready_demo();
+    let scope = state.session.scope().expect("ready");
+    let entities = state
+        .session
+        .ready()
+        .expect("ready")
+        .mesh()
+        .entities()
+        .to_vec();
+    let on = |story: &str| {
+        entities
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.story == story)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+    };
+    let (l1, l2) = (on("L1"), on("L2"));
+    state
+        .apply(Action::SelectStory(Some("L5".to_owned())))
+        .expect("story");
+    let pick = |entity, toggle| Action::Pick {
+        scope,
+        entity: Some(entity),
+        toggle,
+        coincident: 0,
+    };
+    state
+        .apply(pick(l1[0], false))
+        .expect("a pick on another story");
+    assert_eq!(
+        state.model.story.as_deref(),
+        Some("L5"),
+        "picking keeps the filter"
+    );
+    state.apply(Action::RevealSelection).expect("reveal");
+    assert_eq!(state.model.story.as_deref(), Some("L1"));
+    assert_eq!(
+        state.model.selected(scope),
+        [l1[0]],
+        "the selection is kept"
+    );
+    // A selection across stories clears the filter instead.
+    state.apply(pick(l2[0], true)).expect("ctrl-add");
+    state.apply(Action::RevealSelection).expect("reveal");
+    assert_eq!(state.model.story, None);
+    assert_eq!(state.model.selected(scope).len(), 2);
+}

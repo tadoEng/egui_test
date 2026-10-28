@@ -276,6 +276,9 @@ pub enum Action {
     ToggleInspector,
     /// The page's width class changed (below or above the compact width).
     SetCompact(bool),
+    /// Move the Explorer's story filter to the selection's story (or clear it
+    /// when the selection spans stories), keeping the selection.
+    RevealSelection,
     /// From a view or the explorer, made in `scope`; refused in any other.
     Pick {
         scope: Scope,
@@ -388,6 +391,7 @@ impl State {
             Action::ToggleExplorer => self.model.toggle_explorer(),
             Action::ToggleInspector => self.model.toggle_inspector(),
             Action::SetCompact(compact) => self.model.compact = compact,
+            Action::RevealSelection => self.reveal_selection()?,
             Action::Pick {
                 scope,
                 entity,
@@ -496,6 +500,27 @@ impl State {
         } else {
             Context::Inspector
         };
+        Ok(())
+    }
+
+    /// The Explorer filter follows the selection instead of the selection
+    /// being dropped: the one case where the story changes and a pick stays,
+    /// because afterwards the two agree (owner, #53 Windows note).
+    fn reveal_selection(&mut self) -> Result<(), Refusal> {
+        let document = self.session.ready().ok_or(Refusal::NoDocument)?;
+        let scope = self.session.scope().ok_or(Refusal::NoDocument)?;
+        let entities = document.mesh().entities();
+        let mut stories = self
+            .model
+            .selection
+            .entities(scope)
+            .iter()
+            .filter_map(|&index| entities.get(index).map(|e| e.story.as_str()));
+        let Some(first) = stories.next() else {
+            return Ok(());
+        };
+        let single = stories.all(|story| story == first);
+        self.model.story = single.then(|| first.to_owned());
         Ok(())
     }
 

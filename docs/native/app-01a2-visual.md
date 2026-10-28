@@ -114,6 +114,11 @@ own descriptions.
 - Type rows coloured with the colour each class is actually drawn in; a type
   row filters, never selects.
 - The virtualised entity list.
+- The story filter and the selection are kept distinct (owner's #53 Windows
+  note). When the selection lies outside the filtered story, the Explorer says
+  so, for example "Selected C0_0 is on L1, outside the L5 filter.", and offers
+  **Show in Explorer**. That moves the filter to the selection's story, or
+  clears it if the selection spans stories, and keeps the selection.
 - A source-units footer.
 
 ### Inspector
@@ -151,7 +156,7 @@ values are plotted or invented.
 
 ## Tests
 
-There are 39 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
+There are 41 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
 `NativeModelView` through egui's AccessKit tree. Seven are new or rewritten
 for A.2:
 
@@ -166,6 +171,8 @@ for A.2:
   at 900;
 - the version strip and the header picker act as one controller;
 - the explorer text filter and type filter;
+- the selection outside the story filter: the notice, and **Show in Explorer**
+  keeping the selection (state and UI);
 - at 900 pt: the More overflow, no header overlaps, shortcuts still route, and
   the canvas keeps at least 380 pt;
 - shrinking from 1280 to 900 pt narrows the docked panes. This test fails

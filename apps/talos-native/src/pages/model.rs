@@ -711,6 +711,9 @@ fn explorer(
             None => format!("All entities ({})", rows.len()),
         },
     );
+    if let Some(story) = story {
+        outside_filter(ui, entities, selected, story, actions);
+    }
     let footer = 40.0;
     let row_height = ui.spacing().interact_size.y;
     egui::ScrollArea::vertical()
@@ -749,6 +752,61 @@ fn explorer(
 }
 
 const ROW: f32 = 26.0;
+
+/// The story filter and the selection are different things: when the
+/// selection lies outside the filtered story, say so and offer to move the
+/// filter to it (the selection is kept).
+fn outside_filter(
+    ui: &mut egui::Ui,
+    entities: &[EntityMesh],
+    selected: &[usize],
+    story: &str,
+    actions: &mut Vec<Action>,
+) {
+    let outside: Vec<&EntityMesh> = selected
+        .iter()
+        .filter_map(|&index| entities.get(index))
+        .filter(|entity| entity.story != story)
+        .collect();
+    let text = match outside.as_slice() {
+        [] => return,
+        [entity] => format!(
+            "Selected {} is on {}, outside the {story} filter.",
+            short_name(&entity.key),
+            entity.story
+        ),
+        many => format!(
+            "{} selected entities are outside the {story} filter.",
+            many.len()
+        ),
+    };
+    let tokens = Tokens::of(ui);
+    egui::Frame::new()
+        .fill(tokens.accent_weak)
+        .corner_radius(tokens.radius)
+        .inner_margin(egui::Margin::symmetric(8, 6))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                icons::show(ui, Icon::Info, 14.0, tokens.accent);
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(text)
+                            .size(theme::SMALL)
+                            .color(tokens.text),
+                    )
+                    .wrap(),
+                );
+            });
+            if ui
+                .button(egui::RichText::new("Show in Explorer").size(theme::SMALL))
+                .on_hover_text("Filter the Explorer to the selection's story; keeps the selection")
+                .clicked()
+            {
+                actions.push(Action::RevealSelection);
+            }
+        });
+}
 
 /// One row per source class present, coloured as drawn; a row is a class
 /// filter for the entity list, never a selection.

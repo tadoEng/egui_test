@@ -1000,3 +1000,43 @@ fn at_900_points_one_contextual_panel_leaves_the_model_unobscured() {
         "the Explorer is not drawn"
     );
 }
+
+#[test]
+fn the_explorer_says_when_the_selection_is_outside_its_story_filter() {
+    let mut harness = harness(LoadMode::Inline);
+    row(&harness, "L5  ·  ").scroll_to_me();
+    settle(&mut harness);
+    row(&harness, "L5  ·  ").click();
+    settle(&mut harness);
+    // Exactly L1 (a `contains` match would also find L10-L12).
+    let index = {
+        let document = harness.state().state().session.ready().expect("ready");
+        document
+            .mesh()
+            .entities()
+            .iter()
+            .position(|e| e.key.to_string().ends_with("|C0_0|L1"))
+            .expect("C0_0 on L1")
+    };
+    let scope = harness.state().state().session.scope().expect("ready");
+    harness.state_mut().dispatch(Action::Pick {
+        scope,
+        entity: Some(index),
+        toggle: false,
+        coincident: 0,
+    });
+    settle(&mut harness);
+    let picked = selected(&harness);
+    assert_eq!(picked, [index]);
+    assert_eq!(harness.state().state().model.story.as_deref(), Some("L5"));
+    assert!(present(
+        &harness,
+        "Selected C0_0 is on L1, outside the L5 filter."
+    ));
+    harness.get_by_label("Show in Explorer").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state().model.story.as_deref(), Some("L1"));
+    assert_eq!(selected(&harness), picked, "the selection is kept");
+    assert!(!present(&harness, "outside the"));
+    assert!(present(&harness, "ENTITIES ON L1"));
+}
