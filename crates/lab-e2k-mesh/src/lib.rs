@@ -191,10 +191,33 @@ pub enum ShellPlacement {
     /// A thickness with an absent or unrecognised insertion: the ring's place
     /// within the body is unknown; drawn flat, never assumed MIDDLE.
     FlatInsertionUnproven,
-    /// No drawable thickness: the ring is the whole modeled shell surface.
-    FlatNoBody,
+    /// The definition declares no positive body (`Undeclared`): the flat ring
+    /// is the whole modeled shell surface.
+    FlatNoDeclaredBody,
+    /// The body is unknown or not rendered: no section, a missing definition,
+    /// an ambiguous or unmodeled thickness, or a thickness outside the drawable
+    /// range. The flat ring is not the modeled body.
+    FlatBodyUnresolved,
     /// Not drawn (`EntityMesh::limitation` says why).
     Withheld,
+}
+impl ShellPlacement {
+    /// What the native viewer actually displays, independent of the canonical
+    /// backend fidelity tier, which describes the backend's own drawing.
+    pub fn native_display(self) -> &'static str {
+        match self {
+            Self::CentredMiddle => "body drawn ±t/2 about the ring (MIDDLE)",
+            Self::FlatAtDeclaredFace => {
+                "flat ring only: a TOP/BOTTOM face; body thickness omitted (side unproven)"
+            }
+            Self::FlatInsertionUnproven => {
+                "flat ring only: body thickness omitted (insertion absent or unrecognised)"
+            }
+            Self::FlatNoDeclaredBody => "flat ring: the source declares no body",
+            Self::FlatBodyUnresolved => "flat ring only: body unresolved or not rendered",
+            Self::Withheld => "not drawn",
+        }
+    }
 }
 /// Source shell attributes for an inspector, in metres where dimensional.
 #[derive(Clone, Debug, PartialEq)]
@@ -653,7 +676,10 @@ impl Builder {
             .map(|t| t * factor)
             .filter(|_| thickness_source == ThicknessSource::Resolved);
         let face = match (thickness_m, shell.insertion_point.as_ref()) {
-            (None, _) => ShellPlacement::FlatNoBody,
+            (None, _) if thickness_source == ThicknessSource::Undeclared => {
+                ShellPlacement::FlatNoDeclaredBody
+            }
+            (None, _) => ShellPlacement::FlatBodyUnresolved,
             (Some(_), Some(ShellInsertionPoint::Middle)) => ShellPlacement::CentredMiddle,
             (Some(_), Some(ShellInsertionPoint::Top | ShellInsertionPoint::Bottom)) => {
                 ShellPlacement::FlatAtDeclaredFace

@@ -1155,21 +1155,64 @@ mod shell_bodies {
             let m = mesh(&source(&props, assign, WALL_MIDDLE));
             let src = shell(&m, "S");
             assert_eq!(src.thickness_source, expected, "{props:?} {assign}");
+            // Only a source that declares no body may say the flat ring is it.
+            let placement = if expected == ThicknessSource::Undeclared {
+                ShellPlacement::FlatNoDeclaredBody
+            } else {
+                ShellPlacement::FlatBodyUnresolved
+            };
             assert_eq!(
                 (entity(&m, "S").mode, src.placement, src.thickness_drawn),
-                (
-                    DisplayMode::ZeroThicknessSurface,
-                    ShellPlacement::FlatNoBody,
-                    false
-                ),
+                (DisplayMode::ZeroThicknessSurface, placement, false),
                 "{props:?}"
             );
+            let native = src.placement.native_display();
+            assert!(!native.contains("drawn ±t/2"), "{native}");
+            if placement == ShellPlacement::FlatBodyUnresolved {
+                assert!(native.contains("unresolved or not rendered"), "{native}");
+            }
             let [lo, hi] = world_bounds(&m, entity(&m, "S"));
             assert!(
                 (hi[2] - lo[2]).abs() < TOL,
                 "no invented thickness: {props:?}"
             );
         }
+    }
+    #[test]
+    fn an_omitted_body_never_reads_as_reproduced_even_when_the_backend_tier_is_exact() {
+        let m = mesh(&source(
+            &["SHELLPROP \"SL\" PROPTYPE \"Slab\" SLABTHICKNESS 100", WALL],
+            MIDDLE,
+            WALL_MIDDLE,
+        ));
+        let src = shell(&m, "S");
+        // Canonical backend classification stays byte-identical (oracle parity)...
+        assert_eq!(
+            (src.fidelity, src.reasons.as_slice()),
+            (GeometryFidelity::Exact, [].as_slice())
+        );
+        // ...while the native display status says the body was not rendered.
+        assert_eq!(
+            (src.thickness_source, src.placement, src.thickness_drawn),
+            (
+                ThicknessSource::OutOfRange,
+                ShellPlacement::FlatBodyUnresolved,
+                false
+            )
+        );
+        // Every placement other than CentredMiddle discloses an omitted body.
+        for placement in [
+            ShellPlacement::FlatAtDeclaredFace,
+            ShellPlacement::FlatInsertionUnproven,
+            ShellPlacement::FlatBodyUnresolved,
+        ] {
+            assert!(placement.native_display().contains("only"), "{placement:?}");
+        }
+        assert!(
+            ShellPlacement::CentredMiddle
+                .native_display()
+                .contains("body drawn")
+        );
     }
     #[test]
     fn voids_hosts_and_overlaps_are_never_filled_by_an_extruded_body() {

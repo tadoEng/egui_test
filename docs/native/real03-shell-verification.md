@@ -53,11 +53,11 @@ inclined shells including any reversed-axis assignment.
 | Resolved t, MIDDLE | **Closed body ±t/2** | `CentredMiddle` / `Resolved` | Exact `[]` | ±t/2 about ring | none |
 | Resolved t, TOP or BOTTOM | Flat ring (a true face) | `FlatAtDeclaredFace` / `Resolved` | Approximate `[ShellInsertionPointIgnored]` | ±t/2 about ring (wrong place) | native omits the body rather than misplace it |
 | Resolved t, insertion absent or unknown token | Flat ring | `FlatInsertionUnproven` / `Resolved` | Approximate `[ShellInsertionPointIgnored]` | ±t/2 about ring | native omits the body |
-| No section / missing definition | Flat ring | `FlatNoBody` / `NoSection`, `DefinitionMissing` | Exact `[]` | flat | none |
-| Zero / negative / absent fields | Flat ring | `FlatNoBody` / `Undeclared` | Exact `[]` | flat | none |
-| Conflicting slab vs wall fields | Flat ring | `FlatNoBody` / `Ambiguous` | Approximate `[ShellThicknessAmbiguous]` | flat | none |
-| Deck / unmodeled family | Flat ring | `FlatNoBody` / `FamilyUnmodeled` | Approximate `[ShellThicknessFamilyUnmodeled]` | flat | none |
-| Resolved but outside 1e-7..20 m | Flat ring | `FlatNoBody` / `OutOfRange` | backend tier unchanged | ±t/2 | native reports, never clamps |
+| No section / missing definition | Flat ring (body unknown) | `FlatBodyUnresolved` / `NoSection`, `DefinitionMissing` | Exact `[]` | flat | none |
+| Zero / negative / absent fields | Flat ring (the whole modeled surface) | `FlatNoDeclaredBody` / `Undeclared` | Exact `[]` | flat | none |
+| Conflicting slab vs wall fields | Flat ring (body unresolved) | `FlatBodyUnresolved` / `Ambiguous` | Approximate `[ShellThicknessAmbiguous]` | flat | none |
+| Deck / unmodeled family | Flat ring (body unresolved) | `FlatBodyUnresolved` / `FamilyUnmodeled` | Approximate `[ShellThicknessFamilyUnmodeled]` | flat | none |
+| Resolved but outside 1e-7..20 m | Flat ring (body not rendered) | `FlatBodyUnresolved` / `OutOfRange` | Exact `[]` (backend tier unchanged) | ±t/2 | native omits the body; inspector says so |
 | Declared void (`OPENING "Yes"`) | **Withheld** | `Withheld` | Approximate `[ShellOpeningRenderedAsSolid]` | solid | native never fills a void |
 | Backend host of a void | **Withheld** | `Withheld` | Approximate `[ShellOpeningNotSubtracted]` | solid, no hole | native never fills a void |
 | Same-story partial overlap | **Withheld** (`OverlapsUnsubtractedOpening`) | `Withheld` | Exact `[]` | solid | intentional, native stricter |
@@ -65,7 +65,13 @@ inclined shells including any reversed-axis assignment.
 | Invalid ring (self-intersecting, warped, degenerate) | Withheld (`InvalidShellRing`) | `Withheld` | per backend | drawn | native withholds |
 
 The shell `fidelity`/`reasons` fields are a **mirror** of the backend
-classifier, never upgraded by native drawing. `thickness_source` (what the
+classifier, never upgraded by native drawing, and the inspector labels them
+**backend fidelity**: they describe the backend's own drawing. What the native
+viewer actually displays is a separate line, `native display: …`
+(`ShellPlacement::native_display`), which never reads as reproduced when a body
+was omitted. For example, a MIDDLE shell whose thickness is out of the drawable
+range shows `native display: flat ring only: body unresolved or not rendered`
+next to `backend fidelity Exact []`. `thickness_source` (what the
 definition says) and `thickness_drawn` / `placement` (what is drawn) are
 reported separately.
 
@@ -85,8 +91,10 @@ Clean-worktree gate @ `7521511` (`evidence/real03-shells/gate-7521511.txt`):
 - check, fmt, doc tests and WASM: **pass**.
 - Tests: **117 passed, 0 failed, 6 ignored**. The 6 are GPU-only probes; they
   were **not run** here (no adapter).
-- Strict Clippy: clean on every target except the recorded pre-existing
-  `webview_stage_a` Linux-only `eprintln!` exception (G-ENV-1).
+- Strict whole-workspace Clippy **returns 101** because of the recorded
+  pre-existing `webview_stage_a` Linux-only `eprintln!` exception (G-ENV-1).
+  Every other target, linted explicitly, is clean. This is not an
+  unconditional Clippy pass.
 
 New `lab-e2k-mesh` tests (`shell_bodies`), all with hand-computed expectations
 (ft × 0.3048, tolerance 1e-5 m) and negative assertions:
