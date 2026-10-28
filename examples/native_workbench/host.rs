@@ -325,6 +325,7 @@ impl eframe::App for Workbench {
                 ui,
                 self.session.packet.selected_story.as_deref(),
                 self.session.packet.generation,
+                self.session.linked,
             );
         });
         self.sync(bounds, ui.ctx());

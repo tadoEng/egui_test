@@ -37,7 +37,7 @@ impl eframe::App for native::NativeViewport {
             });
             ui.small("Synthetic fidelity only: frames are rectangular boxes and the shell is a zero-thickness face. Section profiles, insertion offsets, openings and local axes are unsupported.");
         });
-        egui::CentralPanel::default().show(ui, |ui| self.show(ui, None, 0));
+        egui::CentralPanel::default().show(ui, |ui| self.show(ui, None, 0, true));
     }
 }
 

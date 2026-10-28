@@ -751,10 +751,50 @@ pub(crate) struct NativeViewport {
 #[derive(Default)]
 struct Picking {
     generation: u64,
+    /// Set while the host's source provenance is not validated (UNLINKED). The
+    /// last-good mesh stays visible, but nothing in it can be picked.
+    blocked: bool,
     selection: lab_e2k_mesh::pick::Selection,
     hovered: Option<lab_e2k_mesh::pick::Hit>,
     clicked: Option<lab_e2k_mesh::pick::Hit>,
     last_pick_cpu_us: Option<u128>,
+}
+
+#[cfg(feature = "real-workbench")]
+impl Picking {
+    /// Fail closed: blocking clears selection, hover and the last click.
+    /// Returns whether element state was cleared.
+    fn set_blocked(&mut self, blocked: bool) -> bool {
+        if self.blocked == blocked {
+            return false;
+        }
+        self.blocked = blocked;
+        if blocked {
+            self.selection = lab_e2k_mesh::pick::Selection::default();
+            self.hovered = None;
+            self.clicked = None;
+        }
+        blocked
+    }
+
+    fn hover(&mut self, hit: Option<lab_e2k_mesh::pick::Hit>) {
+        self.hovered = if self.blocked { None } else { hit };
+    }
+
+    /// Applies a click unless blocked; returns whether it was accepted.
+    fn click(
+        &mut self,
+        scope: lab_e2k_mesh::pick::Scope,
+        hit: Option<lab_e2k_mesh::pick::Hit>,
+        toggle: bool,
+    ) -> bool {
+        if self.blocked {
+            return false;
+        }
+        self.selection.click(scope, hit.map(|h| h.entity), toggle);
+        self.clicked = hit;
+        true
+    }
 }
 
 impl NativeViewport {
@@ -840,16 +880,25 @@ impl NativeViewport {
 
     /// `load_generation` is the host's load identity; a change expires the
     /// element selection even when the new load has byte-identical geometry.
+    /// `selection_allowed` is false while source provenance is not validated
+    /// (UNLINKED): element picking is refused and its state cleared until the
+    /// host allows it again, which a workbench does only on an explicit reopen.
     pub(crate) fn show(
         &mut self,
         ui: &mut egui::Ui,
         selected_story: Option<&str>,
         load_generation: u64,
+        selection_allowed: bool,
     ) {
         #[cfg(feature = "real-workbench")]
-        self.set_load_generation(load_generation);
+        {
+            self.set_load_generation(load_generation);
+            if self.picking.set_blocked(!selection_allowed) {
+                self.refresh_overlay();
+            }
+        }
         #[cfg(not(feature = "real-workbench"))]
-        let _unused_generation = load_generation;
+        let _unused_selection_state = (load_generation, selection_allowed);
         #[cfg(feature = "real-workbench")]
         if self.selected_story.as_deref() != selected_story {
             self.selected_story = selected_story.map(str::to_owned);
@@ -966,7 +1015,8 @@ impl NativeViewport {
         rect: egui::Rect,
         aspect: f32,
     ) {
-        let Some(scope) = self.scope() else {
+        let Some(scope) = self.scope().filter(|_| !self.picking.blocked) else {
+            self.picking.hover(None);
             return;
         };
         let at = |pos: egui::Pos2| {
@@ -979,9 +1029,10 @@ impl NativeViewport {
         let moved = ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO);
         match response.hover_pos() {
             Some(pos) if moved || self.picking.hovered.is_none() => {
-                self.picking.hovered = at(pos);
+                let hit = at(pos);
+                self.picking.hover(hit);
             }
-            None => self.picking.hovered = None,
+            None => self.picking.hover(None),
             Some(_) => {}
         }
         if response.clicked()
@@ -990,10 +1041,7 @@ impl NativeViewport {
             let started = web_time::Instant::now();
             let hit = at(pos);
             let toggle = ui.input(|i| i.modifiers.command);
-            self.picking
-                .selection
-                .click(scope, hit.map(|h| h.entity), toggle);
-            self.picking.clicked = hit;
+            self.picking.click(scope, hit, toggle);
             self.refresh_overlay();
             self.picking.last_pick_cpu_us = Some(started.elapsed().as_micros());
             ui.ctx().request_repaint();
@@ -1021,6 +1069,16 @@ impl NativeViewport {
     }
 
     fn inspector(&self, ui: &egui::Ui, rect: egui::Rect) {
+        if self.picking.blocked {
+            ui.painter().with_clip_rect(rect).text(
+                rect.left_top() + egui::vec2(10.0, 8.0),
+                egui::Align2::LEFT_TOP,
+                "UNLINKED preview: element selection disabled until the version is reopened",
+                egui::FontId::monospace(11.0),
+                egui::Color32::LIGHT_RED,
+            );
+            return;
+        }
         let selected = self.selected_entities();
         let mut lines = vec![format!(
             "Selected {} element(s){}",
@@ -1610,6 +1668,55 @@ mod tests {
         );
         let described = describe(&mesh.source_entities[floor]);
         assert!(described.contains("FloorShell") && described.contains("not drawn"));
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn unlinked_provenance_clears_and_refuses_element_picking_until_reopen() {
+        let mesh = source_mesh(
+            lab_e2k_mesh::build(
+                lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+                Default::default(),
+            )
+            .expect("public source"),
+        );
+        let revision = mesh.revision.expect("source revision");
+        let hit = |entity| {
+            Some(lab_e2k_mesh::pick::Hit {
+                entity,
+                distance: 1.0,
+                coincident: 0,
+            })
+        };
+        let mut picking = Picking::default();
+        // Linked: a pick and a hover are accepted.
+        assert!(!picking.set_blocked(false));
+        assert!(picking.click((revision, 1), hit(2), false));
+        picking.hover(hit(0));
+        assert_eq!(picking.selection.entities((revision, 1)), [2]);
+        // Invalidate (host reports UNLINKED): state is cleared at once.
+        assert!(picking.set_blocked(true), "unlink must clear element state");
+        assert!(picking.selection.entities((revision, 1)).is_empty());
+        assert!(picking.hovered.is_none() && picking.clicked.is_none());
+        // Refused while unlinked, including after the same bytes are restored
+        // on disk: the host keeps `linked = false` until an explicit reopen.
+        for generation in [2, 2, 3] {
+            assert!(!picking.set_blocked(true), "already blocked");
+            assert!(!picking.click((revision, generation), hit(2), false));
+            picking.hover(hit(2));
+            assert!(picking.hovered.is_none());
+            assert!(
+                picking
+                    .selection
+                    .entities((revision, generation))
+                    .is_empty()
+            );
+        }
+        // Explicit reopen: picking resumes, starting from an empty selection.
+        assert!(!picking.set_blocked(false));
+        assert!(picking.selection.entities((revision, 4)).is_empty());
+        assert!(picking.click((revision, 4), hit(0), false));
+        assert_eq!(picking.selection.entities((revision, 4)), [0]);
     }
 
     #[cfg(feature = "real-workbench")]
