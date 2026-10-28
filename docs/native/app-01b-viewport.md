@@ -86,7 +86,22 @@ Renderer beautification (edge lines, grid, gradient, selection outline), the
 
 ## Test receipts (agent-reported; Linux container)
 
-See `evidence/app-01b/`.
+Gate on exact head `69ee396` (`evidence/app-01b/gate-01b-69ee396.txt`, script
+`gate.sh.txt`; `--locked --offline -j 2`):
+
+- check, fmt, doc tests and WASM: **pass**.
+- Workspace tests: **151 passed, 0 failed, 7 ignored**. The 7 ignored are the
+  GPU-only tests (6 example probes and 1 `lab-viewport` test).
+- GPU steps on Mesa lavapipe (`--include-ignored`):
+  - `talos-native` 29 and `lab-viewport` 2;
+  - examples `native_e2k` 23 and `native_renderer` 18;
+  - all pass, so every previously skipped GPU probe now runs green.
+- Whole-workspace strict Clippy returns 101 only from the recorded
+  `webview_stage_a` `eprintln!` exception (G-ENV-1). `talos-native`,
+  `lab-viewport`, `lab-e2k-mesh`, `lab-fixture`, the root lib, bins and tests, and
+  every other example are linted explicitly and are clean.
+
+What the tests cover:
 
 - `talos-native` **29** tests:
   - state tests, including story highlight, pick ambiguity and per-version
