@@ -1,14 +1,14 @@
 # APP-01A.2: the visual system on the real viewport (2026-10-28)
 
 **Status: draft, experimental `egui_test` only.** This PR is stacked on APP-01B
-(#53, `feat/app-01b-viewport` @ `0ed117f`), which is itself stacked on APP-01A
+(#53, `feat/app-01b-viewport` @ `664d04e`), which is itself stacked on APP-01A
 (#50). Neither base is merged. It applies the #52 design target to the real
 TALOS binary and the real GPU viewport. EtabExtension #467 stays HOLD. Tracks
 [#49](https://github.com/tadoEng/egui_test/issues/49).
 
 | Item | Value |
 |---|---|
-| Base | `feat/app-01b-viewport` @ `0ed117f` (#53, unmerged) |
+| Base | `feat/app-01b-viewport` @ `664d04e` (#53, unmerged; merged into this branch after the #53 story-selection fix) |
 | Backend pin | EtabExtension `9eb1c8792a1d41f3f81c60428afe89f1655782ba` (unchanged) |
 | Dependencies | `talos-native` now lists `image` (0.25.10, PNG only), which was already in `Cargo.lock` through eframe. No new external crate, no version change |
 | Assets | Inter variable (SIL OFL 1.1) and 20 Lucide icons (ISC). Sources, licences and hashes are in `apps/talos-native/assets/*/SOURCE.txt` |
@@ -140,7 +140,7 @@ values are plotted or invented.
 
 ## Tests
 
-There are 35 `talos-native` tests. The UI tests run the real `App` and
+There are 37 `talos-native` tests, including the two story-selection tests merged in from #53 (`0e7330b`). The UI tests run the real `App` and
 `NativeModelView` through egui's AccessKit tree. Seven are new or rewritten
 for A.2:
 

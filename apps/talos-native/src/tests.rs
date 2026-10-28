@@ -461,3 +461,48 @@ fn gpu_geometry_keys_follow_geometry_bytes_not_version_names() {
     );
     assert_eq!(v2.vertices().len(), v2.mesh().vertices().len(), "no copy");
 }
+
+#[test]
+fn an_explicit_story_change_clears_the_member_selection() {
+    let mut state = ready_demo();
+    let scope = state.session.scope().expect("ready");
+    let member = state
+        .session
+        .ready()
+        .expect("ready")
+        .mesh()
+        .entities()
+        .iter()
+        .position(|e| e.story == "L12")
+        .expect("an L12 member");
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: Some(member),
+            toggle: false,
+            coincident: 1,
+        })
+        .expect("in scope");
+    assert_eq!(state.model.selected(scope), [member]);
+    state
+        .apply(Action::SelectStory(Some("L1".to_owned())))
+        .expect("story of v2");
+    assert_eq!(state.model.selected(scope), [] as [usize; 0]);
+    assert_eq!(state.model.ambiguous, 0);
+
+    // Re-sending the current story is not a change and keeps a new pick.
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: Some(member),
+            toggle: false,
+            coincident: 0,
+        })
+        .expect("in scope");
+    state
+        .apply(Action::SelectStory(Some("L1".to_owned())))
+        .expect("same story");
+    assert_eq!(state.model.selected(scope), [member]);
+    state.apply(Action::SelectStory(None)).expect("clear");
+    assert_eq!(state.model.selected(scope), [] as [usize; 0]);
+}

@@ -881,3 +881,44 @@ fn shrinking_a_wide_window_to_900_points_narrows_the_docked_panes() {
         "panes sized for {wide} pt of canvas kept {canvas:?}"
     );
 }
+
+#[test]
+fn choosing_another_story_drops_the_member_picked_on_the_old_one() {
+    let mut harness = harness(LoadMode::Inline);
+    select(&mut harness, "|C0_0|L12");
+    assert!(!present(&harness, "Nothing selected"));
+    // L1 is the last story row: scroll it into view, then click it.
+    row(&harness, "L1  ·  ").scroll_to_me();
+    settle(&mut harness);
+    row(&harness, "L1  ·  ").click();
+    settle(&mut harness);
+    let state = harness.state().state();
+    let scope = state.session.scope().expect("ready");
+    assert_eq!(state.model.story.as_deref(), Some("L1"));
+    assert_eq!(state.model.selected(scope), [] as [usize; 0]);
+    assert!(present(&harness, "Nothing selected"), "inspector cleared");
+    let expected: usize = {
+        let document = state.session.ready().expect("ready");
+        document
+            .mesh()
+            .entities()
+            .iter()
+            .filter(|e| e.story == "L1")
+            .map(|e| (e.indices.end - e.indices.start) as usize)
+            .sum()
+    };
+    assert!(expected > 0);
+    // The frame the shell hands the view now asks for the L1 story, not the
+    // old L12 member.
+    let frame = crate::view::ViewFrame {
+        document: state.session.ready().expect("ready"),
+        scope,
+        selected: state.model.selected(scope),
+        story: state.model.story.as_deref(),
+        picking_allowed: true,
+    };
+    assert_eq!(
+        crate::native_view::highlight_indices(&frame).len(),
+        expected
+    );
+}

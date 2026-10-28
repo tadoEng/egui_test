@@ -106,7 +106,7 @@ impl NativeModelView {
 
 /// Element selection takes precedence over the story highlight; only attributed
 /// index ranges are used, so no vertex is re-sent.
-fn highlight_indices(frame: &ViewFrame<'_>) -> Vec<u32> {
+pub(crate) fn highlight_indices(frame: &ViewFrame<'_>) -> Vec<u32> {
     let mesh = frame.document.mesh();
     let entities = mesh.entities();
     let chosen: Vec<_> = if frame.selected.is_empty() {

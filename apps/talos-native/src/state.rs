@@ -440,6 +440,12 @@ impl State {
         {
             return Err(Refusal::UnknownStory);
         }
+        // Choosing (or clearing) a story is a new question: a member picked
+        // under the previous one, and its ambiguity note, no longer apply.
+        if self.model.story != story {
+            self.model.selection = Selection::default();
+            self.model.ambiguous = 0;
+        }
         self.model.story = story;
         Ok(())
     }
