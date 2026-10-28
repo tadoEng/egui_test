@@ -5,6 +5,11 @@
 //! show one stored profile from `lab-results` (values as written, gaps kept,
 //! nothing recalculated); with no cached results, or refused ones, the card
 //! says why and plots nothing.
+//!
+//! With an embedded chart (ECharts in a `WebView2` child on Windows) the chart
+//! card keeps its header and leaves the plot area to that chart: [`show`]
+//! returns the area and the [`Content`] to draw in it.
+use crate::chart_bridge::{Content, Style, css};
 use crate::document::{Document, Results};
 use crate::icons::{self, Icon};
 use crate::state::{Action, Direction, Metric, ResultsQuery, Shown, State, StoryRange};
@@ -15,13 +20,25 @@ use lab_results::data::Plot;
 const SIDE_TABLE: f32 = 1000.0;
 const TABLE_WIDTH: f32 = 340.0;
 
-pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
+/// The plot area an embedded chart draws over, and what it shows there.
+pub struct Embed {
+    pub area: egui::Rect,
+    pub content: Content,
+}
+
+/// Draws the page. With `embedded`, a stored profile's plot area is left to
+/// the embedded chart and returned with its content; otherwise the page
+/// draws the chart itself.
+pub fn show(ui: &mut egui::Ui, state: &State, embedded: bool) -> (Vec<Action>, Option<Embed>) {
     let mut actions = Vec::new();
+    let mut embed = None;
     let tokens = Tokens::of(ui);
     let Some(document) = state.session.ready() else {
         egui::CentralPanel::no_frame().show(ui, |ui| super::not_ready(ui, state));
-        return actions;
+        return (actions, embed);
     };
+    // Shown::Plot implies cached results; their fingerprint names the source.
+    let source = state.cached().map(|snapshot| snapshot.fingerprint.clone());
     let query = &state.results.query;
     egui::CentralPanel::default()
         .frame(
@@ -68,8 +85,30 @@ pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
                             ),
                         )
                     };
-                    chart_card(ui, chart, document, &plot, selected, &mut actions);
+                    let embedded = if embedded { source.clone() } else { None };
+                    let area = chart_card(
+                        ui,
+                        chart,
+                        document,
+                        &plot,
+                        selected,
+                        embedded.is_some(),
+                        &mut actions,
+                    );
                     table_card(ui, table, &plot, selected, &mut actions);
+                    if let (Some(area), Some(source)) = (area, embedded) {
+                        let style = chart_style(&tokens, plot.series.len());
+                        embed = Some(Embed {
+                            area,
+                            content: Content {
+                                version: document.version().to_string(),
+                                source,
+                                plot,
+                                selected: selected.map(str::to_owned),
+                                style,
+                            },
+                        });
+                    }
                 }
                 Shown::RangeMismatch(missing) => {
                     mismatch_card(ui, document, query, &missing, &mut actions);
@@ -77,7 +116,7 @@ pub fn show(ui: &mut egui::Ui, state: &State) -> Vec<Action> {
                 Shown::Unavailable => empty_card(ui, document, query),
             }
         });
-    actions
+    (actions, embed)
 }
 
 /// A selector group: a muted label before its control, in one pill.
@@ -365,14 +404,34 @@ fn reference_color(tokens: &Tokens) -> egui::Color32 {
     egui::Color32::from_rgb(220, 70, 70).lerp_to_gamma(tokens.text, 0.1)
 }
 
+/// The theme's chart colours, for an embedded chart to match this card.
+fn chart_style(tokens: &Tokens, series: usize) -> Style {
+    Style {
+        background: css(tokens.card),
+        text: css(tokens.text),
+        muted: css(tokens.muted),
+        grid: css(tokens.border),
+        axis: css(tokens.muted),
+        selected: css(tokens.accent_weak),
+        reference: css(reference_color(tokens)),
+        series: (0..series)
+            .map(|index| css(palette(tokens, index)))
+            .collect(),
+    }
+}
+
+/// The chart card: title, identity line, warnings and legend, then the plot.
+/// With `embedded` the plot area is only reserved, and returned.
 fn chart_card(
     ui: &mut egui::Ui,
     rect: egui::Rect,
     document: &Document,
     plot: &Plot,
     selected: Option<&str>,
+    embedded: bool,
     actions: &mut Vec<Action>,
-) {
+) -> Option<egui::Rect> {
+    let mut reserved = None;
     card(ui, rect, |ui| {
         let tokens = Tokens::of(ui);
         ui.label(
@@ -405,7 +464,14 @@ fn chart_card(
             }
         });
         let area = ui.available_rect_before_wrap();
-        let response = ui.allocate_rect(area, egui::Sense::click());
+        let response = ui.allocate_rect(
+            area,
+            if embedded {
+                egui::Sense::hover()
+            } else {
+                egui::Sense::click()
+            },
+        );
         response.widget_info(|| {
             egui::WidgetInfo::labeled(
                 egui::accesskit::Role::Image,
@@ -413,6 +479,19 @@ fn chart_card(
                 format!("Chart: {}", plot.title),
             )
         });
+        if embedded {
+            // Seen only until the chart window first shows, or while it is
+            // hidden under an open selector list.
+            ui.painter().text(
+                area.center(),
+                egui::Align2::CENTER_CENTER,
+                "Chart",
+                egui::FontId::proportional(theme::SMALL),
+                tokens.faint,
+            );
+            reserved = Some(area);
+            return;
+        }
         let hovered = draw_chart(ui, area, plot, selected, response.hover_pos());
         if let Some(story) = &hovered {
             response.clone().on_hover_ui_at_pointer(|ui| {
@@ -436,6 +515,7 @@ fn chart_card(
             ));
         }
     });
+    reserved
 }
 
 /// Same version name is not the same story set: warn both ways.

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<title>TALOS Results chart</title>
+<style>
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent}
+#chart{width:100%;height:100%}
+#chart:focus{outline:none}
+</style>
+</head>
+<body>
+<div id="chart" tabindex="0" role="img" aria-label="Results chart"></div>
+<script>/*__ECHARTS_RUNTIME__*/</script>
+<script>
+"use strict";
+// TALOS Results chart (APP-01C). One stored story profile per frame; the host
+// owns every value, the selection and the theme. Presentation follows
+// examples/native_results/chart.html (adapted from EtabExtension 9eb1c879,
+// Apache-2.0; see docs/native/cached-chart-style.md). Contract:
+// apps/talos-native/src/chart_bridge.rs.
+const PROTOCOL=1;
+const el=document.getElementById('chart');
+const chart=echarts.init(el,null,{renderer:'canvas'});
+let active=null;
+function post(message){window.ipc.postMessage(JSON.stringify(Object.assign({protocol:PROTOCOL},message)));}
+function identity(){return {version:active.version,source:active.source,generation:active.generation};}
+function grid(){return {left:Math.max(72,Math.min(140,chart.getWidth()*.12)),right:16,top:12,bottom:36};}
+// The selected story's band: a line as thick as one story row, as the native chart draws it.
+function band(){
+  if(!active||active.selected_story===null||!active.plot.stories.includes(active.selected_story))return [];
+  const g=grid();const rows=Math.max(1,active.plot.stories.length);
+  const width=Math.max(2,Math.min(28,(chart.getHeight()-g.top-g.bottom)/rows));
+  return [{yAxis:active.selected_story,lineStyle:{color:active.style.selected,width,type:'solid',cap:'butt'},label:{show:false}}];
+}
+function option(){
+  const p=active.plot,s=active.style;
+  const series=p.series.map((one,i)=>({id:'stored-'+i,name:one.name,type:'line',smooth:false,showSymbol:true,symbol:'circle',symbolSize:5,connectNulls:false,z:3,
+    itemStyle:{color:s.series[i]},lineStyle:{color:s.series[i],width:2},
+    data:p.stories.map((story,j)=>[one.values[j],story])}));
+  series.push({id:'selection',name:'',type:'line',data:[],silent:true,z:1,markLine:{silent:true,symbol:'none',animation:false,data:band()}});
+  if(p.reference!==null)series.push({id:'stored-reference',name:'Stored allowable',type:'line',showSymbol:false,silent:true,z:2,
+    lineStyle:{color:s.reference,type:'dashed',width:1.5},itemStyle:{color:s.reference},tooltip:{show:false},data:p.stories.map(story=>[p.reference,story])});
+  return {animation:false,backgroundColor:s.background,textStyle:{fontFamily:'Inter, Segoe UI, system-ui, sans-serif',fontSize:11,color:s.text},
+    grid:grid(),legend:{show:false},
+    tooltip:{trigger:'axis',confine:true,renderMode:'richText',axisPointer:{type:'shadow',axis:'y'},backgroundColor:s.background,borderColor:s.grid,textStyle:{color:s.text,fontSize:11},
+      valueFormatter:v=>(v===null||v===undefined||Number.isNaN(v))?'no stored value':String(v)+' '+p.unit},
+    xAxis:{type:'value',scale:false,axisLabel:{color:s.muted,hideOverlap:true},splitLine:{lineStyle:{color:s.grid}},axisLine:{show:true,onZero:false,lineStyle:{color:s.axis}}},
+    yAxis:{type:'category',data:p.stories,inverse:true,axisTick:{show:false},axisLine:{lineStyle:{color:s.axis}},axisLabel:{color:s.muted,width:110,overflow:'truncate',interval:'auto'}},
+    series};
+  // The value range covers the stored values, the stored reference (drawn as
+  // a series) and zero (scale:false), rounded to ECharts' ticks.
+}
+function selectAt(x,y){
+  if(!active||!chart.containPixel('grid',[x,y]))return;
+  // [value, category index] in the grid; the nearest story row wins.
+  const at=chart.convertFromPixel({gridIndex:0},[x,y]);
+  if(!Array.isArray(at))return;
+  const index=Math.round(at[1]);
+  const story=active.plot.stories[index];
+  if(story===undefined)return;
+  if(story===active.selected_story)post(Object.assign({type:'clear_selection',story:null},identity()));
+  else post(Object.assign({type:'select_story',story},identity()));
+}
+window.talosChart=Object.freeze({apply(frame){
+  if(!frame||frame.protocol!==PROTOCOL||typeof frame.source!=='string'||typeof frame.version!=='string'||!Number.isSafeInteger(frame.generation))throw Error('Invalid chart frame');
+  if(active&&frame.generation<active.generation)return;
+  const same=active&&frame.generation===active.generation&&frame.source===active.source&&frame.version===active.version;
+  active=frame;
+  el.setAttribute('aria-label','Chart: '+frame.plot.title);
+  if(same)chart.setOption({series:[{id:'selection',markLine:{data:band()}}]});
+  else chart.setOption(option(),{notMerge:true});
+}});
+chart.getZr().on('click',e=>selectAt(e.offsetX,e.offsetY));
+const SHORTCUTS={Digit1:1,Digit2:1,Digit3:1,Digit4:1,Digit5:1,PageUp:1,PageDown:1};
+el.addEventListener('keydown',e=>{
+  // The child window has the keyboard: forward the workspace shortcuts only.
+  if((e.ctrlKey||e.metaKey)&&!e.altKey&&SHORTCUTS[e.code]){post({type:'shortcut',key:e.code});e.preventDefault();return;}
+  if(e.key==='Escape'&&active&&active.selected_story!==null){post(Object.assign({type:'clear_selection',story:null},identity()));e.preventDefault();}
+});
+new ResizeObserver(()=>{chart.resize();if(active)chart.setOption({grid:grid(),series:[{id:'selection',markLine:{data:band()}}]});}).observe(el);
+post({type:'ready'});
+</script>
+</body>
+</html>

@@ -17,8 +17,8 @@ its own.
 | APP-01A (#50) | Tab-first TALOS shell; typed project/version/workspace state; load tickets refusing stale responses | **Merged** (`e1aea4d`) | Gates in the PR; owner Windows screenshots | Windows DPI 125/150 %, Narrator |
 | APP-01B (#53) | Shared wgpu renderer (`lab-viewport`) in Model; one selection authority; GPU lifetime | **Merged** (`25ad580`) | 153 tests + 33 GPU (lavapipe) at `0e7330b`; owner screenshot of picking | Windows occlusion, Ctrl add/remove, v1↔v2, `native_e2k`/`native_workbench` WebView2 smoke |
 | APP-01A.2 (#54) | Visual system: one header row, floating/docked panels, one panel when compact, version strip | **Merged** (`816fa22`); owner accepted the visual direction | 164 tests + 44 GPU at `72d7b98`; owner wide/compact screenshots | Exact-head Windows smoke the owner listed (compact pick, strip/header sync, Results flow) |
-| APP-01C native (this PR) | Cached results via `lab-results`; story chart + story table; version folders read-only; fail-closed story range; stored Mx/My | **Draft PR** | Gate at this PR's head (see `app-01c-results.md`); owner's real folder checked locally, never published | Owner review; Windows build of the moved `native_results`/`native_workbench` files |
-| APP-01C ECharts / WebView2 | The interactive chart in Results through the existing Wry child | **Not started** | — | Windows-only: typed version/fingerprint/generation messages, stale-event denial, focus/z-order/resize, coexistence with the wgpu viewport |
+| APP-01C native (#55) | Cached results via `lab-results`; story chart + story table; version folders read-only; fail-closed story range; stored Mx/My | **Merged** (`de080d0`, experimental) | Gate receipts in `app-01c-results.md`; owner's real folder checked locally, never published | Owner review; Windows build of the moved `native_results`/`native_workbench` files |
+| APP-01C ECharts / WebView2 | ECharts in a `WebView2` child over the Results plot area; typed version/fingerprint/generation contract; stale-event denial; hidden off Results and under egui popups; native chart as fallback | **Draft PR** (see [`app-01c-echarts.md`](app-01c-echarts.md)) | Contract and shell tested on Linux; the page tested in headless Chromium; **the Windows module not compiled by the author** | Owner Windows build + the 10-item acceptance list (selection both ways, z-order, wgpu coexistence, focus, DPI/resize, real folder, offline/shutdown) |
 | APP-01D | Authoritative `ext-api` read-only project/version routing | **Blocked** | — | INT-01 (#9/#18) Windows CRT/linker/packaging hold |
 
 ## Migration gates
@@ -28,7 +28,7 @@ its own.
 | #5 native UI | PARTIAL | A working tab-first app on egui 0.37: one-row header, overflow, floating/docked panels, one panel when compact, accessible tabs, panels and rows (AccessKit-asserted), Inter/Lucide, light/dark | Windows 125/150 % DPI, Narrator, keyboard focus under a real window manager, docking, cold restart |
 | #6 native 3D | PARTIAL | One shared renderer; depth; CPU nearest-visible picking with scoped selection; GPU tests on lavapipe; owner Windows screenshot of real GPU picking | Windows occlusion/Ctrl/version matrix, device loss/recovery, real-GPU captures at all DPIs |
 | #4 performance | PARTIAL (CPU 1k/10k/50k/100k superlinear: FAIL; CPU pick latency: PASS) | None measured | ≥ 3 Windows Release presented-frame runs, CPU/GPU/RSS/VRAM, Three.js reference |
-| #2 embedded chart (WebView2) | PARTIAL (hidden WebView2 smokes, #17) | Results is now chart-first with a native chart and table over real cached data; the WebView2 slice is designed but not built | Offline child in TALOS: both selection directions, focus/IME/DPI/z-order/docking, zero network, process cleanup |
+| #2 embedded chart (WebView2) | PARTIAL (hidden WebView2 smokes, #17) | Results is chart-first over real cached data; the TALOS `WebView2` chart slice is in a draft PR (contract tested, page tested in Chromium), not yet built or run on Windows | Offline child in TALOS: both selection directions, focus/IME/DPI/z-order/docking, zero network, process cleanup |
 | #7 E2K fidelity | PARTIAL (24/24 frames, 19/19 shell labels vs the pinned `ext-api` classifier) | The real model renders with fidelity tiers shown; a story-set mismatch between the model and the cached results is flagged | Engineering-grade geometry (insertion/offset placement, thickness), wall/slab rule (#349) |
 | #8 desktop runtime | NOT TESTED | Read-only CLI folders; nothing is written | Packaged install/upgrade/rollback, slow/cancelled jobs, clean shutdown |
 | #9 read-only API | BLOCKED (backend CRT/packaging) | Version identity read from folder manifests through the pinned `ext-core` type, labelled as not repository state | APP-01D on `ext-api`, identity/outcome parity, non-mutation |
@@ -52,7 +52,7 @@ its own.
   - Migration readiness: there is no measured performance, packaging,
     authoritative `ext-api` routing, report path or sidecar.
   - The Windows evidence is limited to the owner's screenshots so far.
-  - The WebView2 chart is still to be built.
+  - The `WebView2` chart is written but not yet built or run on Windows.
 - **Recommended order from here:**
   1. Owner Windows smoke at exact heads (A.2 list, then APP-01C).
   2. APP-01C ECharts/WebView2 slice, Windows-tested.

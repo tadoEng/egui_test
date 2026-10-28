@@ -1,5 +1,6 @@
 //! The application host: runs effects, routes keyboard shortcuts, draws the
 //! chrome (header, workspace tabs, status line) and the active workspace page.
+use crate::chart_bridge::EmbeddedChart;
 use crate::loader::{LoadMode, Loader};
 use crate::project::Project;
 use crate::state::{Action, DocumentState, Refusal, State, Workspace};
@@ -14,6 +15,9 @@ pub struct App {
     view: Box<dyn ModelView>,
     loader: Loader,
     last_refusal: Option<Refusal>,
+    /// The Results chart outside egui (ECharts in a `WebView2` child on
+    /// Windows); without one, or while it is unavailable, the page draws it.
+    chart: Option<Box<dyn EmbeddedChart>>,
 }
 
 impl App {
@@ -26,6 +30,24 @@ impl App {
             )),
             Loader::new(mode, Some(cc.egui_ctx.clone())),
         )
+        .with_platform_chart(cc)
+    }
+    /// Windows: the Results chart is ECharts in a `WebView2` child window.
+    /// If it cannot be created (no `WebView2` runtime), the page draws it.
+    #[cfg(target_os = "windows")]
+    fn with_platform_chart(self, cc: &eframe::CreationContext<'_>) -> Self {
+        match crate::webview_chart::WebViewChart::new(cc) {
+            Ok(chart) => self.with_chart(Box::new(chart)),
+            Err(error) => {
+                log::warn!("ECharts chart unavailable, the native chart is used: {error}");
+                self
+            }
+        }
+    }
+    /// Elsewhere the page draws the chart.
+    #[cfg(not(target_os = "windows"))]
+    fn with_platform_chart(self, _cc: &eframe::CreationContext<'_>) -> Self {
+        self
     }
     pub fn with_parts(project: Project, view: Box<dyn ModelView>, loader: Loader) -> Self {
         let (state, effects) = State::new(project);
@@ -34,11 +56,18 @@ impl App {
             view,
             loader,
             last_refusal: None,
+            chart: None,
         };
         for effect in effects {
             app.loader.run(effect);
         }
         app
+    }
+    /// Draws the Results chart with `chart` whenever it is available.
+    #[must_use]
+    pub fn with_chart(mut self, chart: Box<dyn EmbeddedChart>) -> Self {
+        self.chart = Some(chart);
+        self
     }
     pub fn state(&self) -> &State {
         &self.state
@@ -290,6 +319,8 @@ impl eframe::App for App {
                 .show(ui, |ui| self.warning(ui));
         }
         let workspace = self.state.workspace;
+        let embedded = self.chart.as_ref().is_some_and(|chart| chart.available());
+        let mut embed = None;
         egui::CentralPanel::no_frame().show(ui, |ui| match workspace {
             Workspace::Model => {
                 actions.extend(crate::pages::model::show(
@@ -298,9 +329,25 @@ impl eframe::App for App {
                     self.view.as_mut(),
                 ));
             }
-            Workspace::Results => actions.extend(crate::pages::results::show(ui, &self.state)),
+            Workspace::Results => {
+                let (page, chart) = crate::pages::results::show(ui, &self.state, embedded);
+                actions.extend(page);
+                embed = chart;
+            }
             other => crate::pages::placeholder::show(ui, other),
         });
+        if let Some(chart) = &mut self.chart {
+            // A child window draws above everything egui paints, so it hides
+            // while an egui popup (a selector's list) is open, and while the
+            // window is minimized. Its content stays, so it reappears as is.
+            let covered = egui::Popup::is_any_open(&ctx)
+                || ctx.input(|input| input.viewport().minimized == Some(true));
+            let (area, content) = match embed {
+                Some(embed) => (Some(embed.area).filter(|_| !covered), Some(embed.content)),
+                None => (None, None),
+            };
+            actions.extend(chart.sync(&ctx, area, content));
+        }
         for action in actions {
             self.dispatch(action);
         }

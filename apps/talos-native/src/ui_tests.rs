@@ -1217,3 +1217,190 @@ fn results_fit_a_900_point_window() {
         );
     }
 }
+
+/// Stands in for the Windows chart window: records where the app places it
+/// and what it shows, and plays queued page messages through the real bridge.
+#[derive(Default)]
+struct ChartProbe {
+    available: bool,
+    synced: usize,
+    area: Option<egui::Rect>,
+    inbox: Vec<String>,
+    bridge: crate::chart_bridge::Bridge,
+}
+type Probe = std::rc::Rc<std::cell::RefCell<ChartProbe>>;
+struct FakeChart(Probe);
+impl crate::chart_bridge::EmbeddedChart for FakeChart {
+    fn available(&self) -> bool {
+        self.0.borrow().available
+    }
+    fn sync(
+        &mut self,
+        _ctx: &egui::Context,
+        area: Option<egui::Rect>,
+        content: Option<crate::chart_bridge::Content>,
+    ) -> Vec<Action> {
+        let mut probe = self.0.borrow_mut();
+        let inbox = std::mem::take(&mut probe.inbox);
+        let actions = inbox
+            .iter()
+            .filter_map(|raw| probe.bridge.accept(raw).ok())
+            .collect();
+        probe.bridge.update(content).unwrap();
+        probe.area = area;
+        probe.synced += 1;
+        actions
+    }
+}
+
+fn results_with_chart(available: bool) -> (Harness<'static, App>, Probe) {
+    let probe = std::rc::Rc::new(std::cell::RefCell::new(ChartProbe {
+        available,
+        ..ChartProbe::default()
+    }));
+    let chart = std::rc::Rc::clone(&probe);
+    let mut harness = Harness::builder()
+        .with_max_steps(8)
+        .with_size(egui::vec2(1280.0, 800.0))
+        .with_context_setup(crate::theme::install)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                Project::public_results_fixture(),
+                Box::new(NativeModelView::new(None)),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+            .with_chart(Box::new(FakeChart(chart)))
+        });
+    settle(&mut harness);
+    (harness, probe)
+}
+
+/// A page message about the frame the chart shows now.
+fn chart_message(probe: &ChartProbe, kind: &str, story: Option<&str>) -> String {
+    let frame = probe.bridge.frame().expect("a frame is charted");
+    serde_json::json!({
+        "protocol": 1, "type": kind, "version": frame.version,
+        "source": frame.source, "generation": frame.generation, "story": story,
+    })
+    .to_string()
+}
+
+#[test]
+fn the_embedded_chart_covers_the_plot_area_only_on_results_and_never_over_a_popup() {
+    let (mut harness, probe) = results_with_chart(true);
+    assert!(probe.borrow().synced > 0);
+    assert_eq!(probe.borrow().area, None, "hidden on Model");
+    assert!(probe.borrow().bridge.frame().is_none());
+
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    let area = probe.borrow().area.expect("placed on Results");
+    let table = harness.get_by_label("Story table").rect();
+    assert!(
+        area.width() > 300.0 && area.height() > 200.0,
+        "the plot area: {area:?}"
+    );
+    assert!(area.right() < table.left(), "beside the table, not over it");
+    let title = harness.get_by_label_contains("Chart: Story drift").rect();
+    assert!(
+        title.intersects(area),
+        "the reserved area keeps its accessible name"
+    );
+    {
+        let probe = probe.borrow();
+        let frame = probe.bridge.frame().expect("charted");
+        assert_eq!(frame.plot.title, "Story drift · wind X · G · W");
+        let document = harness.state().state().session.ready().expect("ready");
+        assert_eq!(frame.version, document.version().to_string());
+        assert_eq!(
+            Some(frame.source.as_str()),
+            harness
+                .state()
+                .state()
+                .cached()
+                .map(|s| s.fingerprint.as_str())
+        );
+        assert_eq!(frame.style.series.len(), frame.plot.series.len());
+    }
+
+    // An open selector list would be drawn under the child window: hide it.
+    harness
+        .get_by_role_and_label(Role::ComboBox, "Metric")
+        .click();
+    settle(&mut harness);
+    assert_eq!(probe.borrow().area, None, "hidden while a list is open");
+    assert!(
+        probe.borrow().bridge.frame().is_some(),
+        "the content stays meanwhile"
+    );
+    harness.key_press(egui::Key::Escape);
+    settle(&mut harness);
+    assert!(probe.borrow().area.is_some(), "back once the list closes");
+
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
+    settle(&mut harness);
+    assert_eq!(probe.borrow().area, None, "hidden over the Model viewport");
+    assert!(probe.borrow().bridge.frame().is_none());
+}
+
+#[test]
+fn chart_messages_select_only_in_the_frame_shown_and_forward_shortcuts() {
+    let (mut harness, probe) = results_with_chart(true);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    let roof = chart_message(&probe.borrow(), "select_story", Some("Roof"));
+    probe.borrow_mut().inbox.push(roof.clone());
+    harness.run_ok();
+    assert_eq!(
+        harness.state().state().results.story.as_deref(),
+        Some("Roof")
+    );
+    assert_eq!(
+        probe
+            .borrow()
+            .bridge
+            .frame()
+            .and_then(|f| f.selected_story.as_deref()),
+        Some("Roof"),
+        "the selection goes back to the chart in the same generation"
+    );
+    // Another metric: a new frame. A late click on the old chart is refused.
+    harness
+        .get_by_role_and_label(Role::ComboBox, "Metric")
+        .click();
+    settle(&mut harness);
+    harness.get_by_label("Story shear").click();
+    settle(&mut harness);
+    let clear = chart_message(&probe.borrow(), "clear_selection", None);
+    probe.borrow_mut().inbox.push(clear);
+    harness.run_ok();
+    assert_eq!(harness.state().state().results.story, None);
+    probe.borrow_mut().inbox.push(roof);
+    harness.run_ok();
+    assert_eq!(
+        harness.state().state().results.story,
+        None,
+        "stale click refused"
+    );
+    assert_eq!(probe.borrow().bridge.refused(), 1);
+    // Workspace shortcuts typed while the chart has focus still work.
+    probe
+        .borrow_mut()
+        .inbox
+        .push(r#"{"protocol":1,"type":"shortcut","key":"Digit1"}"#.into());
+    harness.run_ok();
+    assert_eq!(harness.state().state().workspace, Workspace::Model);
+}
+
+#[test]
+fn an_unavailable_chart_window_leaves_the_native_chart() {
+    let (mut harness, probe) = results_with_chart(false);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    assert_eq!(probe.borrow().area, None);
+    assert!(probe.borrow().bridge.frame().is_none());
+    // The native chart still takes clicks: the page draws it.
+    let chart = harness.get_by_label_contains("Chart: Story drift").rect();
+    click_at(&mut harness, chart.center(), egui::Modifiers::NONE);
+    assert!(harness.state().state().results.story.is_some());
+}
