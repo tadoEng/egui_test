@@ -309,7 +309,14 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
             12.5 * 0.3048 - origin[1],
             roof - origin[2],
         ]
-        .map(|v| v as f32)
+        .map(|v| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a local display coordinate, as the renderer's f32 vertices"
+            )]
+            let local = v as f32;
+            local
+        })
     };
     let rect = harness.get_by_label("3D model view").rect();
     let camera = view(&harness).camera().expect("camera");
@@ -343,7 +350,10 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
         rect.left_top() + egui::vec2(12.0, 12.0),
         egui::Modifiers::NONE,
     );
-    assert!(harness.state().state().model.selected(scope).is_empty());
+    assert_eq!(
+        harness.state().state().model.selected(scope),
+        [] as [usize; 0]
+    );
 }
 
 #[test]
@@ -368,7 +378,10 @@ fn a_version_switch_keeps_the_view_and_clears_the_pick() {
         "relative zoom kept across versions"
     );
     let scope = harness.state().state().session.scope().expect("ready");
-    assert!(harness.state().state().model.selected(scope).is_empty());
+    assert_eq!(
+        harness.state().state().model.selected(scope),
+        [] as [usize; 0]
+    );
     harness.key_press(egui::Key::F);
     settle(&mut harness);
     let fitted = view(&harness).camera().expect("camera");

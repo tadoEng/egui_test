@@ -522,6 +522,10 @@ impl RendererCore {
     pub fn resident(&self) -> Option<&GpuMesh> {
         self.mesh.as_ref()
     }
+    /// The resident highlight index buffer, for evidence tests.
+    pub fn resident_selection(&self) -> Option<&wgpu::Buffer> {
+        self.selection.as_ref().map(|(_, buffer)| buffer)
+    }
     pub fn uploaded_key(&self) -> Option<MeshKey> {
         self.uploaded_key
     }
@@ -545,9 +549,10 @@ impl GpuCounters {
     }
 }
 
-/// Registers the renderer with eframe's wgpu state once and returns its
-/// counters. A second call (another view, a reopened tab) reuses the existing
-/// renderer and its resident mesh instead of creating new pipelines.
+/// Registers the renderer with eframe's wgpu state once; returns its counters.
+///
+/// A second call (another view, a reopened tab) reuses the existing renderer
+/// and its resident mesh instead of creating new pipelines.
 pub fn install(render_state: &egui_wgpu::RenderState) -> Arc<GpuCounters> {
     let mut renderer = render_state.renderer.write();
     install_into(

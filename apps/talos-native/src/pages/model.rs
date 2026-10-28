@@ -63,7 +63,7 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .default_size(320.0)
             .size_range(240.0..=520.0)
             .show(ui, |ui| {
-                inspector(ui, document, selected, state.model.ambiguous)
+                inspector(ui, document, selected, state.model.ambiguous);
             });
     }
     egui::CentralPanel::no_frame().show(ui, |ui| {

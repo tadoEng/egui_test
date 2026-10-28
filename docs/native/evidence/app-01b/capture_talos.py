@@ -20,8 +20,7 @@ DISPLAY = ":99"
 x11 = ctypes.CDLL("libX11.so.6")
 xtst = ctypes.CDLL("libXtst.so.6")
 x11.XOpenDisplay.restype = ctypes.c_void_p
-x11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
-for fn in (xtst.XTestFakeMotionEvent, xtst.XTestFakeButtonEvent, xtst.XTestFakeKeyEvent):
+for fn in (xtst.XTestFakeMotionEvent, xtst.XTestFakeButtonEvent):
     fn.argtypes = None
 x11.XFlush.argtypes = [ctypes.c_void_p]
 
@@ -43,15 +42,6 @@ def click(handle, x, y):
         time.sleep(0.15)
 
 
-def chord(handle, *keysyms):
-    codes = [x11.XKeysymToKeycode(ctypes.c_void_p(handle), k) for k in keysyms]
-    for code in codes:
-        xtst.XTestFakeKeyEvent(ctypes.c_void_p(handle), code, 1, 0)
-    for code in reversed(codes):
-        xtst.XTestFakeKeyEvent(ctypes.c_void_p(handle), code, 0, 0)
-    x11.XFlush(handle)
-
-
 def shot(name, width, height):
     subprocess.run(
         ["import", "-window", "root", "-crop", f"{width}x{height}+0+0", "+repage",
@@ -59,7 +49,6 @@ def shot(name, width, height):
         check=True, env={**os.environ, "DISPLAY": DISPLAY})
 
 
-XK_CONTROL_L, XK_2 = 0xFFE3, 0x32
 if subprocess.run(["pgrep", "-x", "Xvfb"], capture_output=True).returncode != 0:
     subprocess.Popen(["Xvfb", DISPLAY, "-screen", "0", "2100x1400x24"],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -82,7 +71,9 @@ for scale in ("1", "1.25", "1.5"):
         click(handle, 600 * s, 430 * s)
         time.sleep(3)
         shot(f"talos-model-picked-{tag}", width, height)
-        chord(handle, XK_CONTROL_L, XK_2)
+        # Xvfb has no window manager to give the window keyboard focus, so the
+        # Results tab is clicked rather than reached with Ctrl+2.
+        click(handle, 114 * s, 54 * s)
         time.sleep(3)
         shot(f"talos-results-{tag}", width, height)
     finally:

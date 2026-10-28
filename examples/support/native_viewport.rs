@@ -1393,16 +1393,14 @@ mod tests {
         let selected = Arc::new(story_indices(&mesh, Some("Roof")).expect("source indices"));
         renderer.prepare_selection(&device, &selected);
         let selected_buffer = renderer
-            .selection
-            .as_ref()
+            .resident_selection()
             .expect("highlight buffer")
-            .1
             .clone();
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
         renderer.prepare_selection(&device, &selected);
         assert_eq!(renderer.resident().expect("resident").vertex, resident);
         assert_eq!(
-            renderer.selection.as_ref().expect("highlight").1,
+            *renderer.resident_selection().expect("highlight"),
             selected_buffer
         );
         assert_eq!(renderer.stats().uploads.load(Ordering::Relaxed), 1);
@@ -1426,7 +1424,7 @@ mod tests {
                 .expect("public capture");
         }
         renderer.prepare_selection(&device, &Arc::new(Vec::new()));
-        assert!(renderer.selection.is_none());
+        assert!(renderer.resident_selection().is_none());
         assert_eq!(renderer.stats().selection_bytes.load(Ordering::Relaxed), 0);
         let cleared = read_public_rgba(&device, &queue, &renderer);
         assert!(
