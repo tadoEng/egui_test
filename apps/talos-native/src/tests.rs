@@ -368,4 +368,9 @@ fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
         "{:?}",
         state.results.notice
     );
+    // The notice describes the v1 load only; it must not follow the user back.
+    let effect = switch(&mut state, "v2");
+    deliver(&mut state, &effect).expect("v2");
+    assert_eq!(state.results.notice, None, "stale notice about main/v1");
+    assert_eq!(state.results.query.version, Some(v("v2")));
 }

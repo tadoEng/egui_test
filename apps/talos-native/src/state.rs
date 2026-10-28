@@ -402,6 +402,8 @@ impl State {
     }
 
     fn revalidate_results(&mut self, document: &Document) {
+        // A notice describes one load; a later load starts without it.
+        self.results.notice = None;
         let query = &mut self.results.query;
         query.version = Some(document.version().clone());
         // No analyzed result set exists for any synthetic version.
