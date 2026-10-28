@@ -219,8 +219,8 @@ mod host {
                     ui.label(format!("{} source entities · {} stories · {v} vertices · {t} triangles", self.summary.entities, self.summary.stories));
                 });
                 ui.label(format!("{} withheld entities · {} source projection notes · {} CPU vertex/index bytes",self.summary.withheld,self.summary.projection_skips,self.summary.cpu_buffer_bytes));
-                ui.small("Rectangular frame proxies and zero-thickness supported shells. Assigned sections, local axes, offsets, insertion and opening subtraction are unverified. Unknown/invalid surfaces are withheld.");
-                ui.colored_label(egui::Color32::YELLOW,"Geometry snapshot only · analysis/source-model freshness unverified. Cached results and selection are not attached in this slice.");
+                ui.small("Frames: a D×B box in default CSI local axes when both source dimensions resolve (exact only for rectangular families; others are a labelled envelope); circular, catalog/library and unresolved sections are fixed-size proxies (see each member's fidelity reasons). Section rotation, cardinal/joint offsets, shell thickness/insertion and opening subtraction are not drawn. Declared voids and invalid rings are withheld.");
+                ui.colored_label(egui::Color32::YELLOW,"Geometry snapshot only · analysis/source-model freshness unverified. Element picking is CPU ray casting on drawn geometry; no cached results are attached in this preview.");
             });
             egui::CentralPanel::default().show(ui, |ui| self.viewport.show(ui, None, 0, true));
             if let Some(smoke) = &mut self.smoke
