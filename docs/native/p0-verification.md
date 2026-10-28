@@ -15,7 +15,7 @@ only as "local run executed" where relevant.
 | Item | Value |
 |---|---|
 | egui_test base | `6f622918791c2703ace42dd28e15c117eafef13d` (`main`, after #44/#45) |
-| Branch / head | `claude/funny-cori-cweovj`; gate-verified code head `97cd098cd8b9e451a97bc2d5d588214d2b9de8a2` (later commits on this branch are this document and evidence files only) |
+| Branch / head | `claude/funny-cori-cweovj`; gate-verified code head `20703af4150ad4aa45b58aa1309289a5841d2cbd` after review fixes (first review at `aebd019`; later commits are documentation/evidence only) |
 | Backend pin | EtabExtension `9eb1c8792a1d41f3f81c60428afe89f1655782ba` (unchanged) |
 | Production reference | EtabExtension HEAD `04d67651dd2fd96140f65634905ae3b4b807d663`; `crates/ext-e2k/src` and `ext-api/.../shell_openings.rs` are byte-identical to the pin |
 | `Cargo.lock` / manifests | unchanged (sha256 `8e98fe9c…4c83ba`) |
@@ -28,13 +28,20 @@ only as "local run executed" where relevant.
 | SHA | check | fmt | clippy `-D warnings` all-features | test all-targets all-features | doc | wasm |
 |---|---|---|---|---|---|---|
 | `fc6b66d` (first fix only) | 0 | 0 | **101** (pre-existing, see G-ENV-1) | 0 — 84 passed, 0 failed, 6 ignored | 0 | 0 |
-| `97cd098` (code head) | 0 | 0 | **101** (same pre-existing) | 0 — **102 passed, 0 failed, 6 ignored** | 0 | 0 |
+| `97cd098` (first review) | 0 | 0 | **101** (same pre-existing) | 0 — 102 passed, 0 failed, 6 ignored | 0 | 0 |
+| `20703af` (code head, review fixes) | 0 | 0 | **101** (same pre-existing) | 0 — **105 passed, 0 failed, 6 ignored** | 0 | 0 |
 
 Every target except `examples/webview_stage_a` was additionally linted with
-strict Clippy at `97cd098`: **clean**. The 6 ignored tests are the opt-in GPU
-probes; they were **not executed** (no adapter).
+strict Clippy at `97cd098` and again at `20703af`: **clean**. The 6 ignored tests
+are the opt-in GPU probes; they were **not executed** (no adapter).
 
-**G-ENV-1 (pre-existing, not this branch):** on non-Windows targets
+**Windows compile: NOT TESTED here — owner runs it on Windows.** A Linux cross
+type-check for `x86_64-pc-windows-msvc` was attempted with owner permission and
+abandoned: `ring`, `stacker` and `zstd-sys` build scripts need MSVC/Windows SDK
+headers, and the `real-workbench` feature pulls `ext-calc`→polars→zstd. No
+Windows evidence is claimed. Commands for the owner are in §6.
+
+**G-ENV-1 — recorded narrowly scoped exception (pre-existing, not this branch):** on non-Windows targets
 `examples/webview_stage_a.rs:393` uses `eprintln!`, which the workspace
 `print_stderr` lint rejects. The file is untouched by this branch and the
 canonical gate is Windows `check.ps1`, where that branch is not compiled. A
@@ -69,7 +76,7 @@ Verified by executable tests in this session unless stated otherwise.
   (`init_project` → `commit_version{no_e2k, analyze:false}` → snapshot →
   `model_scene_packet`), never launching ETABS, and diffs its per-entity
   `SceneFidelityEntry` list against the native labels. On the public fixture
-  set: **22/22 frames identical (tier and ordered reasons), 15/15 shell
+  set (7 fixtures, incl. a cross-story near-coincident void): **24/24 frames identical (tier and ordered reasons), 19/19 shell
   void/host labels identical, 1 intentional native-stricter case** (a shell that
   partially overlaps a declared void: `ext-api` draws it, the native viewer
   withholds it rather than paint over the void). The oracle found one real
@@ -116,6 +123,8 @@ example itself is Windows-only and compiles nothing on Linux).
 | P0-PK-07 | [#25](https://github.com/tadoEng/egui_test/issues/25) | Coplanar overlaps | #25 | unit | PASS (disclosed) | deterministic winner + `coincident` count | GPU may show other face | Owner policy | No |
 | P0-PK-08 | [#25](https://github.com/tadoEng/egui_test/issues/25) | Inspector shows actual source attributes + fidelity | #467 §A | vp | PASS | `describe()` asserted | No Windows capture | Windows capture | No |
 | P0-PK-09 | [#25](https://github.com/tadoEng/egui_test/issues/25) | Zero incorrect selections, deterministic matrix | #25 | unit | PASS on fixture matrix | 6 picking + 2 vp tests | Matrix is small; no physical mouse | Expand + Windows | Yes |
+| P0-SH-09 | [#7](https://github.com/tadoEng/egui_test/issues/7) | Conservative overlap fallback is story-scoped (review P1) | `ext-api` host rule is same-story | unit (pre-fix FAIL recorded) + oracle | PASS | `an_opening_on_another_story_never_withholds_…` failed on `aebd019` before the fix, passes @`e32d48f`; oracle cross-story fixture matches | — | Independent re-review | No |
+| P0-PK-10 | [#25](https://github.com/tadoEng/egui_test/issues/25) | UNLINKED provenance refuses element picking (review P1) | workbench `Session::linked` | vp + mutation | PASS (gate) / NOT TESTED (Windows host) | `unlinked_provenance_clears_and_refuses_…`; removing the refusal fails it | Workbench host wiring compiles only on Windows | Owner Windows run (§6) | Yes |
 
 ### B. Scale and performance (P1) — #467 §B, GATE-03 #4, #24
 
@@ -200,3 +209,29 @@ hold unresolved; toolchain split (1.99.1 vs 1.96.0).
 | GATE-05 E2K fidelity #7 | **PARTIAL — NO-GO** | native labels match `ext-api` on public fixtures (oracle); remaining geometry gaps above; owner policy pending |
 | GATE-06 runtime parity #8 | **NO-GO** | not started natively; #18 hold |
 | **Overall migration** | **HOLD** | six gates open, no functional parity, no ADR |
+
+## 6. Owner Windows verification (to run on the owner's machine)
+
+From a fresh checkout of the PR head, in the repo root, using the AGENTS.md
+build-tool setup (own `.codex-target`, sccache optional):
+
+```powershell
+$env:CARGO_TARGET_DIR = ".codex-target"
+pwsh ./check.ps1 -Offline
+cargo build --release --locked --offline --example native_workbench --features real-workbench
+cargo test --locked --offline --example native_workbench --features real-workbench
+cargo test --locked --offline --example native_e2k --features real-workbench -- --include-ignored
+```
+
+Manual smoke on the public workbench fixture (synthetic data only), at display
+scaling 100 %, 125 % and 150 %:
+
+1. Click a beam, column, wall and slab: the inspector shows that element's
+   key, section/shell attributes and fidelity reasons; the highlight matches.
+2. Click a member in front of a wall/slab: the front member is selected.
+3. Ctrl-click a second element (both listed); Ctrl-click it again (removed);
+   click empty space (cleared).
+4. Resize and orbit, then repeat step 1.
+5. Trigger the UNLINKED recheck control: selection and hover clear, the
+   viewport shows "UNLINKED preview: element selection disabled…", clicks do
+   nothing; restoring the same file still refuses; only reopen re-enables.
