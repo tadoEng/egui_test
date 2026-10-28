@@ -1,2 +1,4 @@
 # Preserve the exact verified Apache distribution bytes on Windows checkouts.
 assets/vendor/echarts/echarts.min.js -text
+# The exact HTML bytes also define the allow-listed bootstrap data URL.
+examples/webview_stage_a/chart.html -text

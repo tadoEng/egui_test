@@ -20,7 +20,7 @@ Issue bodies, rather than historical baseline paragraphs, govern acceptance.
 | SolidCraft | `4f2c133d01d1b3d8bae026af2ae76b5c677949ac` | Source architecture reference, not dependency |
 | Storytold craft-libs | `b9ba47f58902e839a8f102b824bb9f0beaac335c` | Source architecture reference, not dependency |
 
-PR #3 remains draft/unmerged. The reviewer reran `./check.ps1 -Offline` on its
+At the baseline review, PR #3 was draft/unmerged. The reviewer reran `./check.ps1 -Offline` on its
 exact head on Windows: formatting, native all-target/all-feature check, strict
 Clippy, **23 tests**, doc tests (zero), and WASM all-target/all-feature check
 passed. `git diff --check` passed; the checkout remained clean. The independent
@@ -36,8 +36,13 @@ Environmental incremental-cache hard-link warnings did not bypass Clippy.
 
 ## Parallel tracks and first PR boundaries
 
-All initial branches are stacked on PR #3's branch, with that dependency stated
-in each draft PR. They do not merge one another or change production.
+All initial branches started from PR #3's branch, with that dependency stated
+in each draft PR. They do not change EtabExtension production.
+
+GitHub now records PR #3, the programme document PR #15, and WebView PR #17 as
+merged on 2026-10-26. Those merges occurred outside this implementation run;
+this run did not issue merge commands. PR #16 and PR #18 remain draft/unmerged.
+These repository merges do not establish acceptance of any native gate.
 
 | Track | First smallest implementation | Explicit follow-up boundary |
 |---|---|---|
@@ -66,13 +71,13 @@ issues or acceptance of N/A items. No automatic continuation into real ETABS.
 
 ## First published slices
 
-| Draft PR | Exact implementation head | Current evidence / assessment |
+| Track PR / follow-up | Exact reviewed head | Current evidence / assessment |
 |---|---|---|
-| [#16: native GPU core](https://github.com/tadoEng/egui_test/pull/16) | `57c22dabc3aabd6d4a8e864ff01de02d697329bc` | PARTIAL: 23 baseline + 3 CPU tests and full offline gate pass; explicit RTX 3050 Ti depth/buffer-reuse probe passes; Windows release builds. No native-window interaction, picking or presentation performance acceptance. |
-| [#17: offline WebView child](https://github.com/tadoEng/egui_test/pull/17) | `7e4a917c7483f2fc2c1ebfa3c1b47fce448f64c3` | PARTIAL: 23 baseline + 11 tests and full offline gate pass; release builds; three actual hidden WebView2 156.0.4314.42 two-way message smokes pass. Manual interaction, docking/DPI, network capture and performance remain unverified. |
-| [#18: read-only API adapter](https://github.com/tadoEng/egui_test/pull/18) | `67a9811332486d37a84cd44f2a72642af4d2d6cf` | PARTIAL: initial native compile and WASM fencing pass; final tests/Clippy pending. Unconditional backend closure adds 503 lockfile records; first partly cached library check 29m 22s. |
+| [#16: native GPU core](https://github.com/tadoEng/egui_test/pull/16) | `57c22dabc3aabd6d4a8e864ff01de02d697329bc` | PARTIAL: 23 baseline + 3 CPU tests and full offline gate pass; explicit RTX 3050 Ti/Vulkan depth/buffer-reuse probe passes; Windows release builds. Fit contains all fixture vertices in tall/wide viewports. No native-window interaction, picking or presentation performance acceptance. |
+| [#17: offline WebView child](https://github.com/tadoEng/egui_test/pull/17), merged at `7e4a917` | `29f0747e0a10dfa0c13d36bce48835f8bfdbb620` (evidence follow-up) | PARTIAL: 23 baseline + 11 tests and full offline gate pass; release builds; three fresh hidden WebView2 156.0.4314.42 two-way message smokes pass. Manifest binds binary/reports to runtime source commit `7e4a917`; this follow-up adds evidence/byte policy only. Manual interaction, docking/DPI, network capture and performance remain unverified. |
+| [#18: read-only API adapter](https://github.com/tadoEng/egui_test/pull/18) | `6336023c37777ee9c98fb086cbe78aad498063f9` | PARTIAL: full offline gate and all 28 tests pass, including branch history before version selection, DTO parity, non-mutation and stale/busy handling. Unconditional closure adds 503 lockfile records; first check 29m 22s, first test codegen 63m 40s. LNK4098 CRT warning remains unresolved; release/package and engineering parity unverified. |
 
-Each draft links its source map, tests, measurements, limitations and remaining
+Each track links its source map, tests, measurements, limitations and remaining
 criteria. Later commits supersede the listed head only when explicitly checked
 and recorded in that PR. All remain unmerged and pending independent/owner
 review; none is a gate PASS or migration approval.
