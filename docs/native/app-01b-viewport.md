@@ -90,7 +90,19 @@ Renderer beautification (edge lines, grid, gradient, selection outline), the
 
 ## Test receipts (agent-reported; Linux container)
 
-Gate on exact head `69ee396` (`evidence/app-01b/gate-01b-69ee396.txt`, script
+**Current receipt: `0e7330b`** (`evidence/app-01b/gate-01b-0e7330b.txt`, the
+same `gate.sh.txt`), re-run in full after the story-selection fix:
+- every step is green except the known G-ENV-1 whole-workspace Clippy exception
+  (`webview_stage_a.rs:393` `eprintln!`);
+- workspace tests: **153 passed, 0 failed, 7 ignored** (the two new story
+  tests);
+- GPU, `talos-native` + `lab-viewport`: **33 passed**;
+- GPU examples: **41 passed**.
+
+The earlier commit `0ed117f` only added the `69ee396` receipt (docs). The
+`69ee396` receipt does not certify `0e7330b`; the line above does.
+
+Earlier gate on `69ee396` (`evidence/app-01b/gate-01b-69ee396.txt`, script
 `gate.sh.txt`; `--locked --offline -j 2`):
 
 - check, fmt, doc tests and WASM: **pass**.
