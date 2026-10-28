@@ -15,7 +15,7 @@ pub struct App {
     view: Box<dyn ModelView>,
     loader: Loader,
     last_refusal: Option<Refusal>,
-    /// The Results chart outside egui (ECharts in a `WebView2` child on
+    /// The Results chart outside egui (`ECharts` in a `WebView2` child on
     /// Windows); without one, or while it is unavailable, the page draws it.
     chart: Option<Box<dyn EmbeddedChart>>,
 }
@@ -32,7 +32,7 @@ impl App {
         )
         .with_platform_chart(cc)
     }
-    /// Windows: the Results chart is ECharts in a `WebView2` child window.
+    /// Windows: the Results chart is `ECharts` in a `WebView2` child window.
     /// If it cannot be created (no `WebView2` runtime), the page draws it.
     #[cfg(target_os = "windows")]
     fn with_platform_chart(self, cc: &eframe::CreationContext<'_>) -> Self {
@@ -343,10 +343,16 @@ impl eframe::App for App {
             let covered = egui::Popup::is_any_open(&ctx)
                 || ctx.input(|input| input.viewport().minimized == Some(true));
             let (area, content) = match embed {
-                Some(embed) => (Some(embed.area).filter(|_| !covered), Some(embed.content)),
+                Some(embed) => ((!covered).then_some(embed.area), Some(embed.content)),
                 None => (None, None),
             };
-            actions.extend(chart.sync(&ctx, area, content));
+            let requested = chart.sync(&ctx, area, content);
+            if !requested.is_empty() {
+                // The chart shows the result (e.g. the selected band) only
+                // when it is next synced, so draw another frame.
+                ctx.request_repaint();
+            }
+            actions.extend(requested);
         }
         for action in actions {
             self.dispatch(action);

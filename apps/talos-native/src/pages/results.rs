@@ -6,7 +6,7 @@
 //! nothing recalculated); with no cached results, or refused ones, the card
 //! says why and plots nothing.
 //!
-//! With an embedded chart (ECharts in a `WebView2` child on Windows) the chart
+//! With an embedded chart (`ECharts` in a `WebView2` child on Windows) the chart
 //! card keeps its header and leaves the plot area to that chart: [`show`]
 //! returns the area and the [`Content`] to draw in it.
 use crate::chart_bridge::{Content, Style, css};

@@ -1,9 +1,9 @@
-//! Windows: the Results chart as ECharts in a `WebView2` child window.
+//! Windows: the Results chart as `ECharts` in a `WebView2` child window.
 //!
 //! The transport is the bounded offline child `WebView` the Windows examples
 //! already use (`examples/support/webview_host.rs`): authored HTML only, no
 //! navigation, no new windows, no downloads, IPC messages of at most 1 KiB.
-//! The ECharts runtime is the pinned offline asset in `assets/vendor/echarts`.
+//! The `ECharts` runtime is the pinned offline asset in `assets/vendor/echarts`.
 //! What the chart is sent and what it may answer is [`crate::chart_bridge`].
 #[path = "../../../examples/support/webview_host.rs"]
 mod webview_host;

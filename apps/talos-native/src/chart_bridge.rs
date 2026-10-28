@@ -1,6 +1,6 @@
 //! The typed contract between the Results page and an embedded chart.
 //!
-//! On Windows the Results chart is ECharts in a WebView2 child window
+//! On Windows the Results chart is `ECharts` in a `WebView2` child window
 //! (`webview_chart`). This module is the platform-independent part, so it is
 //! tested everywhere: the host sends a [`Frame`] (one stored profile of one
 //! version's cached results, tagged with the version, the results' source
@@ -38,7 +38,7 @@ pub trait EmbeddedChart {
 
 /// Colours from the TALOS theme, as CSS colours, so the chart matches the
 /// card it sits in.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Style {
     pub background: String,
     pub text: String,
@@ -193,14 +193,13 @@ impl Bridge {
         if self.sent.as_ref() == Some(&key) {
             return None;
         }
-        Some(
-            serde_json::to_string(frame)
-                .map(|json| {
-                    self.sent = Some(key);
-                    json
-                })
-                .map_err(|error| format!("Serialize chart frame: {error}")),
-        )
+        Some(match serde_json::to_string(frame) {
+            Ok(json) => {
+                self.sent = Some(key);
+                Ok(json)
+            }
+            Err(error) => Err(format!("Serialize chart frame: {error}")),
+        })
     }
 
     /// Delivery failed: send the current frame again next time.

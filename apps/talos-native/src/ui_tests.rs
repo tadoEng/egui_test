@@ -1246,7 +1246,7 @@ impl crate::chart_bridge::EmbeddedChart for FakeChart {
             .iter()
             .filter_map(|raw| probe.bridge.accept(raw).ok())
             .collect();
-        probe.bridge.update(content).unwrap();
+        probe.bridge.update(content).expect("update");
         probe.area = area;
         probe.synced += 1;
         actions
@@ -1295,7 +1295,7 @@ fn the_embedded_chart_covers_the_plot_area_only_on_results_and_never_over_a_popu
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     settle(&mut harness);
     let area = probe.borrow().area.expect("placed on Results");
-    let table = harness.get_by_label("Story table").rect();
+    let table = harness.get_by_label("STORY TABLE").rect();
     assert!(
         area.width() > 300.0 && area.height() > 200.0,
         "the plot area: {area:?}"

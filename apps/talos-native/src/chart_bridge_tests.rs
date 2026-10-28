@@ -54,9 +54,10 @@ fn a_frame_carries_identity_and_stored_values_with_gaps() {
     let mut bridge = Bridge::default();
     bridge
         .update(Some(content("Story shear", Some("L2"))))
-        .unwrap();
+        .expect("valid JSON");
     let json: serde_json::Value =
-        serde_json::from_str(&bridge.outgoing().unwrap().unwrap()).unwrap();
+        serde_json::from_str(&bridge.outgoing().expect("a frame").expect("serialized"))
+            .expect("valid JSON");
     assert_eq!(json["protocol"], 1);
     assert_eq!(json["version"], "main/v2");
     assert_eq!(json["source"], "abc123");
@@ -70,7 +71,7 @@ fn a_frame_carries_identity_and_stored_values_with_gaps() {
     assert!(
         json["style"]["series"][0]
             .as_str()
-            .unwrap()
+            .expect("valid JSON")
             .starts_with("rgba(")
     );
     // Sent once; nothing new until the frame or the selection changes.
@@ -80,32 +81,36 @@ fn a_frame_carries_identity_and_stored_values_with_gaps() {
 #[test]
 fn a_new_selection_resends_without_a_new_generation_and_new_content_starts_one() {
     let mut bridge = Bridge::default();
-    bridge.update(Some(content("Story shear", None))).unwrap();
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("update");
     bridge.outgoing();
     bridge
         .update(Some(content("Story shear", Some("Roof"))))
-        .unwrap();
+        .expect("valid JSON");
     assert_eq!(generation(&bridge), 1);
     assert!(bridge.outgoing().is_some());
     bridge
         .update(Some(content("Story moment", Some("Roof"))))
-        .unwrap();
+        .expect("valid JSON");
     assert_eq!(generation(&bridge), 2);
     assert!(bridge.outgoing().is_some());
     // Nothing charted, then the same content again: still a new generation,
     // so nothing aimed at the earlier one can land.
-    bridge.update(None).unwrap();
+    bridge.update(None).expect("update");
     assert!(bridge.outgoing().is_none());
     bridge
         .update(Some(content("Story moment", Some("Roof"))))
-        .unwrap();
+        .expect("valid JSON");
     assert_eq!(generation(&bridge), 3);
 }
 
 #[test]
 fn a_failed_delivery_is_sent_again() {
     let mut bridge = Bridge::default();
-    bridge.update(Some(content("Story shear", None))).unwrap();
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("update");
     assert!(bridge.outgoing().is_some());
     bridge.resend();
     assert!(bridge.outgoing().is_some());
@@ -116,7 +121,9 @@ fn selections_are_accepted_only_for_the_frame_shown() {
     let mut bridge = Bridge::default();
     // Nothing charted yet: refused.
     assert_eq!(bridge.accept(&select(1, "L2")).err(), Some(Refused::Stale));
-    bridge.update(Some(content("Story shear", None))).unwrap();
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("update");
     assert!(matches!(
         bridge.accept(&select(1, "L2")),
         Ok(Action::SelectResultStory(Some(story))) if story == "L2"
@@ -131,12 +138,15 @@ fn selections_are_accepted_only_for_the_frame_shown() {
         Ok(Action::SelectResultStory(None))
     ));
     // The query changes: a click on the previous chart arrives late.
-    bridge.update(Some(content("Story moment", None))).unwrap();
+    bridge
+        .update(Some(content("Story moment", None)))
+        .expect("update");
     assert_eq!(bridge.accept(&select(1, "L2")).err(), Some(Refused::Stale));
     assert!(bridge.accept(&select(2, "L2")).is_ok());
     // Another version or source with the right generation is still refused.
     for (field, value) in [("version", "main/v1"), ("source", "other")] {
-        let mut message: serde_json::Value = serde_json::from_str(&select(2, "L2")).unwrap();
+        let mut message: serde_json::Value =
+            serde_json::from_str(&select(2, "L2")).expect("valid JSON");
         message[field] = value.into();
         assert_eq!(
             bridge.accept(&message.to_string()).err(),
@@ -154,10 +164,13 @@ fn selections_are_accepted_only_for_the_frame_shown() {
 #[test]
 fn malformed_oversized_and_unknown_messages_are_refused() {
     let mut bridge = Bridge::default();
-    bridge.update(Some(content("Story shear", None))).unwrap();
-    let mut extra: serde_json::Value = serde_json::from_str(&select(1, "L2")).unwrap();
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("update");
+    let mut extra: serde_json::Value = serde_json::from_str(&select(1, "L2")).expect("valid JSON");
     extra["script"] = "alert(1)".into();
-    let mut protocol: serde_json::Value = serde_json::from_str(&select(1, "L2")).unwrap();
+    let mut protocol: serde_json::Value =
+        serde_json::from_str(&select(1, "L2")).expect("valid JSON");
     protocol["protocol"] = 2.into();
     let clear_with_story = select(1, "L2").replace("select_story", "clear_selection");
     let long = select(1, &"L".repeat(MAX_MESSAGE));
@@ -222,10 +235,12 @@ fn the_chart_pages_own_messages_are_accepted_and_go_stale() {
     let posted: Vec<String> = serde_json::from_str(include_str!(
         "../../../docs/native/evidence/app-01c-echarts/messages.json"
     ))
-    .unwrap();
+    .expect("valid JSON");
     assert!(is_ready(&posted[0]), "the page's ready message");
     let mut bridge = Bridge::default();
-    bridge.update(Some(content("Story shear", None))).unwrap();
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("update");
     let (first, second): (Vec<_>, Vec<_>) = posted[1..]
         .iter()
         .partition(|raw| !raw.contains(r#""generation":2"#));
@@ -233,7 +248,9 @@ fn the_chart_pages_own_messages_are_accepted_and_go_stale() {
         assert!(bridge.accept(raw).is_ok(), "{raw}");
     }
     // The page was then sent generation 2 ("Story moment").
-    bridge.update(Some(content("Story moment", None))).unwrap();
+    bridge
+        .update(Some(content("Story moment", None)))
+        .expect("update");
     for raw in &second {
         assert!(
             matches!(bridge.accept(raw), Ok(Action::SelectResultStory(Some(story))) if story == "Roof"),
