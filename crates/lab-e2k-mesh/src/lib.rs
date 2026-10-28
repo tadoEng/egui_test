@@ -10,6 +10,7 @@ use std::{collections::BTreeSet, fmt, ops::Range};
 const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 const CONTRACT_VERSION: u32 = 1;
 const EPS: f64 = 1.0e-7;
+mod openings;
 pub mod public_fixture;
 /// Fixed limitations, never inferred model-specific engineering status.
 pub const FIDELITY_LIMITATIONS: [&str; 4] = [
@@ -245,10 +246,7 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
     for frame in &scene.frames {
         builder.frame(frame, factor, config.proxy_half_extents_m)?;
     }
-    let has_void = scene.shells.iter().any(|s| s.opening == Some(true));
-    for shell in &scene.shells {
-        builder.shell(shell, factor, has_void)?;
-    }
+    builder.shells(&scene.shells, factor)?;
     if builder.indices.is_empty() {
         return Err(Error::NoGeometry);
     }
@@ -404,11 +402,36 @@ impl Builder {
 
         Ok(())
     }
+    /// Opening attribution needs every ring first, so shells are built together.
+    fn shells(&mut self, shells: &[ext_e2k::ShellPolygon], factor: f64) -> Result<(), Error> {
+        let rings = shells
+            .iter()
+            .map(|shell| {
+                shell
+                    .points
+                    .iter()
+                    .map(|p| world(*p, factor).map(|p| local(p, self.origin_m)))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let openings: Vec<_> = shells
+            .iter()
+            .zip(&rings)
+            .filter(|(shell, _)| shell.opening == Some(true))
+            .map(|(_, ring)| openings::Opening::new(ring))
+            .collect();
+        for (shell, ring) in shells.iter().zip(&rings) {
+            let hosts_opening = shell.opening != Some(true)
+                && openings.iter().any(|opening| opening.withholds(ring));
+            self.shell(shell, ring, hosts_opening)?;
+        }
+        Ok(())
+    }
     fn shell(
         &mut self,
         shell: &ext_e2k::ShellPolygon,
-        factor: f64,
-        has_void: bool,
+        points: &[Point],
+        hosts_opening: bool,
     ) -> Result<(), Error> {
         if !self.seen.insert(shell.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -419,19 +442,14 @@ impl Builder {
             _ => SourceClass::OtherShell,
         };
         let first = self.index()?;
-        let points = shell
-            .points
-            .iter()
-            .map(|p| world(*p, factor).map(|p| local(p, self.origin_m)))
-            .collect::<Result<Vec<_>, _>>()?;
         let limitation = if shell.opening == Some(true) {
             Some(Limitation::OpeningVoid)
-        } else if has_void {
+        } else if hosts_opening {
             Some(Limitation::HostOpeningSubtractionUnavailable)
         } else if shell.opening.is_none() {
             Some(Limitation::UnknownOpeningState)
-        } else if let Some(normal) = convex_normal(&points) {
-            self.polygon(&points, normal, color(class))?;
+        } else if let Some(normal) = convex_normal(points) {
+            self.polygon(points, normal, color(class))?;
             None
         } else {
             Some(Limitation::InvalidOrConcaveShell)

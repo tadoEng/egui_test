@@ -270,3 +270,111 @@ fn proxy_face_normals_point_away_from_the_independent_source_centerline() {
         }
     }
 }
+/// Two-story public fixture with three independent shells and one explicit void
+/// that lies wholly inside floor `S` only. Wall `W` and the roof-level floor `R`
+/// share no material with the void.
+fn scoped_opening_source() -> String {
+    SOURCE
+        .replace(
+            " POINT \"4\" 0 10\n",
+            " POINT \"4\" 0 10\n POINT \"5\" 4 4\n POINT \"6\" 6 4\n POINT \"7\" 6 6\n POINT \"8\" 4 6\n POINT \"9\" 20 0\n POINT \"10\" 30 0\n POINT \"11\" 30 10\n POINT \"12\" 20 10\n",
+        )
+        .replace(
+            "$ LINE ASSIGNS",
+            " AREA \"VOID\" FLOOR 4 \"5\" \"6\" \"7\" \"8\" 0 0 0 0\n AREA \"R\" FLOOR 4 \"9\" \"10\" \"11\" \"12\" 0 0 0 0\n AREA \"W\" PANEL 4 \"2\" \"3\" \"3\" \"2\" 0 0 0 0\n$ LINE ASSIGNS",
+        )
+        .replace(
+            "$ END OF MODEL FILE",
+            " AREAASSIGN \"VOID\" \"Roof\" OPENING \"YES\"\n AREAASSIGN \"R\" \"Roof\" OPENING \"NO\"\n AREAASSIGN \"W\" \"Roof\" OPENING \"NO\"\n$ END OF MODEL FILE",
+        )
+}
+fn entity<'a>(mesh: &'a Mesh, id: &str) -> &'a EntityMesh {
+    mesh.entities()
+        .iter()
+        .find(|e| matches!(&e.key, EntityKey::Instance { id: key, .. } if key.as_str() == id))
+        .unwrap_or_else(|| panic!("{id} should be projected"))
+}
+#[test]
+fn an_opening_withholds_only_coplanar_overlapping_hosts() {
+    let mesh = build(scoped_opening_source().as_bytes(), Config::default()).expect("source");
+    assert_eq!(
+        entity(&mesh, "VOID").limitation,
+        Some(Limitation::OpeningVoid)
+    );
+    let host = entity(&mesh, "S");
+    assert_eq!(
+        host.limitation,
+        Some(Limitation::HostOpeningSubtractionUnavailable),
+        "the void lies inside S, so S must not be painted as solid material"
+    );
+    assert!(host.indices.is_empty());
+    for independent in ["R", "W"] {
+        let shell = entity(&mesh, independent);
+        assert_eq!(
+            (shell.mode, shell.limitation),
+            (DisplayMode::ZeroThicknessSurface, None),
+            "{independent} shares no material with the void and must stay visible"
+        );
+        assert!(!shell.indices.is_empty());
+    }
+}
+#[test]
+fn an_opening_overlap_is_detected_without_any_vertex_strictly_inside() {
+    // A full-width strip void whose vertices all lie on the host boundary.
+    let source = scoped_opening_source()
+        .replace("POINT \"5\" 4 4", "POINT \"5\" 0 0")
+        .replace("POINT \"6\" 6 4", "POINT \"6\" 10 0")
+        .replace("POINT \"7\" 6 6", "POINT \"7\" 10 5")
+        .replace("POINT \"8\" 4 6", "POINT \"8\" 0 5");
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    assert_eq!(
+        entity(&mesh, "S").limitation,
+        Some(Limitation::HostOpeningSubtractionUnavailable)
+    );
+    assert_eq!(entity(&mesh, "R").limitation, None);
+}
+#[test]
+fn an_opening_that_only_touches_a_neighbour_edge_does_not_hide_it() {
+    // Void occupies x 10..14, sharing only the x=10 edge with S and lying in
+    // the gap before R. Neither neighbour loses material.
+    let source = scoped_opening_source()
+        .replace("POINT \"5\" 4 4", "POINT \"5\" 10 0")
+        .replace("POINT \"6\" 6 4", "POINT \"6\" 14 0")
+        .replace("POINT \"7\" 6 6", "POINT \"7\" 14 10")
+        .replace("POINT \"8\" 4 6", "POINT \"8\" 10 10");
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    for neighbour in ["S", "R", "W"] {
+        assert_eq!(entity(&mesh, neighbour).limitation, None, "{neighbour}");
+    }
+}
+#[test]
+fn a_degenerate_opening_conservatively_withholds_hosts_by_bounds() {
+    // Collinear void ring: no plane, so overlap cannot be proven absent.
+    let source = scoped_opening_source()
+        .replace("POINT \"7\" 6 6", "POINT \"7\" 8 4")
+        .replace("POINT \"8\" 4 6", "POINT \"8\" 5 4");
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    assert_eq!(
+        entity(&mesh, "S").limitation,
+        Some(Limitation::HostOpeningSubtractionUnavailable)
+    );
+    assert_eq!(entity(&mesh, "R").limitation, None);
+}
+#[test]
+fn a_perpendicular_wall_through_the_void_footprint_is_not_its_host() {
+    let source = scoped_opening_source()
+        .replace(
+            " POINT \"9\" 20 0\n",
+            " POINT \"9\" 20 0\n POINT \"13\" 5 0\n POINT \"14\" 5 10\n",
+        )
+        .replace(
+            "AREA \"W\" PANEL 4 \"2\" \"3\" \"3\" \"2\"",
+            "AREA \"W\" PANEL 4 \"13\" \"14\" \"14\" \"13\"",
+        );
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    assert_eq!(entity(&mesh, "W").limitation, None);
+    assert_eq!(
+        entity(&mesh, "S").limitation,
+        Some(Limitation::HostOpeningSubtractionUnavailable)
+    );
+}
