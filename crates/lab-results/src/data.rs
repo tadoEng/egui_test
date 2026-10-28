@@ -28,12 +28,12 @@ pub struct Choices {
     pub cases: Vec<String>,
     pub forces: Vec<String>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 pub struct Series {
     pub name: String,
     pub values: Vec<Option<f64>>,
 }
-#[derive(Serialize)]
+#[derive(Serialize, Debug, PartialEq)]
 pub struct Plot {
     pub title: String,
     pub unit: String,
