@@ -212,26 +212,72 @@ hold unresolved; toolchain split (1.99.1 vs 1.96.0).
 
 ## 6. Owner Windows verification (to run on the owner's machine)
 
-From a fresh checkout of the PR head, in the repo root, using the AGENTS.md
-build-tool setup (own `.codex-target`, sccache optional):
+Record the exact PR head SHA, Windows build, Rust version, GPU/driver and
+PASS/FAIL per step. Publish only sanitized public-fixture evidence: no private
+model source, names, counts, screenshots or timings.
+
+**Code compiled here vs not.** Everything except the Windows-only
+`native_workbench`/`native_dashboard` host modules was compiled and tested on
+Linux. `examples/native_workbench/host.rs` (the `selection_allowed` wiring and
+`--public-workbench-interactive`) has **never been compiled**; step 1 is its
+first compile.
+
+### Step 1 — canonical gate and builds
 
 ```powershell
 $env:CARGO_TARGET_DIR = ".codex-target"
 pwsh ./check.ps1 -Offline
 cargo build --release --locked --offline --example native_workbench --features real-workbench
 cargo test --locked --offline --example native_workbench --features real-workbench
-cargo test --locked --offline --example native_e2k --features real-workbench -- --include-ignored
 ```
 
-Manual smoke on the public workbench fixture (synthetic data only), at display
-scaling 100 %, 125 % and 150 %:
+### Step 2 — hidden automated smoke (no physical input; window is invisible)
 
-1. Click a beam, column, wall and slab: the inspector shows that element's
-   key, section/shell attributes and fidelity reasons; the highlight matches.
-2. Click a member in front of a wall/slab: the front member is selected.
+```powershell
+cargo test --locked --offline --example native_e2k --features real-workbench -- --include-ignored
+cargo run --release --locked --offline --example native_e2k --features real-geometry -- --public-smoke
+cargo run --release --locked --offline --example native_workbench --features real-workbench -- --public-workbench-smoke
+```
+
+These own and remove their temporary inputs and print a receipt. They prove GPU
+upload/readback and scripted chart/UNLINKED behavior only; they are **not**
+physical mouse, keyboard or DPI evidence.
+
+### Step 3 — visible physical tests on an owned public fixture
+
+```powershell
+cargo run --release --locked --offline --example native_workbench --features real-workbench -- --public-workbench-interactive
+```
+
+`--public-workbench-interactive` writes the authored public fixture (synthetic
+E2K + synthetic cached results) to an owned temporary directory, opens a
+visible window, and removes that directory on exit. It never accepts a user
+path and never touches a real snapshot or E2K. At display scaling 100 %, 125 %
+and 150 %:
+
+1. Click the beam, column and slab of the fixture (it has no wall; wall
+   picking is exercised in step 4 and by the unit/viewport tests): the inspector overlay shows
+   that element's key, section/shell attributes and fidelity reasons, and only
+   that element is highlighted.
+2. Orbit so a beam is in front of the slab; click the beam: the beam (front
+   surface) is selected, not the slab.
 3. Ctrl-click a second element (both listed); Ctrl-click it again (removed);
-   click empty space (cleared).
-4. Resize and orbit, then repeat step 1.
-5. Trigger the UNLINKED recheck control: selection and hover clear, the
-   viewport shows "UNLINKED preview: element selection disabled…", clicks do
-   nothing; restoring the same file still refuses; only reopen re-enables.
+   click empty background (cleared). Hover shows a separate "Hover:" line.
+4. Resize the window and orbit/zoom, then repeat step 1.
+5. Charts: select a story in a chart and in the story list; the 3D story
+   highlight and table follow; element selection takes precedence over the
+   story highlight while an element is selected.
+6. Press **"UNLINK test: invalidate owned public fixture"**. Expected: the red
+   UNLINKED notice; element selection and hover clear; the viewport shows
+   "UNLINKED preview: element selection disabled…"; clicks and Ctrl-clicks do
+   nothing; charts/story selection are disabled. The control restores the
+   fixture bytes and rechecks: it must remain UNLINKED. Pressing "Recheck
+   selected version" must also remain UNLINKED.
+7. Reopen = close the window and run the command again: picking works on a
+   fresh, linked fixture.
+
+### Step 4 — visible source E2K picking on a local copy (private, stays local)
+
+Copy one committed version directory to a scratch location first; never point
+the workbench at a live project. Repeat step 3.1–3.4 there. Record PASS/FAIL
+only; keep everything else local.
