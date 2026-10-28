@@ -125,10 +125,12 @@ dependency lines and no new package.
 
 | What | Where | Result here |
 |---|---|---|
-| Contract: frame identity and stored values, generations, re-send on a selection, failed-delivery retry, stale version/source/generation refused, unknown story, malformed/oversized/unknown messages, exact `ready`, shortcut allowlist | `chart_bridge_tests.rs` (8 tests) | see the PR's test receipt |
-| The page's **own** posted messages accepted for their frame and refused once stale | `chart_bridge_tests.rs`, reading `evidence/app-01c-echarts/messages.json` | see the PR's test receipt |
-| Shell: chart placed over the plot area (beside the table) only on Results; hidden under an open selector list and back after; hidden on Model; frame carries the loaded version and the snapshot fingerprint; a page click selects; a late click after a metric change is refused; forwarded Ctrl+1 switches to Model; an unavailable chart leaves the native chart working | `ui_tests.rs` (3 tests, stand-in chart window) | see the PR's test receipt |
+| Contract: frame identity and stored values, generations, re-send on a selection, failed-delivery retry, stale version/source/generation refused, unknown story, malformed/oversized/unknown messages, exact `ready`, shortcut allowlist | `chart_bridge_tests.rs` (8 tests) | **pass** |
+| The page's **own** posted messages accepted for their frame and refused once stale | `chart_bridge_tests.rs`, reading `evidence/app-01c-echarts/messages.json` | **pass** (one of the 8) |
+| Shell: chart placed over the plot area (beside the table) only on Results; hidden under an open selector list and back after; hidden on Model; frame carries the loaded version and the snapshot fingerprint; a page click selects; a late click after a metric change is refused; forwarded Ctrl+1 switches to Model; an unavailable chart leaves the native chart working | `ui_tests.rs` (3 tests, stand-in chart window) | **pass**; they caught a missing repaint after an accepted chart message (fixed) |
 | ECharts page in headless **Chromium** (the engine under `WebView2`): ready first; a row click posts `select_story` with identity; clicking the selected story clears; clicks outside the grid post nothing; Escape clears; only workspace shortcuts are forwarded; an older generation is ignored; malformed frames are refused; `fetch` blocked by the CSP; no page errors | `evidence/app-01c-echarts/chart_page_test.js` → `chart_page_test.txt` | **11/11 pass** |
+
+Receipt: [`evidence/app-01c-echarts/linux-receipt.txt`](evidence/app-01c-echarts/linux-receipt.txt) (fmt, Clippy on the TALOS crates, 152 workspace tests).
 
 The light and dark images in `evidence/app-01c-echarts/` are the page with an
 **authored synthetic** frame (made-up values, a gap, a stored reference), not
