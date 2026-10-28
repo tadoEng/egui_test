@@ -181,9 +181,12 @@ impl eframe::App for App {
         egui::Panel::top("talos-header")
             .frame(chrome)
             .show(ui, |ui| actions.extend(self.header(ui)));
-        egui::Panel::top("talos-warning")
-            .frame(egui::Frame::NONE)
-            .show(ui, |ui| self.warning(ui));
+        // Only drawn when something is wrong; an empty panel would still take space.
+        if matches!(self.state.session.document, DocumentState::Failed { .. }) {
+            egui::Panel::top("talos-warning")
+                .frame(egui::Frame::NONE)
+                .show(ui, |ui| self.warning(ui));
+        }
         egui::Panel::top("talos-tabs")
             .frame(chrome.inner_margin(egui::Margin::symmetric(8, 0)))
             .show(ui, |ui| {

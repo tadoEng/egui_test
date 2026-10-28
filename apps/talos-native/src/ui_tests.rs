@@ -227,3 +227,162 @@ fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     assert_eq!(app.last_refusal(), Some(Refusal::StaleResponse));
     assert!(present(&harness, "Source entities"));
 }
+
+/// Paint bounds (logical points) of every text label under `root`.
+fn label_rects<'a>(
+    nodes: impl Iterator<Item = egui_kittest::Node<'a>>,
+) -> Vec<(String, egui::Rect)> {
+    nodes
+        .filter(|node| node.accesskit_node().role() == Role::Label)
+        .map(|node| {
+            let text = node.accesskit_node().value().unwrap_or_default();
+            (text, node.rect())
+        })
+        .collect()
+}
+fn assert_within(labels: &[(String, egui::Rect)], left: f32, right: f32, context: &str) {
+    assert!(!labels.is_empty(), "{context}: no labels");
+    for (text, rect) in labels {
+        assert!(
+            rect.min.x >= left - 0.5 && rect.max.x <= right + 0.5,
+            "{context}: {text:?} at {rect:?} leaves [{left}, {right}]"
+        );
+    }
+}
+
+#[test]
+fn inspector_text_stays_inside_its_panel_in_the_app() {
+    let mut harness = harness(LoadMode::Inline);
+    for version in ["v2", "v1"] {
+        if version == "v1" {
+            choose_version(&mut harness, "v1");
+        }
+        slab_row(&harness).click();
+        settle(&mut harness);
+        // The inspector's own pane: the smallest pane holding its heading.
+        let pane = harness
+            .root()
+            .children_recursive()
+            .filter(|node| node.accesskit_node().role() == Role::Pane)
+            .filter(|pane| {
+                pane.children_recursive()
+                    .any(|n| n.accesskit_node().value().as_deref() == Some("Inspector"))
+            })
+            .min_by_key(|pane| pane.children_recursive().count())
+            .expect("inspector pane");
+        let labels = label_rects(pane.children_recursive());
+        let left = harness
+            .get_all_by_role(Role::Splitter)
+            .map(|splitter| splitter.rect().center().x)
+            .fold(f32::MIN, f32::max);
+        assert_within(&labels, left, 1280.0, version);
+        let expected = if version == "v2" {
+            "FlatAtDeclaredFace"
+        } else {
+            "CentredMiddle"
+        };
+        assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
+    }
+}
+
+/// `middle.e2k` with slab `S` renamed to one long unbroken identifier.
+fn long_name_version() -> crate::project::VersionEntry {
+    let mut entry = Project::public_demo().versions[0].clone();
+    let crate::project::Source::Embedded(bytes) = entry.source;
+    let text = String::from_utf8(bytes.to_vec())
+        .expect("utf-8")
+        .replace("\"S\"", &format!("\"{LONG_NAME}\""));
+    entry.source =
+        crate::project::Source::Embedded(Box::leak(text.into_bytes().into_boxed_slice()));
+    entry
+}
+const LONG_NAME: &str =
+    "S_DELIBERATELY_LONG_SOURCE_IDENTIFIER_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+#[test]
+fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
+    let project = Project::public_demo();
+    let documents: Vec<_> = [
+        project.versions[0].clone(),
+        project.versions[1].clone(),
+        long_name_version(),
+    ]
+    .iter()
+    .map(|entry| std::sync::Arc::new(crate::document::Document::load(entry).expect("fixture")))
+    .collect();
+    for width in [240.0, 320.0, 520.0] {
+        for scale in [1.0, 1.25, 1.5] {
+            for theme in [egui::Theme::Dark, egui::Theme::Light] {
+                for document in &documents {
+                    for index in 0..document.mesh().entities().len() {
+                        let shown = std::sync::Arc::clone(document);
+                        let harness = Harness::builder()
+                            .with_size(egui::vec2(width, 900.0))
+                            .with_pixels_per_point(scale)
+                            .with_theme(theme)
+                            .build_ui(move |ui| {
+                                crate::pages::model::inspector(ui, &shown, &[index]);
+                            });
+                        let context = format!(
+                            "width {width} scale {scale} {theme:?} {} entity {index}",
+                            document.version()
+                        );
+                        let labels = label_rects(harness.root().children_recursive());
+                        assert_within(&labels, 0.0, width, &context);
+                        // Full values, not elided: the source key and, for shells,
+                        // the native-display sentence appear whole.
+                        let entity = &document.mesh().entities()[index];
+                        let mut whole = vec![entity.key.to_string()];
+                        if let Some(shell) = &entity.shell {
+                            whole.push(shell.placement.native_display().to_owned());
+                        }
+                        for text in whole {
+                            assert!(
+                                labels.iter().any(|(label, _)| *label == text),
+                                "{context}: {text:?} missing or cut"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        documents[2]
+            .mesh()
+            .entities()
+            .iter()
+            .any(|e| e.key.to_string().contains(LONG_NAME)),
+        "the long identifier reached the inspector"
+    );
+}
+
+#[test]
+fn no_empty_warning_band_when_nothing_is_wrong() {
+    let harness = harness(LoadMode::Inline);
+    let version = harness
+        .get_by_role_and_label(Role::ComboBox, "Version")
+        .rect();
+    let tabs = harness.get_by_label("Model").rect();
+    let gap = tabs.min.y - version.max.y;
+    assert!(gap < 12.0, "{gap} pt between the header and the tabs");
+}
+
+#[test]
+fn a_failed_load_still_shows_its_warning() {
+    let mut project = Project::public_demo();
+    project.versions[1].source = crate::project::Source::Embedded(b"not an E2K file");
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .with_max_steps(8)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                project,
+                Box::new(PlaceholderView),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+        });
+    settle(&mut harness);
+    assert!(present(&harness, "Could not load main/v2"));
+    assert!(present(&harness, "main/v2 is not available"));
+}

@@ -128,7 +128,7 @@ fn explorer(
     );
 }
 
-fn inspector(ui: &mut egui::Ui, document: &Document, selected: &[usize]) {
+pub(crate) fn inspector(ui: &mut egui::Ui, document: &Document, selected: &[usize]) {
     let tokens = crate::theme::Tokens::of(ui);
     ui.add_space(6.0);
     ui.strong("Inspector");
@@ -150,14 +150,14 @@ fn inspector(ui: &mut egui::Ui, document: &Document, selected: &[usize]) {
         .show(ui, |ui| {
             for &index in selected {
                 if let Some(entity) = document.mesh().entities().get(index) {
-                    details(ui, document, index, entity);
+                    details(ui, document, entity);
                     ui.add_space(8.0);
                 }
             }
         });
 }
 
-fn details(ui: &mut egui::Ui, document: &Document, index: usize, entity: &EntityMesh) {
+fn details(ui: &mut egui::Ui, document: &Document, entity: &EntityMesh) {
     let units = document.mesh().source_units();
     let length = |value: Option<f64>| {
         value.map_or_else(|| "none".to_owned(), |m| document::length(m, units))
@@ -205,17 +205,40 @@ fn details(ui: &mut egui::Ui, document: &Document, index: usize, entity: &Entity
     if let Some(limitation) = entity.limitation {
         rows.push(("Withheld because", format!("{limitation:?}")));
     }
-    egui::Grid::new(("inspector-entity", index))
-        .num_columns(2)
-        .striped(true)
-        .spacing([12.0, 4.0])
-        .show(ui, |ui| {
-            for (name, value) in rows {
-                ui.label(egui::RichText::new(name).small());
-                ui.label(value);
-                ui.end_row();
-            }
-        });
+    for (name, value) in rows {
+        property(ui, name, &value);
+    }
+}
+
+/// Below this content width a property stacks its name above its value.
+const STACK_BELOW: f32 = 300.0;
+
+/// One inspector property, laid out within the width the panel gives it:
+/// a narrow name column and a value that wraps (long identifiers break
+/// mid-token rather than widen the panel). Nothing is elided.
+fn property(ui: &mut egui::Ui, name: &str, value: &str) {
+    let tokens = crate::theme::Tokens::of(ui);
+    let width = ui.available_width();
+    let name = egui::Label::new(egui::RichText::new(name).small().color(tokens.muted)).wrap();
+    let value = egui::Label::new(value).wrap();
+    if width < STACK_BELOW {
+        ui.add(name);
+        ui.add(value);
+        ui.add_space(4.0);
+        return;
+    }
+    let name_width = (width * 0.34).clamp(96.0, 132.0);
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(name_width, 0.0),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_width(name_width);
+                ui.add(name);
+            },
+        );
+        ui.add(value);
+    });
 }
 
 /// The backend tier and reasons this native viewer mirrors; never upgraded by

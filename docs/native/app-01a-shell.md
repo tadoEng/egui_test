@@ -172,6 +172,33 @@ comparison) fails 2 state tests and the UI rapid-switch test.
 Not run: Windows build, GPU, WebView2, screen reader, DPI scaling (owner
 check below).
 
+## Review repairs after the first Windows launch
+
+- **P1 Inspector clipping (owner Windows capture, synthetic `main/v2`).**
+  Reproduced headlessly from the public fixture at 1280×800. The Inspector
+  heading painted at x=769 while the panel's splitter was at x≈820, and the
+  native-display value ran to x=1332, past the window. Cause: the unbounded
+  two-column `egui::Grid` made the content wider than the panel. Fix: each
+  property is a width-bounded row with a narrow name column and a wrapping
+  value. Below 300 pt the name stacks above the value. Long identifiers break
+  mid-token instead of widening the panel, and nothing is elided. No fidelity,
+  units, ticketing or backend code changed.
+- **Empty band under the header.** The warning panel was always laid out
+  (27 pt high) even with no warning. It is now drawn only when a load has
+  failed.
+- Tests (paint bounds of every text label, not only AccessKit presence):
+  - in-app, shell `S` on v2 (TOP) and v1 (MIDDLE): every Inspector label lies
+    between its splitter and the window edge;
+  - the Inspector alone at 240, 320 and 520 pt × scale 1.0, 1.25 and 1.5 ×
+    dark and light, for every entity of v1, v2 and a variant whose slab has a
+    74-character unbroken identifier: all labels within the width, and the
+    full source key and native-display text present;
+  - header-to-tab gap below 12 pt; a failed load still shows its warning.
+
+  The old `Grid` fails both Inspector tests and the old header fails the gap
+  test. These are headless egui layout checks. Windows rendering at each DPI
+  still needs the owner check below.
+
 ## Owner Windows check (public data only)
 
 ```powershell
