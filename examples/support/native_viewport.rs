@@ -1082,11 +1082,16 @@ fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
         )
     } else if let Some(shell) = &entity.shell {
         format!(
-            "section {} · material {} · t {} (not drawn) · insertion {}",
+            "section {} · material {} · t {} (not drawn) · insertion {} · opening {}",
             shell.section.as_deref().unwrap_or("unassigned"),
             shell.material.as_deref().unwrap_or("—"),
             metres(shell.thickness_m),
             shell.insertion_point.as_deref().unwrap_or("undeclared"),
+            match shell.opening {
+                Some(true) => "declared void",
+                Some(false) => "declared no",
+                None => "not declared by source",
+            },
         )
     } else {
         String::new()

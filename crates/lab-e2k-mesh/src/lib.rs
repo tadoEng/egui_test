@@ -79,7 +79,6 @@ pub enum DisplayMode {
 pub enum Limitation {
     DegenerateFrame,
     OpeningVoid,
-    UnknownOpeningState,
     /// The pinned `ext-api` host rule: a declared opening lies within this
     /// coplanar same-story shell, and the projection does not subtract it.
     HostOpeningSubtractionUnavailable,
@@ -144,6 +143,10 @@ pub struct ShellSource {
     pub material: Option<String>,
     pub thickness_m: Option<f64>,
     pub insertion_point: Option<String>,
+    /// The source `OPENING` flag. `None` means the row said nothing; like the
+    /// pinned `ext-api`, only an explicit `true` makes a void, so such a shell
+    /// is drawn and this field is what discloses that nothing was declared.
+    pub opening: Option<bool>,
     /// Surfaces are zero thickness at the connectivity plane; always false today.
     pub thickness_drawn: bool,
 }
@@ -537,8 +540,6 @@ impl Builder {
             Some(Limitation::OpeningVoid)
         } else if opening_limitation.is_some() {
             opening_limitation
-        } else if shell.opening.is_none() {
-            Some(Limitation::UnknownOpeningState)
         } else if let Some(normal) = convex_normal(points) {
             self.polygon(points, normal, color(class))?;
             None
@@ -568,6 +569,7 @@ impl Builder {
                     ShellInsertionPoint::Bottom => "BOTTOM".into(),
                     ShellInsertionPoint::Other(value) => value.as_str().into(),
                 }),
+                opening: shell.opening,
                 thickness_drawn: false,
             }),
         });

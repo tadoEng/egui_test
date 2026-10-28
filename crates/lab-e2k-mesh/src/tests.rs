@@ -105,11 +105,25 @@ fn openings_and_unknown_flags_never_become_filled_material() {
         Config::default(),
     )
     .expect("frames remain");
+    // As in the pinned ext-api, an undeclared flag is not a void: the shell is
+    // drawn, and the undeclared state is disclosed rather than hidden.
+    let undeclared = &unknown.entities()[2];
     assert_eq!(
-        unknown.entities()[2].limitation,
-        Some(Limitation::UnknownOpeningState)
+        (undeclared.mode, undeclared.limitation),
+        (DisplayMode::ZeroThicknessSurface, None)
     );
-    assert!(unknown.entities()[2].indices.is_empty());
+    assert!(!undeclared.indices.is_empty());
+    assert_eq!(undeclared.shell.as_ref().expect("shell").opening, None);
+    assert_eq!(
+        build(SOURCE.as_bytes(), Config::default())
+            .expect("source")
+            .entities()[2]
+            .shell
+            .as_ref()
+            .expect("shell")
+            .opening,
+        Some(false)
+    );
     let opening = build(
         SOURCE
             .replace("OPENING \"NO\"", "OPENING \"YES\"")
@@ -708,7 +722,7 @@ mod picking {
     fn withheld_entities_and_corrupt_ranges_are_unpickable_without_panicking() {
         let withheld = Scene::new(&source().replace(
             "AREAASSIGN \"S\" \"Roof\" OPENING \"NO\"",
-            "AREAASSIGN \"S\" \"Roof\"",
+            "AREAASSIGN \"S\" \"Roof\" OPENING \"YES\"",
         ));
         assert_eq!(withheld.pick([1.5, 1.5, 10.0], DOWN, &[]), None);
         let s = Scene::new(&source());
