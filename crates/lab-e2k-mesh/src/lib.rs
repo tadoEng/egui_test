@@ -14,6 +14,7 @@ const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 const CONTRACT_VERSION: u32 = 1;
 const EPS: f64 = 1.0e-7;
 mod openings;
+pub mod pick;
 pub mod public_fixture;
 /// Fixed limitations, never inferred model-specific engineering status.
 pub const FIDELITY_LIMITATIONS: [&str; 7] = [

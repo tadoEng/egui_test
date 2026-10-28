@@ -322,6 +322,8 @@ impl eframe::App for Workbench {
             });
         egui::CentralPanel::default().show(ui, |ui| {
             self.viewport
+                .set_load_generation(self.session.packet.generation);
+            self.viewport
                 .show(ui, self.session.packet.selected_story.as_deref());
         });
         self.sync(bounds, ui.ctx());

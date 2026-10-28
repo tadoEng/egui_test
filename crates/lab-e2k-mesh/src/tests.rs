@@ -593,3 +593,198 @@ fn shell_source_attributes_carry_section_thickness_and_insertion_without_inferri
     assert!(!shell.thickness_drawn, "surfaces stay zero thickness");
     assert!(entity(&mesh, "B").shell.is_none());
 }
+mod picking {
+    use super::*;
+    use crate::pick::{PickIndex, Ray, Selection};
+    /// Column at plan (0,0), beam along y=0 at roof, roof floor 0..10 ft square,
+    /// wall on x=10 ft. Metres: roof 3.048, plan edge 3.048, proxy 0.1 square.
+    fn source() -> String {
+        SOURCE
+            .replace(
+                "$ LINE ASSIGNS",
+                " AREA \"W\" PANEL 4 \"2\" \"3\" \"3\" \"2\" 0 0 0 0\n$ LINE ASSIGNS",
+            )
+            .replace(
+                "$ END OF MODEL FILE",
+                " AREAASSIGN \"W\" \"Roof\" OPENING \"NO\"\n$ END OF MODEL FILE",
+            )
+    }
+    struct Scene {
+        mesh: Mesh,
+        index: PickIndex,
+    }
+    impl Scene {
+        fn new(source: &str) -> Self {
+            let mesh = build(source.as_bytes(), Config::default()).expect("source");
+            let index = PickIndex::new(mesh.vertices(), mesh.indices(), mesh.entities());
+            Self { mesh, index }
+        }
+        /// World-metre origin and unit direction; returns the picked source id.
+        fn pick_window(
+            &self,
+            from: Point,
+            towards: Point,
+            window: [f64; 2],
+            hidden: &[&str],
+        ) -> Option<(String, usize)> {
+            let origin = sub(from, self.mesh.origin_m());
+            let ray = Ray {
+                origin,
+                direction: unit(towards).expect("direction"),
+                min_distance: window[0],
+                max_distance: window[1],
+            };
+            let entities = self.mesh.entities();
+            self.index
+                .pick(
+                    self.mesh.vertices(),
+                    self.mesh.indices(),
+                    entities,
+                    &ray,
+                    |i| !hidden.contains(&id(&entities[i])),
+                )
+                .map(|hit| (id(&entities[hit.entity]).to_owned(), hit.coincident))
+        }
+        fn pick(&self, from: Point, towards: Point, hidden: &[&str]) -> Option<String> {
+            self.pick_window(from, towards, [0.0, 1.0e3], hidden)
+                .map(|(id, _)| id)
+        }
+    }
+    fn id(entity: &EntityMesh) -> &str {
+        match &entity.key {
+            EntityKey::Instance { id, .. } => id.as_str(),
+            _ => "",
+        }
+    }
+    const DOWN: Point = [0.0, 0.0, -1.0];
+    const EAST: Point = [1.0, 0.0, 0.0];
+    #[test]
+    fn each_family_is_picked_at_its_own_surface() {
+        let s = Scene::new(&source());
+        assert_eq!(s.pick([1.5, 1.5, 10.0], DOWN, &[]).as_deref(), Some("S"));
+        assert_eq!(s.pick([1.5, 0.0, 10.0], DOWN, &[]).as_deref(), Some("B"));
+        assert_eq!(s.pick([-5.0, 0.0, 1.5], EAST, &[]).as_deref(), Some("C"));
+        assert_eq!(s.pick([-5.0, 1.5, 1.5], EAST, &[]).as_deref(), Some("W"));
+    }
+    #[test]
+    fn the_nearest_visible_surface_wins_and_back_faces_are_pickable() {
+        let s = Scene::new(&source());
+        // Beam top (3.098) is above the floor plane (3.048): beam occludes floor.
+        assert_eq!(s.pick([1.5, 0.0, 10.0], DOWN, &[]).as_deref(), Some("B"));
+        // 0.2 m off the 0.1 m beam: the floor.
+        assert_eq!(s.pick([1.5, 0.2, 10.0], DOWN, &[]).as_deref(), Some("S"));
+        // Column at x=0 occludes the wall at x=3.048 along the same ray.
+        assert_eq!(s.pick([-5.0, 0.0, 1.5], EAST, &[]).as_deref(), Some("C"));
+        // Wall seen from behind, and the floor from below: two-sided like the GPU.
+        assert_eq!(
+            s.pick([10.0, 1.5, 1.5], [-1.0, 0.0, 0.0], &[]).as_deref(),
+            Some("W")
+        );
+        assert_eq!(
+            s.pick([1.5, 1.5, -5.0], [0.0, 0.0, 1.0], &[]).as_deref(),
+            Some("S")
+        );
+    }
+    #[test]
+    fn empty_space_hidden_and_clipped_surfaces_are_never_picked() {
+        let s = Scene::new(&source());
+        assert_eq!(s.pick([10.0, 10.0, 10.0], DOWN, &[]), None);
+        assert_eq!(
+            s.pick([1.5, 1.5, 10.0], [0.0, 0.0, 1.0], &[]),
+            None,
+            "behind ray"
+        );
+        assert_eq!(s.pick([1.5, 0.0, 10.0], DOWN, &["B"]).as_deref(), Some("S"));
+        assert_eq!(s.pick([1.5, 1.5, 10.0], DOWN, &["S"]), None);
+        // Near plane past the beam's top face (t 6.902) but before the floor (6.952).
+        assert_eq!(
+            s.pick_window([1.5, 0.0, 10.0], DOWN, [6.92, 1.0e3], &[]),
+            Some(("S".to_owned(), 0))
+        );
+        // Far plane before every surface.
+        assert_eq!(s.pick_window([1.5, 1.5, 10.0], DOWN, [0.0, 6.0], &[]), None);
+    }
+    #[test]
+    fn withheld_entities_and_corrupt_ranges_are_unpickable_without_panicking() {
+        let withheld = Scene::new(&source().replace(
+            "AREAASSIGN \"S\" \"Roof\" OPENING \"NO\"",
+            "AREAASSIGN \"S\" \"Roof\"",
+        ));
+        assert_eq!(withheld.pick([1.5, 1.5, 10.0], DOWN, &[]), None);
+        let s = Scene::new(&source());
+        let mut entities = s.mesh.entities().to_vec();
+        for entity in &mut entities {
+            entity.indices = 0..u32::MAX;
+        }
+        let index = PickIndex::new(s.mesh.vertices(), s.mesh.indices(), &entities);
+        let ray = Ray {
+            origin: sub([1.5, 1.5, 10.0], s.mesh.origin_m()),
+            direction: DOWN,
+            min_distance: 0.0,
+            max_distance: 1.0e3,
+        };
+        assert_eq!(
+            index.pick(s.mesh.vertices(), s.mesh.indices(), &entities, &ray, |_| {
+                true
+            }),
+            None
+        );
+    }
+    #[test]
+    fn coplanar_overlaps_are_deterministic_and_disclosed() {
+        let s = Scene::new(
+            &source()
+                .replace(
+                    "$ LINE ASSIGNS",
+                    " AREA \"T\" FLOOR 4 \"1\" \"2\" \"3\" \"4\" 0 0 0 0\n$ LINE ASSIGNS",
+                )
+                .replace(
+                    "$ END OF MODEL FILE",
+                    " AREAASSIGN \"T\" \"Roof\" OPENING \"NO\"\n$ END OF MODEL FILE",
+                ),
+        );
+        let first = s.pick_window([1.5, 1.5, 10.0], DOWN, [0.0, 1.0e3], &[]);
+        assert_eq!(
+            first,
+            Some(("S".to_owned(), 1)),
+            "lowest index, one coincident"
+        );
+        assert_eq!(
+            first,
+            s.pick_window([1.5, 1.5, 10.0], DOWN, [0.0, 1.0e3], &[])
+        );
+    }
+    #[test]
+    fn selection_replaces_toggles_clears_and_expires_with_its_scope() {
+        let v1 = build(source().as_bytes(), Config::default()).expect("v1");
+        let v2 = build(sectioned_source().as_bytes(), Config::default()).expect("v2");
+        let (a, b) = ((v1.revision(), 1), (v2.revision(), 2));
+        let mut selection = Selection::default();
+        selection.click(a, Some(2), false);
+        assert_eq!(selection.entities(a), [2]);
+        selection.click(a, Some(0), false);
+        assert_eq!(selection.entities(a), [0], "click replaces");
+        selection.click(a, Some(3), true);
+        assert_eq!(selection.entities(a), [0, 3], "ctrl adds");
+        selection.click(a, None, true);
+        assert_eq!(selection.entities(a), [0, 3], "ctrl on empty space keeps");
+        selection.click(a, Some(0), true);
+        assert_eq!(selection.entities(a), [3], "ctrl toggles off");
+        selection.retain_visible(|i| i != 3);
+        assert!(selection.entities(a).is_empty(), "hidden entities drop out");
+        selection.click(a, Some(1), false);
+        assert!(
+            selection.entities(b).is_empty(),
+            "other version sees nothing"
+        );
+        assert!(
+            selection.entities((v1.revision(), 3)).is_empty(),
+            "same bytes, new load"
+        );
+        selection.click(b, Some(4), true);
+        assert_eq!(selection.entities(b), [4]);
+        assert!(selection.entities(a).is_empty(), "old scope expired");
+        selection.click(b, None, false);
+        assert!(selection.entities(b).is_empty(), "empty click clears");
+    }
+}
