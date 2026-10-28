@@ -92,7 +92,10 @@ fn source_lengths_are_converted_explicitly_and_shown_with_their_source_value() {
     let units = document.mesh().source_units();
     assert_eq!(document::unit_names(units), ["kip", "ft", "°F"]);
     let thickness = shell(&document, "|F|L12").thickness_m.expect("declared");
-    assert!((thickness - 0.75 * 0.3048).abs() < 1e-12, "0.75 ft in metres");
+    assert!(
+        (thickness - 0.75 * 0.3048).abs() < 1e-12,
+        "0.75 ft in metres"
+    );
     assert_eq!(document::length(thickness, units), "0.2286 m (0.75 ft)");
 }
 
@@ -394,7 +397,11 @@ fn story_highlight_is_validated_and_survives_only_where_the_story_exists() {
         .expect("story of v2");
     let effect = switch(&mut state, "v1");
     deliver(&mut state, &effect).expect("v1");
-    assert_eq!(state.model.story.as_deref(), Some("L12"), "same story in v1");
+    assert_eq!(
+        state.model.story.as_deref(),
+        Some("L12"),
+        "same story in v1"
+    );
 
     // A version without that story drops the highlight instead of keeping a
     // name that no longer resolves.
@@ -432,4 +439,25 @@ fn an_ambiguous_view_pick_is_disclosed_until_the_next_pick_or_version() {
     state.apply(pick(Some(3), 1)).expect("in scope");
     let _load = switch(&mut state, "v1");
     assert_eq!(state.model.ambiguous, 0, "a version switch clears it");
+}
+
+#[test]
+fn gpu_geometry_keys_follow_geometry_bytes_not_version_names() {
+    use lab_viewport::GpuGeometry as _;
+    let project = Project::public_demo();
+    let load = |entry: &VersionEntry| Document::load(entry).expect("fixture");
+    let (v1, v2) = (load(&project.versions[0]), load(&project.versions[1]));
+    assert_ne!(
+        v1.key(),
+        v2.key(),
+        "a version switch uploads the new geometry"
+    );
+    let mut same = project.versions[1].clone();
+    same.id = v("v3");
+    assert_eq!(
+        load(&same).key(),
+        v2.key(),
+        "identical geometry reuses resident buffers"
+    );
+    assert_eq!(v2.vertices().len(), v2.mesh().vertices().len(), "no copy");
 }

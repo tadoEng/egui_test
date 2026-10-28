@@ -672,6 +672,7 @@ fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
 mod tests {
     use super::*;
     use egui_wgpu::wgpu;
+    use lab_viewport::math::dot;
     use lab_viewport::{DEPTH_FORMAT, RendererCore};
 
     #[test]
@@ -986,11 +987,7 @@ mod tests {
         let depth_view = depth.create_view(&Default::default());
         let mut renderer = RendererCore::new(&device, format);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
-        let resident_vertex = renderer
-            .resident()
-            .expect("resident mesh")
-            .vertex
-            .clone();
+        let resident_vertex = renderer.resident().expect("resident mesh").vertex.clone();
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(0.5));
         assert_eq!(
             renderer.resident().expect("resident mesh").vertex,
@@ -1409,7 +1406,10 @@ mod tests {
             selected_buffer
         );
         assert_eq!(renderer.stats().uploads.load(Ordering::Relaxed), 1);
-        assert_eq!(renderer.stats().selection_uploads.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            renderer.stats().selection_uploads.load(Ordering::Relaxed),
+            1
+        );
         let highlighted = read_public_rgba(&device, &queue, &renderer);
         let gold = |bytes: &[u8]| {
             bytes
@@ -1568,10 +1568,7 @@ mod tests {
         assert_eq!(mesh.key, same_mesh.key);
         renderer.prepare(&device, &queue, &same_mesh, &camera.view_projection(0.5));
         assert_eq!(renderer.resident().expect("resident").vertex, resident);
-        assert_eq!(
-            renderer.resident().expect("resident").index,
-            resident_index
-        );
+        assert_eq!(renderer.resident().expect("resident").index, resident_index);
         assert_eq!(renderer.stats().uploads.load(Ordering::Relaxed), 1);
         assert_eq!(resident.size() + resident_index.size(), expected_bytes);
         renderer.prepare(&device, &queue, &mesh, &camera.view_projection(1.0));
@@ -1688,10 +1685,7 @@ mod tests {
             2,
             "full digest including last byte invalidates buffers"
         );
-        assert_ne!(
-            renderer.resident().expect("replacement").vertex,
-            resident
-        );
+        assert_ne!(renderer.resident().expect("replacement").vertex, resident);
         assert_ne!(
             renderer.resident().expect("replacement").index,
             resident_index

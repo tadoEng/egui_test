@@ -5,6 +5,8 @@ fn main() -> eframe::Result {
     env_logger::init();
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
+        // The model view's pipelines are depth-tested (Depth24Plus).
+        depth_buffer: 24,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("talos-native-prototype")
             .with_title("TALOS · prototype (read-only, synthetic demo)")

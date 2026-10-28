@@ -4,10 +4,10 @@
 //! in `gpu_tests` add a real wgpu renderer.
 use crate::app::App;
 use crate::loader::{LoadMode, Loader};
-use crate::project::{Project, VersionId};
-use crate::state::{DocumentState, Metric, Refusal, Workspace};
 use crate::native_view::NativeModelView;
+use crate::project::{Project, VersionId};
 use crate::state::Action;
+use crate::state::{DocumentState, Metric, Refusal, Workspace};
 use crate::view::PlaceholderView;
 use egui::accesskit::Role;
 use egui_kittest::{
@@ -78,7 +78,7 @@ fn row<'a>(harness: &'a Harness<'_, App>, prefix: &str) -> egui_kittest::Node<'a
         })
         .unwrap_or_else(|| panic!("button starting with {prefix:?}"))
 }
-fn view(harness: &Harness<'_, App>) -> &NativeModelView {
+fn view<'a>(harness: &'a Harness<'_, App>) -> &'a NativeModelView {
     harness
         .state()
         .view()
@@ -115,6 +115,8 @@ fn screen_point(harness: &Harness<'_, App>, index: usize) -> egui::Pos2 {
 }
 fn click_at(harness: &mut Harness<'_, App>, position: egui::Pos2, modifiers: egui::Modifiers) {
     harness.hover_at(position);
+    // egui reads click modifiers from its input state, as a keyboard sets it.
+    harness.event(egui::Event::ModifiersChanged(modifiers));
     harness.event(egui::Event::PointerButton {
         pos: position,
         button: egui::PointerButton::Primary,
@@ -127,6 +129,7 @@ fn click_at(harness: &mut Harness<'_, App>, position: egui::Pos2, modifiers: egu
         pressed: false,
         modifiers,
     });
+    harness.event(egui::Event::ModifiersChanged(egui::Modifiers::NONE));
     settle(harness);
 }
 fn choose_version(harness: &mut Harness<'_, App>, version: &str) {
@@ -265,7 +268,10 @@ fn explorer_story_and_row_drive_highlight_and_inspector_and_a_switch_clears_sele
     settle(&mut harness);
     assert!(present(&harness, "0.6096 m (2 ft)"), "C24 above L4, v2");
     select(&mut harness, "|F|L12");
-    assert!(present(&harness, "FlatAtDeclaredFace"), "v2 roof slab is TOP");
+    assert!(
+        present(&harness, "FlatAtDeclaredFace"),
+        "v2 roof slab is TOP"
+    );
     assert!(present(&harness, "0.2286 m (0.75 ft)"));
     choose_version(&mut harness, "v1");
     assert_eq!(
@@ -292,8 +298,18 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
         let document = harness.state().state().session.ready().expect("ready");
         let mesh = document.mesh();
         let origin = mesh.origin_m();
-        let roof = mesh.stories().iter().find(|s| s.name == "L12").expect("L12").elevation_m;
-        [45.0 * 0.3048 - origin[0], 12.5 * 0.3048 - origin[1], roof - origin[2]].map(|v| v as f32)
+        let roof = mesh
+            .stories()
+            .iter()
+            .find(|s| s.name == "L12")
+            .expect("L12")
+            .elevation_m;
+        [
+            45.0 * 0.3048 - origin[0],
+            12.5 * 0.3048 - origin[1],
+            roof - origin[2],
+        ]
+        .map(|v| v as f32)
     };
     let rect = harness.get_by_label("3D model view").rect();
     let camera = view(&harness).camera().expect("camera");
@@ -308,7 +324,10 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
     click_at(&mut harness, at, egui::Modifiers::NONE);
     let scope = harness.state().state().session.scope().expect("ready");
     assert_eq!(harness.state().state().model.selected(scope), [slab]);
-    assert!(present(&harness, "FlatAtDeclaredFace"), "inspector follows the pick");
+    assert!(
+        present(&harness, "FlatAtDeclaredFace"),
+        "inspector follows the pick"
+    );
 
     let column = entity(&harness, "|C0_0|L6");
     let at = screen_point(&harness, column);
@@ -319,7 +338,11 @@ fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
     assert!(present(&harness, "2 entities selected"));
 
     // Empty space (a corner of the canvas) clears without toggle.
-    click_at(&mut harness, rect.left_top() + egui::vec2(12.0, 12.0), egui::Modifiers::NONE);
+    click_at(
+        &mut harness,
+        rect.left_top() + egui::vec2(12.0, 12.0),
+        egui::Modifiers::NONE,
+    );
     assert!(harness.state().state().model.selected(scope).is_empty());
 }
 
@@ -349,14 +372,20 @@ fn a_version_switch_keeps_the_view_and_clears_the_pick() {
     harness.key_press(egui::Key::F);
     settle(&mut harness);
     let fitted = view(&harness).camera().expect("camera");
-    assert!(fitted.distance > after.distance, "F refits after zooming in");
+    assert!(
+        fitted.distance > after.distance,
+        "F refits after zooming in"
+    );
 }
 
 #[test]
 fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     let mut harness = harness(LoadMode::Manual);
     assert!(present(&harness, "Loading main/v2"));
-    assert!(!present(&harness, "All entities"), "no content before a load");
+    assert!(
+        !present(&harness, "All entities"),
+        "no content before a load"
+    );
     choose_version(&mut harness, "v1");
     choose_version(&mut harness, "v2");
     assert_eq!(harness.state_mut().loader_mut().held().len(), 3);
@@ -551,4 +580,25 @@ fn a_failed_load_still_shows_its_warning() {
     settle(&mut harness);
     assert!(present(&harness, "Could not load main/v2"));
     assert!(present(&harness, "main/v2 is not available"));
+}
+
+#[test]
+fn a_hidden_model_tab_lays_out_no_view_and_keeps_the_same_view() {
+    let mut harness = harness(LoadMode::Inline);
+    let shown = view(&harness).frames();
+    assert!(shown > 0);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    let hidden = view(&harness).frames();
+    for _ in 0..5 {
+        harness.step();
+    }
+    assert_eq!(
+        view(&harness).frames(),
+        hidden,
+        "no view work while Results is active"
+    );
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
+    settle(&mut harness);
+    assert!(view(&harness).frames() > hidden, "the same view resumes");
 }

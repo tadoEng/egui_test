@@ -19,9 +19,7 @@ web-time = "1.1.0"
 env_logger = "0.11.11"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-# `wgpu` drives the real renderer headlessly in the opt-in GPU tests.
-egui_kittest = { version = "0.37.0", features = ["eframe", "wgpu"] }
-image = { version = "0.25.10", default-features = false, features = ["png"] }
+egui_kittest = { version = "0.37.0", features = ["eframe"] }
 
 [lints]
 workspace = true

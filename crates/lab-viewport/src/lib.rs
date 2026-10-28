@@ -550,12 +550,25 @@ impl GpuCounters {
 /// renderer and its resident mesh instead of creating new pipelines.
 pub fn install(render_state: &egui_wgpu::RenderState) -> Arc<GpuCounters> {
     let mut renderer = render_state.renderer.write();
-    if let Some(existing) = renderer.callback_resources.get::<RendererCore>() {
+    install_into(
+        &mut renderer.callback_resources,
+        &render_state.device,
+        render_state.target_format,
+    )
+}
+
+/// [`install`] against explicit resources, for hosts and tests that own them.
+pub fn install_into(
+    resources: &mut egui_wgpu::CallbackResources,
+    device: &wgpu::Device,
+    target_format: wgpu::TextureFormat,
+) -> Arc<GpuCounters> {
+    if let Some(existing) = resources.get::<RendererCore>() {
         return existing.stats();
     }
-    let core = RendererCore::new(&render_state.device, render_state.target_format);
+    let core = RendererCore::new(device, target_format);
     let stats = core.stats();
-    renderer.callback_resources.insert(core);
+    resources.insert(core);
     stats
 }
 
@@ -662,12 +675,112 @@ mod tests {
             max: [14.0, 14.0, 8.0],
         };
         camera.rebase(second);
-        assert_eq!((camera.yaw, camera.pitch), (yaw, pitch), "view direction kept");
-        assert_eq!(camera.center, second.center(), "clip planes follow the new model");
-        assert!((camera.radius - second.radius()).abs() < 1e-5, "radius updated");
-        assert!(((camera.distance / camera.radius) - relative).abs() < 1e-4, "relative zoom kept");
+        assert_eq!(
+            (camera.yaw, camera.pitch),
+            (yaw, pitch),
+            "view direction kept"
+        );
+        assert_eq!(
+            camera.center,
+            second.center(),
+            "clip planes follow the new model"
+        );
+        assert!(
+            (camera.radius - second.radius()).abs() < 1e-5,
+            "radius updated"
+        );
+        assert!(
+            ((camera.distance / camera.radius) - relative).abs() < 1e-4,
+            "relative zoom kept"
+        );
         let (near, far) = camera.clip_planes();
         assert!(near > 0.0 && far > near, "valid clip window after rebase");
     }
-}
 
+    struct Lab {
+        key: MeshKey,
+        vertices: Vec<Vertex>,
+        indices: Vec<u32>,
+    }
+    impl GpuGeometry for Lab {
+        fn key(&self) -> MeshKey {
+            self.key
+        }
+        fn vertices(&self) -> &[Vertex] {
+            &self.vertices
+        }
+        fn indices(&self) -> &[u32] {
+            &self.indices
+        }
+    }
+    fn triangle(key: u64) -> Lab {
+        let vertex = |position| Vertex {
+            position,
+            normal: [0.0, 0.0, 1.0],
+            color: [0.5; 3],
+        };
+        Lab {
+            key: MeshKey::Lab(key),
+            vertices: vec![
+                vertex([0.0, 0.0, 0.0]),
+                vertex([1.0, 0.0, 0.0]),
+                vertex([0.0, 1.0, 0.0]),
+            ],
+            indices: vec![0, 1, 2],
+        }
+    }
+
+    /// Residency contract a host relies on (TALOS tab and version switches):
+    /// one renderer per resources, uploads only on a new key, highlight
+    /// uploads only for a new index list.
+    #[test]
+    #[ignore = "needs a GPU adapter; run with --include-ignored (Mesa lavapipe works)"]
+    fn install_once_upload_per_geometry_key_and_highlight_per_list() {
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let adapter =
+            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+                .expect("GPU test requires an adapter; absence is a failure");
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            required_limits: wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits()),
+            ..Default::default()
+        }))
+        .expect("device");
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let mut resources = egui_wgpu::CallbackResources::default();
+        let first = install_into(&mut resources, &device, format);
+        let second = install_into(&mut resources, &device, format);
+        assert!(
+            Arc::ptr_eq(&first, &second),
+            "a second install reuses the renderer"
+        );
+
+        let camera = OrbitCamera::fit(
+            Bounds {
+                min: [0.0; 3],
+                max: [1.0, 1.0, 0.0],
+            },
+            1.0,
+        );
+        let renderer = resources.get_mut::<RendererCore>().expect("installed");
+        let (a, b) = (triangle(1), triangle(2));
+        let mut prepare = |mesh: &Lab| {
+            renderer.prepare(&device, &queue, mesh, &camera.view_projection(1.0));
+        };
+        for (mesh, uploads) in [(&a, 1), (&a, 1), (&b, 2), (&b, 2), (&a, 3)] {
+            prepare(mesh);
+            assert_eq!(first.snapshot().uploads, uploads, "after {:?}", mesh.key);
+        }
+        let renderer = resources.get_mut::<RendererCore>().expect("installed");
+        let highlight = Arc::new(vec![0, 1, 2]);
+        renderer.prepare_selection(&device, &highlight);
+        renderer.prepare_selection(&device, &highlight);
+        assert_eq!(
+            first.snapshot().selection_uploads,
+            1,
+            "same list, no re-upload"
+        );
+        renderer.prepare_selection(&device, &Arc::new(Vec::new()));
+        assert_eq!(first.snapshot().selection_bytes, 0, "empty list clears");
+    }
+}

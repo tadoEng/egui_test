@@ -14,5 +14,8 @@ egui-wgpu = "0.37.0"
 lab-e2k-mesh = { path = "../lab-e2k-mesh", features = ["render-layout"] }
 web-time = "1.1.0"
 
+[dev-dependencies]
+pollster = "1.0.0"
+
 [lints]
 workspace = true

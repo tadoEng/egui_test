@@ -47,7 +47,14 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .default_size(240.0)
             .size_range(180.0..=420.0)
             .show(ui, |ui| {
-                explorer(ui, document, scope, selected, state.model.story.as_deref(), &mut actions);
+                explorer(
+                    ui,
+                    document,
+                    scope,
+                    selected,
+                    state.model.story.as_deref(),
+                    &mut actions,
+                );
             });
     }
     if state.model.inspector_open {
@@ -55,7 +62,9 @@ pub fn show(ui: &mut egui::Ui, state: &State, view: &mut dyn ModelView) -> Vec<A
             .resizable(true)
             .default_size(320.0)
             .size_range(240.0..=520.0)
-            .show(ui, |ui| inspector(ui, document, selected, state.model.ambiguous));
+            .show(ui, |ui| {
+                inspector(ui, document, selected, state.model.ambiguous)
+            });
     }
     egui::CentralPanel::no_frame().show(ui, |ui| {
         let frame = ViewFrame {
@@ -173,10 +182,8 @@ pub(crate) fn inspector(
     ui.separator();
     if selected.is_empty() {
         ui.label(
-            egui::RichText::new(
-                "Nothing selected. Click the model or an entity in the explorer.",
-            )
-            .color(tokens.muted),
+            egui::RichText::new("Nothing selected. Click the model or an entity in the explorer.")
+                .color(tokens.muted),
         );
         return;
     }

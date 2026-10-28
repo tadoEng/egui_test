@@ -38,6 +38,8 @@ pub struct NativeModelView {
     fit_pending: bool,
     highlight: Option<(HighlightKey, Arc<Vec<u32>>)>,
     last_pick_us: Option<u128>,
+    /// Frames this view was laid out in; a hidden tab adds none.
+    frames: u64,
 }
 
 impl NativeModelView {
@@ -49,6 +51,7 @@ impl NativeModelView {
             fit_pending: false,
             highlight: None,
             last_pick_us: None,
+            frames: 0,
         }
     }
     /// GPU counters (uploads, draw records); `None` without a renderer.
@@ -58,6 +61,9 @@ impl NativeModelView {
     /// Paint callbacks recorded, not presented frames.
     pub fn callback_paints(&self) -> u64 {
         self.paints.load(Ordering::Relaxed)
+    }
+    pub fn frames(&self) -> u64 {
+        self.frames
     }
     pub fn camera(&self) -> Option<OrbitCamera> {
         self.camera.map(|(_, camera)| camera)
@@ -130,9 +136,13 @@ fn highlight_indices(frame: &ViewFrame<'_>) -> Vec<u32> {
 pub fn pick(document: &Document, camera: OrbitCamera, aspect: f32, ndc: [f32; 2]) -> Option<Hit> {
     let ray = camera.ray(aspect, ndc)?;
     let mesh = document.mesh();
-    document
-        .pick_index()
-        .pick(mesh.vertices(), mesh.indices(), mesh.entities(), &ray, |_| true)
+    document.pick_index().pick(
+        mesh.vertices(),
+        mesh.indices(),
+        mesh.entities(),
+        &ray,
+        |_| true,
+    )
 }
 
 impl ModelView for NativeModelView {
@@ -148,6 +158,7 @@ impl ModelView for NativeModelView {
         if !size.is_finite() || size.x < 1.0 || size.y < 1.0 {
             return Vec::new();
         }
+        self.frames += 1;
         let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::accesskit::Role::Canvas, true, "3D model view")
