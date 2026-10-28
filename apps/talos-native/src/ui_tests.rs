@@ -1,9 +1,13 @@
 //! In-process tests of the real application UI through egui's AccessKit tree;
-//! no native window, GPU, `WebView` or desktop input.
+//! no native window, `WebView` or desktop input. The model view is the real
+//! `NativeModelView` without a GPU (picking is CPU work); the opt-in GPU tests
+//! in `gpu_tests` add a real wgpu renderer.
 use crate::app::App;
 use crate::loader::{LoadMode, Loader};
 use crate::project::{Project, VersionId};
 use crate::state::{DocumentState, Metric, Refusal, Workspace};
+use crate::native_view::NativeModelView;
+use crate::state::Action;
 use crate::view::PlaceholderView;
 use egui::accesskit::Role;
 use egui_kittest::{
@@ -20,7 +24,7 @@ fn harness(mode: LoadMode) -> Harness<'static, App> {
             crate::theme::install(&cc.egui_ctx);
             App::with_parts(
                 Project::public_demo(),
-                Box::new(PlaceholderView),
+                Box::new(NativeModelView::new(None)),
                 Loader::new(mode, Some(cc.egui_ctx.clone())),
             )
         });
@@ -41,16 +45,89 @@ fn selected_tabs(harness: &Harness<'_, App>) -> Vec<String> {
 fn present(harness: &Harness<'_, App>, text: &str) -> bool {
     harness.query_all_by_label_contains(text).next().is_some()
 }
-/// The explorer row for shell `S`.
-fn slab_row<'a>(harness: &'a Harness<'_, App>) -> egui_kittest::Node<'a> {
+/// Index of the entity whose stable key contains `needle`, in the loaded version.
+fn entity(harness: &Harness<'_, App>, needle: &str) -> usize {
+    let document = harness.state().state().session.ready().expect("ready");
+    document
+        .mesh()
+        .entities()
+        .iter()
+        .position(|e| e.key.to_string().contains(needle))
+        .expect("entity in the fixture")
+}
+/// Selects through the shell's own action, as the explorer does; for rows the
+/// virtualized explorer has not laid out.
+fn select(harness: &mut Harness<'_, App>, needle: &str) {
+    let index = entity(harness, needle);
+    let scope = harness.state().state().session.scope().expect("ready");
+    harness.state_mut().dispatch(Action::Pick {
+        scope,
+        entity: Some(index),
+        toggle: false,
+        coincident: 0,
+    });
+    settle(harness);
+}
+fn row<'a>(harness: &'a Harness<'_, App>, prefix: &str) -> egui_kittest::Node<'a> {
     harness
         .get_all_by_role(Role::Button)
         .find(|node| {
             node.accesskit_node()
                 .label()
-                .is_some_and(|label| label.starts_with("S  ·  Floor shell"))
+                .is_some_and(|label| label.starts_with(prefix))
         })
-        .expect("explorer row for slab S")
+        .unwrap_or_else(|| panic!("button starting with {prefix:?}"))
+}
+fn view(harness: &Harness<'_, App>) -> &NativeModelView {
+    harness
+        .state()
+        .view()
+        .as_any()
+        .downcast_ref::<NativeModelView>()
+        .expect("native view")
+}
+/// Screen position of the centroid of an entity's drawn triangles, through the
+/// view's current camera, and that centroid's depth along the camera ray.
+fn screen_point(harness: &Harness<'_, App>, index: usize) -> egui::Pos2 {
+    let document = harness.state().state().session.ready().expect("ready");
+    let mesh = document.mesh();
+    let range = &mesh.entities()[index].indices;
+    let ids = &mesh.indices()[range.start as usize..range.end as usize];
+    let mut sum = [0.0_f32; 3];
+    for &id in ids {
+        let p = mesh.vertices()[id as usize].position;
+        for axis in 0..3 {
+            sum[axis] += p[axis];
+        }
+    }
+    let n = ids.len() as f32;
+    let centroid = sum.map(|v| v / n);
+    let rect = harness.get_by_label("3D model view").rect();
+    let camera = view(harness).camera().expect("camera after first frame");
+    let m = camera.view_projection(rect.width() / rect.height());
+    let clip: [f32; 4] = std::array::from_fn(|row| {
+        (0..3).map(|col| m[col][row] * centroid[col]).sum::<f32>() + m[3][row]
+    });
+    egui::pos2(
+        rect.left() + (clip[0] / clip[3] * 0.5 + 0.5) * rect.width(),
+        rect.top() + (0.5 - clip[1] / clip[3] * 0.5) * rect.height(),
+    )
+}
+fn click_at(harness: &mut Harness<'_, App>, position: egui::Pos2, modifiers: egui::Modifiers) {
+    harness.hover_at(position);
+    harness.event(egui::Event::PointerButton {
+        pos: position,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers,
+    });
+    harness.event(egui::Event::PointerButton {
+        pos: position,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers,
+    });
+    settle(harness);
 }
 fn choose_version(harness: &mut Harness<'_, App>, version: &str) {
     harness
@@ -75,14 +152,14 @@ fn launches_as_a_tab_list_on_model_with_a_restrained_header() {
     assert_eq!(tabs, ["Model", "Results", "Compare", "History", "Reports"]);
     assert_eq!(selected_tabs(&harness), ["Model"]);
     for text in [
-        "Public demo project",
+        "Public demo tower",
         "Synthetic demo",
         "Read-only",
         "ETABS not connected",
     ] {
         assert!(present(&harness, text), "{text}");
     }
-    assert!(present(&harness, "3D viewport"));
+    assert!(present(&harness, "3D model view"));
     assert!(
         present(&harness, "Source units kip · ft · °F"),
         "units live in Model"
@@ -101,14 +178,14 @@ fn model_and_results_never_render_together() {
     assert_eq!(selected_tabs(&harness), ["Results"]);
     assert_eq!(harness.state().state().workspace, Workspace::Results);
     assert!(present(&harness, "No analyzed results for main/v2"));
-    for absent in ["3D viewport", "Explorer", "Inspector", "Source units"] {
+    for absent in ["3D model view", "Explorer", "Inspector", "Source units"] {
         assert!(!present(&harness, absent), "{absent} leaked into Results");
     }
     harness.get_by_label("Compare").click();
     harness.run();
     assert!(present(&harness, "Not available in this prototype yet"));
     assert!(!present(&harness, "No analyzed results"));
-    assert!(!present(&harness, "3D viewport"));
+    assert!(!present(&harness, "3D model view"));
 }
 
 #[test]
@@ -162,10 +239,7 @@ fn workspace_state_survives_tab_switches() {
     );
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
     harness.run();
-    assert!(
-        !present(&harness, "Source entities"),
-        "explorer stays closed"
-    );
+    assert!(!present(&harness, "All entities"), "explorer stays closed");
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     harness.run();
     assert_eq!(
@@ -179,33 +253,110 @@ fn workspace_state_survives_tab_switches() {
 }
 
 #[test]
-fn explorer_selection_drives_the_inspector_and_a_version_switch_clears_it() {
+fn explorer_story_and_row_drive_highlight_and_inspector_and_a_switch_clears_selection() {
     let mut harness = harness(LoadMode::Inline);
     assert!(present(&harness, "Nothing selected"));
-    slab_row(&harness).click();
-    harness.run();
-    assert!(present(&harness, "FlatAtDeclaredFace"), "v2 is TOP");
-    assert!(present(&harness, "0.1524 m (0.5 ft)"));
+    assert!(present(&harness, "All entities (672)"));
+    row(&harness, "L12  ·  56").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().state().model.story.as_deref(), Some("L12"));
+    assert!(present(&harness, "Entities on L12 (56)"));
+    row(&harness, "C0_0  ·  Column  ·  L12").click();
+    settle(&mut harness);
+    assert!(present(&harness, "0.6096 m (2 ft)"), "C24 above L4, v2");
+    select(&mut harness, "|F|L12");
+    assert!(present(&harness, "FlatAtDeclaredFace"), "v2 roof slab is TOP");
+    assert!(present(&harness, "0.2286 m (0.75 ft)"));
     choose_version(&mut harness, "v1");
     assert_eq!(
         harness.state().state().session.requested(),
         &VersionId::new("main", "v1")
     );
     assert!(present(&harness, "Nothing selected"), "selection expired");
-    slab_row(&harness).click();
-    harness.run();
-    assert!(present(&harness, "CentredMiddle"), "v1 is MIDDLE");
+    assert_eq!(
+        harness.state().state().model.story.as_deref(),
+        Some("L12"),
+        "the story exists in v1 too"
+    );
+    select(&mut harness, "|F|L12");
+    assert!(present(&harness, "CentredMiddle"), "v1 roof slab is MIDDLE");
     assert!(!present(&harness, "FlatAtDeclaredFace"));
+}
+
+#[test]
+fn clicking_the_model_picks_the_drawn_entity_and_ctrl_click_adds_one() {
+    let mut harness = harness(LoadMode::Inline);
+    let slab = entity(&harness, "|F|L12");
+    // A slab-only point of the roof (between grid lines), seen from above.
+    let target = {
+        let document = harness.state().state().session.ready().expect("ready");
+        let mesh = document.mesh();
+        let origin = mesh.origin_m();
+        let roof = mesh.stories().iter().find(|s| s.name == "L12").expect("L12").elevation_m;
+        [45.0 * 0.3048 - origin[0], 12.5 * 0.3048 - origin[1], roof - origin[2]].map(|v| v as f32)
+    };
+    let rect = harness.get_by_label("3D model view").rect();
+    let camera = view(&harness).camera().expect("camera");
+    let m = camera.view_projection(rect.width() / rect.height());
+    let clip: [f32; 4] = std::array::from_fn(|row| {
+        (0..3).map(|col| m[col][row] * target[col]).sum::<f32>() + m[3][row]
+    });
+    let at = egui::pos2(
+        rect.left() + (clip[0] / clip[3] * 0.5 + 0.5) * rect.width(),
+        rect.top() + (0.5 - clip[1] / clip[3] * 0.5) * rect.height(),
+    );
+    click_at(&mut harness, at, egui::Modifiers::NONE);
+    let scope = harness.state().state().session.scope().expect("ready");
+    assert_eq!(harness.state().state().model.selected(scope), [slab]);
+    assert!(present(&harness, "FlatAtDeclaredFace"), "inspector follows the pick");
+
+    let column = entity(&harness, "|C0_0|L6");
+    let at = screen_point(&harness, column);
+    click_at(&mut harness, at, egui::Modifiers::COMMAND);
+    let mut expected = vec![slab, column];
+    expected.sort_unstable();
+    assert_eq!(harness.state().state().model.selected(scope), expected);
+    assert!(present(&harness, "2 entities selected"));
+
+    // Empty space (a corner of the canvas) clears without toggle.
+    click_at(&mut harness, rect.left_top() + egui::vec2(12.0, 12.0), egui::Modifiers::NONE);
+    assert!(harness.state().state().model.selected(scope).is_empty());
+}
+
+#[test]
+fn a_version_switch_keeps_the_view_and_clears_the_pick() {
+    let mut harness = harness(LoadMode::Inline);
+    harness.get_by_label("3D model view").hover();
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, 120.0),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
+        modifiers: egui::Modifiers::NONE,
+    });
+    settle(&mut harness);
+    let before = view(&harness).camera().expect("camera");
+    select(&mut harness, "|F|L12");
+    choose_version(&mut harness, "v1");
+    let after = view(&harness).camera().expect("camera");
+    assert_eq!((after.yaw, after.pitch), (before.yaw, before.pitch));
+    assert!(
+        (after.distance / after.radius - before.distance / before.radius).abs() < 1e-3,
+        "relative zoom kept across versions"
+    );
+    let scope = harness.state().state().session.scope().expect("ready");
+    assert!(harness.state().state().model.selected(scope).is_empty());
+    harness.key_press(egui::Key::F);
+    settle(&mut harness);
+    let fitted = view(&harness).camera().expect("camera");
+    assert!(fitted.distance > after.distance, "F refits after zooming in");
 }
 
 #[test]
 fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     let mut harness = harness(LoadMode::Manual);
     assert!(present(&harness, "Loading main/v2"));
-    assert!(
-        !present(&harness, "Source entities"),
-        "no content before a load"
-    );
+    assert!(!present(&harness, "All entities"), "no content before a load");
     choose_version(&mut harness, "v1");
     choose_version(&mut harness, "v2");
     assert_eq!(harness.state_mut().loader_mut().held().len(), 3);
@@ -225,7 +376,7 @@ fn rapid_switches_show_only_the_current_version_whatever_order_loads_finish() {
     );
     assert_eq!(app.state().stale_discarded, 2);
     assert_eq!(app.last_refusal(), Some(Refusal::StaleResponse));
-    assert!(present(&harness, "Source entities"));
+    assert!(present(&harness, "All entities"));
 }
 
 /// Paint bounds (logical points) of every text label under `root`.
@@ -257,8 +408,7 @@ fn inspector_text_stays_inside_its_panel_in_the_app() {
         if version == "v1" {
             choose_version(&mut harness, "v1");
         }
-        slab_row(&harness).click();
-        settle(&mut harness);
+        select(&mut harness, "|F|L12");
         // The inspector's own pane: the smallest pane holding its heading.
         let pane = harness
             .root()
@@ -285,19 +435,35 @@ fn inspector_text_stays_inside_its_panel_in_the_app() {
     }
 }
 
-/// `middle.e2k` with slab `S` renamed to one long unbroken identifier.
+/// `tower-v1.e2k` with slab `F` renamed to one long unbroken identifier.
 fn long_name_version() -> crate::project::VersionEntry {
     let mut entry = Project::public_demo().versions[0].clone();
     let crate::project::Source::Embedded(bytes) = entry.source;
     let text = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
-        .replace("\"S\"", &format!("\"{LONG_NAME}\""));
+        .replace("AREA \"F\"", &format!("AREA \"{LONG_NAME}\""))
+        .replace("AREAASSIGN \"F\"", &format!("AREAASSIGN \"{LONG_NAME}\""));
     entry.source =
         crate::project::Source::Embedded(Box::leak(text.into_bytes().into_boxed_slice()));
     entry
 }
 const LONG_NAME: &str =
     "S_DELIBERATELY_LONG_SOURCE_IDENTIFIER_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/// One entity of each class plus every roof (L12) shell: the inspector's
+/// distinct row shapes, including the TOP slab and the long identifier.
+fn sample(document: &crate::document::Document) -> Vec<usize> {
+    let mut seen = Vec::new();
+    let mut picked = Vec::new();
+    for (index, entity) in document.mesh().entities().iter().enumerate() {
+        let roof_shell = entity.shell.is_some() && entity.story == "L12";
+        if roof_shell || !seen.contains(&entity.class) {
+            seen.push(entity.class);
+            picked.push(index);
+        }
+    }
+    picked
+}
 
 #[test]
 fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
@@ -314,14 +480,14 @@ fn inspector_rows_fit_every_width_scale_and_theme_without_eliding() {
         for scale in [1.0, 1.25, 1.5] {
             for theme in [egui::Theme::Dark, egui::Theme::Light] {
                 for document in &documents {
-                    for index in 0..document.mesh().entities().len() {
+                    for index in sample(document) {
                         let shown = std::sync::Arc::clone(document);
                         let harness = Harness::builder()
                             .with_size(egui::vec2(width, 900.0))
                             .with_pixels_per_point(scale)
                             .with_theme(theme)
                             .build_ui(move |ui| {
-                                crate::pages::model::inspector(ui, &shown, &[index]);
+                                crate::pages::model::inspector(ui, &shown, &[index], 0);
                             });
                         let context = format!(
                             "width {width} scale {scale} {theme:?} {} entity {index}",

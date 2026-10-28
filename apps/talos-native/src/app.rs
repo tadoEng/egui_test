@@ -3,7 +3,7 @@
 use crate::loader::{LoadMode, Loader};
 use crate::project::Project;
 use crate::state::{Action, DocumentState, Refusal, State, Workspace};
-use crate::view::{ModelView, PlaceholderView};
+use crate::view::ModelView;
 
 pub struct App {
     state: State,
@@ -17,7 +17,9 @@ impl App {
         crate::theme::install(&cc.egui_ctx);
         Self::with_parts(
             Project::public_demo(),
-            Box::new(PlaceholderView),
+            Box::new(crate::native_view::NativeModelView::new(
+                cc.wgpu_render_state.as_ref(),
+            )),
             Loader::new(mode, Some(cc.egui_ctx.clone())),
         )
     }
@@ -36,6 +38,9 @@ impl App {
     }
     pub fn state(&self) -> &State {
         &self.state
+    }
+    pub fn view(&self) -> &dyn ModelView {
+        self.view.as_ref()
     }
     pub fn loader_mut(&mut self) -> &mut Loader {
         &mut self.loader
@@ -58,7 +63,7 @@ impl App {
         }
     }
 
-    fn shortcuts(&self, ctx: &egui::Context) -> Vec<Action> {
+    fn shortcuts(&mut self, ctx: &egui::Context) -> Vec<Action> {
         use egui::{Key, KeyboardShortcut, Modifiers};
         let mut actions = Vec::new();
         let digits = [Key::Num1, Key::Num2, Key::Num3, Key::Num4, Key::Num5];
@@ -82,6 +87,9 @@ impl App {
                 }
                 if input.consume_key(Modifiers::NONE, Key::I) {
                     actions.push(Action::ToggleInspector);
+                }
+                if input.consume_key(Modifiers::NONE, Key::F) {
+                    self.view.fit();
                 }
             });
         }

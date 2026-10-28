@@ -7,6 +7,7 @@
 pub mod app;
 pub mod document;
 pub mod loader;
+pub mod native_view;
 pub mod pages;
 pub mod project;
 pub mod state;
@@ -16,5 +17,7 @@ pub mod view;
 
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod gpu_tests;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod ui_tests;

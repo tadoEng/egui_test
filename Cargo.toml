@@ -27,6 +27,7 @@ bytemuck = { version = "1.25.2", features = ["derive"], optional = true }
 env_logger = "0.11.11"
 ext-e2k = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", default-features = false, optional = true }
 lab-e2k-mesh = { path = "crates/lab-e2k-mesh", features = ["render-layout"], optional = true }
+lab-viewport = { path = "crates/lab-viewport", optional = true }
 ext-calc = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
 ext-core = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
 ext-sidecar = { git = "https://github.com/tadoEng/EtabExtension", rev = "9eb1c8792a1d41f3f81c60428afe89f1655782ba", optional = true }
@@ -40,7 +41,7 @@ wry = { version = "=0.55.1", optional = true }
 
 [features]
 e2k = ["dep:ext-e2k"]
-native-renderer = ["dep:bytemuck", "dep:pollster"]
+native-renderer = ["dep:bytemuck", "dep:pollster", "dep:lab-viewport"]
 real-geometry = ["native-renderer", "dep:lab-e2k-mesh", "dep:serde_json"]
 webview = ["dep:base64", "dep:serde_json", "dep:wry"]
 cached-results = ["dep:ext-calc", "dep:ext-core", "dep:sha2"]
@@ -109,7 +110,7 @@ opt-level = 2
 workspace = true
 
 [workspace]
-members = ["crates/lab-fixture", "crates/lab-e2k-mesh", "apps/talos-native"]
+members = ["crates/lab-fixture", "crates/lab-e2k-mesh", "crates/lab-viewport", "apps/talos-native"]
 
 [workspace.lints.rust]
 unsafe_code = "deny"

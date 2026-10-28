@@ -59,7 +59,7 @@ fn starts_on_model_loading_the_latest_version() {
 }
 
 #[test]
-fn the_two_demo_versions_differ_only_in_a_source_backed_slab_insertion() {
+fn the_two_demo_versions_differ_in_source_backed_slab_insertion_and_beam_depth() {
     let project = Project::public_demo();
     assert_eq!(project.authority, Authority::PublicSyntheticDemo);
     let [first, second] = project.versions.as_slice() else {
@@ -74,14 +74,14 @@ fn the_two_demo_versions_differ_only_in_a_source_backed_slab_insertion() {
         b.id().revision.source_sha256,
         "distinct source bytes"
     );
-    let (sa, sb) = (shell(&a, "S"), shell(&b, "S"));
+    let (sa, sb) = (shell(&a, "|F|L12"), shell(&b, "|F|L12"));
     assert_eq!(sa.insertion_point.as_deref(), Some("MIDDLE"));
     assert_eq!(sb.insertion_point.as_deref(), Some("TOP"));
     assert_eq!(sa.placement, ShellPlacement::CentredMiddle);
     assert_eq!(sb.placement, ShellPlacement::FlatAtDeclaredFace);
     assert_eq!(
-        shell(&a, "W").placement,
-        shell(&b, "W").placement,
+        shell(&a, "|W1|L12").placement,
+        shell(&b, "|W1|L12").placement,
         "the wall is unchanged"
     );
 }
@@ -91,9 +91,9 @@ fn source_lengths_are_converted_explicitly_and_shown_with_their_source_value() {
     let document = Document::load(&Project::public_demo().versions[0]).expect("v1");
     let units = document.mesh().source_units();
     assert_eq!(document::unit_names(units), ["kip", "ft", "°F"]);
-    let thickness = shell(&document, "S").thickness_m.expect("declared");
-    assert!((thickness - 0.5 * 0.3048).abs() < 1e-12, "0.5 ft in metres");
-    assert_eq!(document::length(thickness, units), "0.1524 m (0.5 ft)");
+    let thickness = shell(&document, "|F|L12").thickness_m.expect("declared");
+    assert!((thickness - 0.75 * 0.3048).abs() < 1e-12, "0.75 ft in metres");
+    assert_eq!(document::length(thickness, units), "0.2286 m (0.75 ft)");
 }
 
 #[test]
@@ -194,6 +194,7 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
             scope,
             entity: Some(0),
             toggle: false,
+            coincident: 0,
         })
         .expect("in scope");
     assert_eq!(state.model.selected(scope), [0]);
@@ -202,6 +203,7 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
             scope,
             entity: Some(999),
             toggle: false,
+            coincident: 0,
         }),
         Err(Refusal::UnknownEntity)
     );
@@ -211,6 +213,7 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
             scope,
             entity: Some(1),
             toggle: false,
+            coincident: 0,
         }),
         Err(Refusal::NoDocument),
         "nothing is pickable while loading"
@@ -225,6 +228,7 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
             scope,
             entity: Some(1),
             toggle: false,
+            coincident: 0,
         }),
         Err(Refusal::StaleSelection),
         "a pick made against v2 is refused on v1"
@@ -253,6 +257,7 @@ fn identical_bytes_as_another_version_still_expire_the_selection() {
             scope: old,
             entity: Some(0),
             toggle: false,
+            coincident: 0,
         })
         .expect("in scope");
     let effect = switch(&mut state, "a");
@@ -265,6 +270,7 @@ fn identical_bytes_as_another_version_still_expire_the_selection() {
             scope: old,
             entity: Some(0),
             toggle: true,
+            coincident: 0,
         }),
         Err(Refusal::StaleSelection)
     );
@@ -280,6 +286,7 @@ fn workspaces_keep_their_own_state_across_tab_switches() {
             scope,
             entity: Some(1),
             toggle: false,
+            coincident: 0,
         },
         Action::SelectWorkspace(Workspace::Results),
         Action::SetMetric(Metric::StoryShear),
@@ -321,21 +328,21 @@ fn the_results_query_is_validated_against_the_version_and_never_invents_a_case()
         })
     };
     state
-        .apply(Action::SetStoryRange(range("Roof", "Roof")))
+        .apply(Action::SetStoryRange(range("L12", "L12")))
         .expect("valid");
     assert_eq!(
-        state.apply(Action::SetStoryRange(range("Base", "Roof"))),
+        state.apply(Action::SetStoryRange(range("Base", "L12"))),
         Err(Refusal::UnknownStory),
         "inverted"
     );
     assert_eq!(
-        state.apply(Action::SetStoryRange(range("Roof", "Level 9"))),
+        state.apply(Action::SetStoryRange(range("L12", "Level 99"))),
         Err(Refusal::UnknownStory)
     );
-    assert_eq!(state.results.query.stories, range("Roof", "Roof"));
+    assert_eq!(state.results.query.stories, range("L12", "L12"));
     assert_eq!(
         crate::pages::results::describe(&state.results.query),
-        "Story drift · X · no case · Roof–Roof · main/v2"
+        "Story drift · X · no case · L12–L12 · main/v2"
     );
 }
 
@@ -344,14 +351,14 @@ fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
     let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
     let renamed = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
-        .replace("\"Roof\"", "\"Level 2\"");
+        .replace("\"L12\"", "\"Level 13\"");
     let mut project = Project::public_demo();
     project.versions[0].source = Source::Embedded(leaked(renamed));
     let (mut state, effects) = State::new(project);
     deliver(&mut state, &effects[0]).expect("v2");
     state
         .apply(Action::SetStoryRange(Some(StoryRange {
-            top: "Roof".to_owned(),
+            top: "L12".to_owned(),
             bottom: "Base".to_owned(),
         })))
         .expect("valid in v2");
@@ -364,7 +371,7 @@ fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
             .results
             .notice
             .as_deref()
-            .is_some_and(|n| n.contains("Roof–Base") && n.contains("main/v1")),
+            .is_some_and(|n| n.contains("L12–Base") && n.contains("main/v1")),
         "{:?}",
         state.results.notice
     );
@@ -373,4 +380,56 @@ fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
     deliver(&mut state, &effect).expect("v2");
     assert_eq!(state.results.notice, None, "stale notice about main/v1");
     assert_eq!(state.results.query.version, Some(v("v2")));
+}
+
+#[test]
+fn story_highlight_is_validated_and_survives_only_where_the_story_exists() {
+    let mut state = ready_demo();
+    assert_eq!(
+        state.apply(Action::SelectStory(Some("Level 99".to_owned()))),
+        Err(Refusal::UnknownStory)
+    );
+    state
+        .apply(Action::SelectStory(Some("L12".to_owned())))
+        .expect("story of v2");
+    let effect = switch(&mut state, "v1");
+    deliver(&mut state, &effect).expect("v1");
+    assert_eq!(state.model.story.as_deref(), Some("L12"), "same story in v1");
+
+    // A version without that story drops the highlight instead of keeping a
+    // name that no longer resolves.
+    let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
+    let renamed = String::from_utf8(bytes.to_vec())
+        .expect("utf-8")
+        .replace("\"L12\"", "\"Level 13\"");
+    let mut project = Project::public_demo();
+    project.versions[0].source = Source::Embedded(leaked(renamed));
+    let (mut state, effects) = State::new(project);
+    deliver(&mut state, &effects[0]).expect("v2");
+    state
+        .apply(Action::SelectStory(Some("L12".to_owned())))
+        .expect("story of v2");
+    let effect = switch(&mut state, "v1");
+    deliver(&mut state, &effect).expect("v1");
+    assert_eq!(state.model.story, None);
+    state.apply(Action::SelectStory(None)).expect("clear");
+}
+
+#[test]
+fn an_ambiguous_view_pick_is_disclosed_until_the_next_pick_or_version() {
+    let mut state = ready_demo();
+    let scope = state.session.scope().expect("ready");
+    let pick = |entity, coincident| Action::Pick {
+        scope,
+        entity,
+        toggle: false,
+        coincident,
+    };
+    state.apply(pick(Some(3), 2)).expect("in scope");
+    assert_eq!(state.model.ambiguous, 2);
+    state.apply(pick(None, 0)).expect("empty click");
+    assert_eq!(state.model.ambiguous, 0, "an empty click clears it");
+    state.apply(pick(Some(3), 1)).expect("in scope");
+    let _load = switch(&mut state, "v1");
+    assert_eq!(state.model.ambiguous, 0, "a version switch clears it");
 }

@@ -15,6 +15,8 @@ pub struct ViewFrame<'a> {
     pub document: &'a std::sync::Arc<Document>,
     pub scope: Scope,
     pub selected: &'a [usize],
+    /// Story to highlight when nothing is selected.
+    pub story: Option<&'a str>,
     /// False while source provenance is unverified (e.g. UNLINKED); a view
     /// must then neither hover nor pick.
     pub picking_allowed: bool,
@@ -26,12 +28,17 @@ pub enum ViewIntent {
         scope: Scope,
         entity: Option<usize>,
         toggle: bool,
+        coincident: usize,
     },
 }
 
 pub trait ModelView {
     /// Draw into the whole of `ui` and report what the user asked for.
     fn show(&mut self, ui: &mut egui::Ui, frame: &ViewFrame<'_>) -> Vec<ViewIntent>;
+    /// Reset the camera to frame the whole model (view state only).
+    fn fit(&mut self) {}
+    /// For diagnostics and tests that inspect a concrete view.
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// APP-01A stand-in: states what will mount here and draws nothing pretending
@@ -39,6 +46,9 @@ pub trait ModelView {
 #[derive(Default)]
 pub struct PlaceholderView;
 impl ModelView for PlaceholderView {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
     fn show(&mut self, ui: &mut egui::Ui, frame: &ViewFrame<'_>) -> Vec<ViewIntent> {
         let rect = ui.available_rect_before_wrap();
         let tokens = crate::theme::Tokens::of(ui);
