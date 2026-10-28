@@ -240,15 +240,15 @@ fn selection_is_scoped_to_version_generation_and_geometry() {
 
 #[test]
 fn identical_bytes_as_another_version_still_expire_the_selection() {
-    let source = Project::public_demo().versions[0].source;
+    let source = Project::public_demo().versions[0].source.clone();
     let project = Project {
         name: "Same bytes".to_owned(),
         authority: Authority::PublicSyntheticDemo,
         versions: ["a", "b"]
             .map(|name| VersionEntry {
                 id: v(name),
-                summary: "same bytes",
-                source,
+                summary: "same bytes".to_owned(),
+                source: source.clone(),
             })
             .to_vec(),
     };
@@ -345,13 +345,15 @@ fn the_results_query_is_validated_against_the_version_and_never_invents_a_case()
     assert_eq!(state.results.query.stories, range("L12", "L12"));
     assert_eq!(
         crate::pages::results::describe(&state.results.query),
-        "Story drift · X · no case · L12–L12 · main/v2"
+        "Story drift · wind · X · no case · L12–L12 · main/v2"
     );
 }
 
 #[test]
 fn a_story_range_missing_from_the_next_version_is_reset_with_a_notice() {
-    let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
+    let Source::Embedded(bytes) = Project::public_demo().versions[0].source else {
+        panic!("the tower is embedded")
+    };
     let renamed = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\"L12\"", "\"Level 13\"");
@@ -405,7 +407,9 @@ fn story_highlight_is_validated_and_survives_only_where_the_story_exists() {
 
     // A version without that story drops the highlight instead of keeping a
     // name that no longer resolves.
-    let Source::Embedded(bytes) = Project::public_demo().versions[0].source;
+    let Source::Embedded(bytes) = Project::public_demo().versions[0].source else {
+        panic!("the tower is embedded")
+    };
     let renamed = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("\"L12\"", "\"Level 13\"");
@@ -638,4 +642,187 @@ fn show_in_explorer_moves_the_filter_to_the_selection_and_keeps_it() {
     state.apply(Action::RevealSelection).expect("reveal");
     assert_eq!(state.model.story, None);
     assert_eq!(state.model.selected(scope).len(), 2);
+}
+
+/// A version folder built from the authored public fixture: the LAB-REAL01
+/// E2K as `model.e2k` and its cached results, edited by `edit` (manifest and
+/// calc JSON). `None` for `edit` leaves out the results entirely.
+/// Edits the fixture's manifest and calc JSON before they are written.
+type Edit<'a> = &'a dyn Fn(&mut serde_json::Value, &mut serde_json::Value);
+fn folder(version: &str, edit: Option<Edit<'_>>) -> tempfile::TempDir {
+    let (mut manifest, mut calc, units) = lab_results::fixture::values();
+    manifest["id"] = serde_json::json!(version);
+    calc["meta"]["versionId"] = serde_json::json!(version);
+    let root = tempfile::tempdir().expect("owned temp folder");
+    let path = root.path();
+    std::fs::write(
+        path.join("model.e2k"),
+        include_bytes!("../../../assets/fixtures/real01.e2k"),
+    )
+    .expect("model");
+    if let Some(edit) = edit {
+        edit(&mut manifest, &mut calc);
+        std::fs::create_dir(path.join("results")).expect("results dir");
+        std::fs::write(path.join("results/calc_output.json"), calc.to_string()).expect("calc");
+        std::fs::write(path.join("results/source-units.json"), units.to_string()).expect("units");
+    }
+    std::fs::write(path.join("manifest.json"), manifest.to_string()).expect("manifest");
+    root
+}
+fn ready(folders: &[&tempfile::TempDir]) -> State {
+    let paths: Vec<_> = folders.iter().map(|f| f.path().to_owned()).collect();
+    let (mut state, effects) = State::new(Project::from_folders(&paths).expect("folders"));
+    deliver(&mut state, &effects[0]).expect("initial load");
+    state
+}
+fn same(_: &mut serde_json::Value, _: &mut serde_json::Value) {}
+
+#[test]
+fn the_public_results_fixture_loads_its_cached_results_and_picks_stored_choices() {
+    let (mut state, effects) = State::new(Project::public_results_fixture());
+    deliver(&mut state, &effects[0]).expect("fixture");
+    assert!(state.cached().is_some());
+    let query = &state.results.query;
+    assert_eq!(query.metric, Metric::WindDrift);
+    assert_eq!(
+        (query.group.as_deref(), query.case.as_deref()),
+        (Some("G"), Some("W")),
+        "the first stored group and case, never an invented one"
+    );
+    let plot = state.profile().expect("profile");
+    assert_eq!(plot.stories, ["Roof", "L1"]);
+    assert_eq!(plot.series[0].values, [Some(0.002), Some(0.001)]);
+    assert_eq!(
+        state.apply(Action::SetMetric(Metric::SeismicDrift)),
+        Err(Refusal::NotInResults),
+        "not stored, so not selectable"
+    );
+    assert_eq!(
+        state.apply(Action::SetCase("Invented".to_owned())),
+        Err(Refusal::NotInResults)
+    );
+    state
+        .apply(Action::SetMetric(Metric::StoryMoment))
+        .expect("stored");
+    let plot = state.profile().expect("moments");
+    let names: Vec<_> = plot.series.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["Mx (stored)", "My (stored)"]);
+    assert_eq!(state.results.query.group, None, "profiles have no group");
+}
+
+#[test]
+fn a_story_range_the_cached_profile_lacks_is_a_mismatch_not_every_story() {
+    // The model has Roof and L1; the cached drift profile only Roof.
+    let drop_l1 = |_: &mut serde_json::Value, calc: &mut serde_json::Value| {
+        for axis in ["x", "y"] {
+            calc["driftWind"][axis]["storyOrder"] = serde_json::json!(["Roof"]);
+            calc["driftWind"][axis]["rows"]
+                .as_array_mut()
+                .expect("rows")
+                .retain(|row| row["story"] == "Roof");
+        }
+    };
+    let root = folder("v1", Some(&drop_l1));
+    let mut state = ready(&[&root]);
+    let range = |top: &str, bottom: &str| {
+        Some(StoryRange {
+            top: top.to_owned(),
+            bottom: bottom.to_owned(),
+        })
+    };
+    state
+        .apply(Action::SetStoryRange(range("L1", "L1")))
+        .expect("L1 is in the model");
+    assert_eq!(
+        state.shown_profile(),
+        crate::state::Shown::RangeMismatch(vec!["L1".to_owned()])
+    );
+    state
+        .apply(Action::SetStoryRange(range("Roof", "Roof")))
+        .expect("Roof is in both");
+    let crate::state::Shown::Plot(plot) = state.shown_profile() else {
+        panic!("Roof is in the cached profile");
+    };
+    assert_eq!(plot.stories, ["Roof"]);
+}
+
+#[test]
+fn a_story_range_that_excludes_the_highlighted_story_clears_it() {
+    let (mut state, effects) = State::new(Project::public_results_fixture());
+    deliver(&mut state, &effects[0]).expect("fixture");
+    state
+        .apply(Action::SelectResultStory(Some("L1".to_owned())))
+        .expect("L1 is stored");
+    let range = |story: &str| {
+        Some(StoryRange {
+            top: story.to_owned(),
+            bottom: story.to_owned(),
+        })
+    };
+    state
+        .apply(Action::SetStoryRange(range("L1")))
+        .expect("range");
+    assert_eq!(
+        state.results.story.as_deref(),
+        Some("L1"),
+        "still on screen"
+    );
+    state
+        .apply(Action::SetStoryRange(range("Roof")))
+        .expect("range");
+    assert_eq!(state.results.story, None, "L1 is no longer shown");
+}
+
+#[test]
+fn a_result_story_selection_is_per_version_and_never_reaches_the_model() {
+    let (one, two) = (folder("v1", Some(&same)), folder("v2", Some(&same)));
+    let mut state = ready(&[&one, &two]);
+    state
+        .apply(Action::SelectResultStory(Some("Roof".to_owned())))
+        .expect("Roof is in the profile");
+    assert_eq!(
+        state.apply(Action::SelectResultStory(Some("Mezzanine".to_owned()))),
+        Err(Refusal::UnknownStory)
+    );
+    let scope = state.session.scope().expect("ready");
+    assert!(state.model.selected(scope).is_empty(), "no model pick");
+    assert_eq!(state.model.story, None, "no model story either");
+    // The latest folder (v2) opens first; switch to the other one.
+    assert_eq!(state.results.query.version, Some(v("v2")));
+    let effect = switch(&mut state, "v1");
+    assert_eq!(
+        state.results.story, None,
+        "cleared the moment v1 is requested"
+    );
+    deliver(&mut state, &effect).expect("v1");
+    assert_eq!(state.results.story, None);
+    assert_eq!(state.results.query.version, Some(v("v1")));
+}
+
+#[test]
+fn absent_and_refused_cached_results_plot_nothing_and_say_why() {
+    let bare = folder("v1", None);
+    let state = ready(&[&bare]);
+    assert!(state.cached().is_none());
+    assert_eq!(state.shown_profile(), crate::state::Shown::Unavailable);
+    let document::Results::Absent(reason) = state.session.ready().expect("ready").results() else {
+        panic!("absent");
+    };
+    assert!(reason.contains("results/calc_output.json"), "{reason}");
+
+    // Results written for another version than the folder's manifest.
+    let other = |_: &mut serde_json::Value, calc: &mut serde_json::Value| {
+        calc["meta"]["versionId"] = serde_json::json!("v9");
+    };
+    let mismatched = folder("v1", Some(&other));
+    let state = ready(&[&mismatched]);
+    assert!(state.cached().is_none());
+    assert!(matches!(
+        state.session.ready().expect("ready").results(),
+        document::Results::Refused(_)
+    ));
+    assert_eq!(
+        state.results.query.case, None,
+        "nothing chosen from refused results"
+    );
 }

@@ -1,14 +1,14 @@
 //! One explicit read-only version: checked E2K buffers + stored engineering DTOs.
 //! No project operations, recalculation, live ETABS, persistence or source certification.
 #[cfg(target_os = "windows")]
-#[path = "native_results/data.rs"]
+#[path = "../crates/lab-results/src/data.rs"]
 #[expect(
     dead_code,
     reason = "The standalone path reader remains in native_results; this host constructs the same DTOs from preflight-held bytes"
 )]
 mod data;
 #[cfg(target_os = "windows")]
-#[path = "native_results/fixture.rs"]
+#[path = "../crates/lab-results/src/fixture.rs"]
 mod fixture;
 #[cfg(target_os = "windows")]
 #[path = "native_workbench/host.rs"]

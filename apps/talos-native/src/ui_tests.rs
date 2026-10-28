@@ -7,7 +7,7 @@ use crate::loader::{LoadMode, Loader};
 use crate::native_view::NativeModelView;
 use crate::project::{Project, VersionId};
 use crate::state::Action;
-use crate::state::{DocumentState, Metric, PanelMode, Refusal, Workspace};
+use crate::state::{DocumentState, PanelMode, Refusal, Workspace};
 use crate::view::PlaceholderView;
 use egui::accesskit::{Role, Toggled};
 use egui_kittest::{
@@ -175,7 +175,7 @@ fn launches_as_a_tab_list_on_model_with_a_restrained_header() {
         "units live in Model"
     );
     assert!(
-        !present(&harness, "No analyzed results"),
+        !present(&harness, "No cached results"),
         "Results is not co-rendered"
     );
 }
@@ -187,14 +187,14 @@ fn model_and_results_never_render_together() {
     harness.run();
     assert_eq!(selected_tabs(&harness), ["Results"]);
     assert_eq!(harness.state().state().workspace, Workspace::Results);
-    assert!(present(&harness, "No analyzed results for main/v2"));
+    assert!(present(&harness, "No cached results for main/v2"));
     for absent in ["3D model view", "Explorer", "Inspector", "Source units"] {
         assert!(!present(&harness, absent), "{absent} leaked into Results");
     }
     harness.get_by_label("Compare").click();
     harness.run();
     assert!(present(&harness, "Not available in this prototype yet"));
-    assert!(!present(&harness, "No analyzed results"));
+    assert!(!present(&harness, "No cached results"));
     assert!(!present(&harness, "3D model view"));
 }
 
@@ -237,11 +237,9 @@ fn workspace_state_survives_tab_switches() {
     assert!(!harness.state().state().model.explorer_open);
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     harness.run();
-    harness
-        .get_by_role_and_label(Role::ComboBox, "Metric")
-        .click();
-    harness.run();
-    harness.get_by_label("Story shear").click();
+    // The tower has no cached results, so the Metric list is disabled; the
+    // direction is still part of the request and must survive tab switches.
+    harness.get_by_label("Y").click();
     harness.run();
     harness.key_press(egui::Key::E);
     harness.run();
@@ -255,12 +253,12 @@ fn workspace_state_survives_tab_switches() {
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     harness.run();
     assert_eq!(
-        harness.state().state().results.query.metric,
-        Metric::StoryShear
+        harness.state().state().results.query.direction,
+        crate::state::Direction::Y
     );
     assert!(present(
         &harness,
-        "Story shear · X · no case · all stories · main/v2"
+        "Story drift · wind · Y · no case · all stories · main/v2"
     ));
 }
 
@@ -507,7 +505,9 @@ fn inspector_text_stays_inside_its_panel_in_the_app() {
 /// `tower-v1.e2k` with slab `F` renamed to one long unbroken identifier.
 fn long_name_version() -> crate::project::VersionEntry {
     let mut entry = Project::public_demo().versions[0].clone();
-    let crate::project::Source::Embedded(bytes) = entry.source;
+    let crate::project::Source::Embedded(bytes) = entry.source else {
+        panic!("the tower is embedded")
+    };
     let text = String::from_utf8(bytes.to_vec())
         .expect("utf-8")
         .replace("AREA \"F\"", &format!("AREA \"{LONG_NAME}\""))
@@ -868,7 +868,7 @@ fn results_selector_labels_come_before_their_controls() {
     }
     assert!(present(
         &harness,
-        "Story drift · X · no case · all stories · main/v2"
+        "Story drift · wind · X · no case · all stories · main/v2"
     ));
 }
 
@@ -1093,5 +1093,127 @@ fn compact_panels_keep_a_narrow_inspector_at_every_scale_and_height() {
                 "{context}: docked {docked:?}"
             );
         }
+    }
+}
+
+fn results_demo() -> Harness<'static, App> {
+    let mut harness = Harness::builder()
+        .with_max_steps(8)
+        .with_size(egui::vec2(1280.0, 800.0))
+        .with_context_setup(crate::theme::install)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                Project::public_results_fixture(),
+                Box::new(NativeModelView::new(None)),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+        });
+    settle(&mut harness);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    harness
+}
+
+#[test]
+fn results_chart_and_story_table_show_stored_values_and_link_selection() {
+    let mut harness = results_demo();
+    assert!(
+        present(&harness, "Story drift · wind X · G · W"),
+        "chart title"
+    );
+    assert!(present(&harness, "Cached · freshness not verified"));
+    assert!(present(&harness, "Authored fixture"));
+    // Table rows carry the stored values, signs kept, in stored order.
+    let roof = "Roof  ·  0.00200  ·  -0.00250";
+    assert!(present(&harness, roof), "Roof row");
+    assert!(present(&harness, "L1  ·  0.00100  ·  -0.00150"), "L1 row");
+    assert!(present(&harness, "Stored allowable 0.01000"));
+    harness.get_by_label(roof).click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().results.story.as_deref(),
+        Some("Roof")
+    );
+    assert_eq!(
+        harness.get_by_label(roof).accesskit_node().toggled(),
+        Some(Toggled::True),
+        "the row's state is in the accessibility tree"
+    );
+    harness.get_by_label(roof).click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().results.story,
+        None,
+        "a second click clears"
+    );
+    // Only the stored responses are offered.
+    harness
+        .get_by_role_and_label(Role::ComboBox, "Metric")
+        .click();
+    settle(&mut harness);
+    assert!(present(&harness, "Story shear"));
+    assert!(!present(&harness, "Story drift · seismic"), "not stored");
+    assert!(
+        !present(&harness, "Story displacement · wind"),
+        "not stored"
+    );
+    harness.get_by_label("Story moment · stored Mx, My").click();
+    settle(&mut harness);
+    assert!(present(&harness, "Mx (stored)") && present(&harness, "My (stored)"));
+    assert!(
+        !present(&harness, "Overturning"),
+        "no axis convention is claimed"
+    );
+    assert!(!present(&harness, "Group"), "profiles have no group");
+}
+
+#[test]
+fn the_tower_still_says_it_has_no_cached_results() {
+    let mut harness = harness(LoadMode::Inline);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    assert!(present(&harness, "No cached results for main/v2"));
+    assert!(present(
+        &harness,
+        "This synthetic snapshot has no cached results."
+    ));
+    assert!(
+        !present(&harness, "Story table"),
+        "no table without results"
+    );
+    assert!(!present(&harness, "Cached · freshness not verified"));
+}
+
+#[test]
+fn results_fit_a_900_point_window() {
+    let mut harness = Harness::builder()
+        .with_max_steps(8)
+        .with_size(egui::vec2(900.0, 700.0))
+        .with_context_setup(crate::theme::install)
+        .build_eframe(move |cc| {
+            App::with_parts(
+                Project::public_results_fixture(),
+                Box::new(NativeModelView::new(None)),
+                Loader::new(LoadMode::Inline, Some(cc.egui_ctx.clone())),
+            )
+        });
+    settle(&mut harness);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    for node in harness.root().children_recursive() {
+        if node.accesskit_node().bounding_box().is_none() {
+            continue;
+        }
+        let rect = node.rect();
+        let name = node
+            .accesskit_node()
+            .label()
+            .or_else(|| node.accesskit_node().value())
+            .unwrap_or_default();
+        assert!(
+            rect.right() <= 900.5,
+            "{:?} {name:?} at {rect:?} runs off a 900 pt window",
+            node.accesskit_node().role()
+        );
     }
 }

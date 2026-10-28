@@ -5,64 +5,64 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use std::{collections::BTreeSet, fs, io::Read as _, path::Path};
 
-pub(crate) struct Snapshot {
-    pub(crate) calc: CalcOutput,
-    pub(crate) manifest: VersionManifest,
-    pub(crate) fingerprint: String,
+pub struct Snapshot {
+    pub calc: CalcOutput,
+    pub manifest: VersionManifest,
+    pub fingerprint: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum Direction {
+pub enum Direction {
     X,
     Y,
 }
 #[derive(Clone, PartialEq, Eq)]
-pub(crate) struct Config {
-    pub(crate) direction: Direction,
-    pub(crate) drift_group: String,
-    pub(crate) drift_case: String,
-    pub(crate) shear_case: String,
+pub struct Config {
+    pub direction: Direction,
+    pub drift_group: String,
+    pub drift_case: String,
+    pub shear_case: String,
 }
-pub(crate) struct Choices {
-    pub(crate) groups: Vec<String>,
-    pub(crate) cases: Vec<String>,
-    pub(crate) forces: Vec<String>,
+pub struct Choices {
+    pub groups: Vec<String>,
+    pub cases: Vec<String>,
+    pub forces: Vec<String>,
+}
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Series {
+    pub name: String,
+    pub values: Vec<Option<f64>>,
+}
+#[derive(Serialize, Debug, PartialEq)]
+pub struct Plot {
+    pub title: String,
+    pub unit: String,
+    pub stories: Vec<String>,
+    pub series: Vec<Series>,
+    pub reference: Option<f64>,
 }
 #[derive(Serialize)]
-pub(crate) struct Series {
-    pub(crate) name: String,
-    pub(crate) values: Vec<Option<f64>>,
-}
-#[derive(Serialize)]
-pub(crate) struct Plot {
-    pub(crate) title: String,
-    pub(crate) unit: String,
-    pub(crate) stories: Vec<String>,
-    pub(crate) series: Vec<Series>,
-    pub(crate) reference: Option<f64>,
-}
-#[derive(Serialize)]
-pub(crate) struct Packet {
-    pub(crate) version: u8,
-    pub(crate) source: String,
-    pub(crate) generation: u64,
-    pub(crate) selected_story: Option<String>,
-    pub(crate) drift: Plot,
-    pub(crate) shear: Plot,
+pub struct Packet {
+    pub version: u8,
+    pub source: String,
+    pub generation: u64,
+    pub selected_story: Option<String>,
+    pub drift: Plot,
+    pub shear: Plot,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Select {
-    pub(crate) version: u8,
+pub struct Select {
+    pub version: u8,
     #[serde(rename = "type")]
-    pub(crate) kind: String,
-    pub(crate) source: String,
-    pub(crate) generation: u64,
-    pub(crate) plot: String,
-    pub(crate) story: Option<String>,
+    pub kind: String,
+    pub source: String,
+    pub generation: u64,
+    pub plot: String,
+    pub story: Option<String>,
 }
 
-fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
+pub(crate) fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
     let meta = fs::metadata(path).map_err(|e| format!("Read artifact metadata: {e}"))?;
     if !meta.is_file() || meta.len() > 64 * 1024 * 1024 {
         return Err("Missing or oversized cached artifact".into());
@@ -77,7 +77,11 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 impl Snapshot {
-    pub(crate) fn load(root: &Path) -> Result<Self, String> {
+    /// Reads one version folder's manifest, cached results and source units.
+    ///
+    /// # Errors
+    /// A partial, unreadable, oversized, changing or inconsistent version.
+    pub fn load(root: &Path) -> Result<Self, String> {
         let root = root
             .canonicalize()
             .map_err(|e| format!("Resolve version directory: {e}"))?;
@@ -113,9 +117,12 @@ impl Snapshot {
         }
         Ok(snapshot)
     }
-    // Same authoritative DTO validation for bytes already held by the preflight
-    // read guards. Do not reopen joined paths when assembling a combined scene.
-    pub(crate) fn from_bytes(bytes: [&[u8]; 3]) -> Result<Self, String> {
+    /// Same authoritative DTO validation for bytes already held by the preflight
+    /// read guards. Do not reopen joined paths when assembling a combined scene.
+    ///
+    /// # Errors
+    /// Invalid DTOs, mismatched identity or unsupported/conflicting units.
+    pub fn from_bytes(bytes: [&[u8]; 3]) -> Result<Self, String> {
         if bytes.iter().any(|b| b.len() > 64 * 1024 * 1024) {
             return Err("Oversized cached artifact".into());
         }
@@ -201,7 +208,11 @@ impl Snapshot {
             Direction::Y => &forces.y_profiles,
         })
     }
-    pub(crate) fn choices(&self, direction: Direction) -> Result<Choices, String> {
+    /// Wind-drift groups/cases and story-force cases for one direction.
+    ///
+    /// # Errors
+    /// The cached results lack wind drift or story forces.
+    pub fn choices(&self, direction: Direction) -> Result<Choices, String> {
         let drift = self.drift(direction)?;
         let groups = drift
             .rows
@@ -228,7 +239,11 @@ impl Snapshot {
             forces: force_cases,
         })
     }
-    pub(crate) fn initial_config(&self, direction: Direction) -> Result<Config, String> {
+    /// The first stored drift row and force profile for one direction.
+    ///
+    /// # Errors
+    /// The cached results hold no such rows.
+    pub fn initial_config(&self, direction: Direction) -> Result<Config, String> {
         let drift = self.drift(direction)?;
         let row = drift.rows.first().ok_or("No cached wind drift rows")?;
         let force = self
@@ -242,7 +257,11 @@ impl Snapshot {
             shear_case: force.output_case.clone(),
         })
     }
-    pub(crate) fn packet(
+    /// The drift and shear chart packet for one configuration.
+    ///
+    /// # Errors
+    /// Unknown cases, invalid story order or membership, non-finite values.
+    pub fn packet(
         &self,
         config: &Config,
         generation: u64,
@@ -347,7 +366,7 @@ impl Snapshot {
         })
     }
 }
-fn validate_order(order: &[String]) -> Result<(), String> {
+pub(crate) fn validate_order(order: &[String]) -> Result<(), String> {
     if order.is_empty()
         || order.len() > 10000
         || order.iter().any(|s| s.is_empty() || s.len() > 512)
@@ -357,13 +376,13 @@ fn validate_order(order: &[String]) -> Result<(), String> {
     }
     Ok(())
 }
-fn validate_values(values: &[Option<f64>]) -> Result<(), String> {
+pub(crate) fn validate_values(values: &[Option<f64>]) -> Result<(), String> {
     if values.iter().flatten().any(|v| !v.is_finite()) {
         return Err("Non-finite cached plot value".into());
     }
     Ok(())
 }
-fn validate_membership<'a>(
+pub(crate) fn validate_membership<'a>(
     order: &[String],
     stories: impl Iterator<Item = &'a String>,
 ) -> Result<(), String> {
@@ -376,7 +395,12 @@ fn validate_membership<'a>(
     Ok(())
 }
 impl Packet {
-    pub(crate) fn accept(&self, raw: &str) -> Result<Option<String>, String> {
+    /// A chart selection message, accepted only for this packet's source and
+    /// generation.
+    ///
+    /// # Errors
+    /// Malformed, stale or unknown selections.
+    pub fn accept(&self, raw: &str) -> Result<Option<String>, String> {
         let msg: Select = serde_json::from_str(raw)
             .map_err(|error| format!("Invalid result selection: {error}"))?;
         if msg.version != 1 || msg.source != self.source || msg.generation != self.generation {

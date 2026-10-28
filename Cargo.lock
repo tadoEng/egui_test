@@ -3377,6 +3377,18 @@ name = "lab-fixture"
 version = "0.1.0"
 
 [[package]]
+name = "lab-results"
+version = "0.1.0"
+dependencies = [
+ "ext-calc",
+ "ext-core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "lab-viewport"
 version = "0.1.0"
 dependencies = [
@@ -7102,8 +7114,11 @@ dependencies = [
  "env_logger",
  "image",
  "lab-e2k-mesh",
+ "lab-results",
  "lab-viewport",
  "log",
+ "serde_json",
+ "tempfile",
  "web-time",
 ]
 

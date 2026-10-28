@@ -209,33 +209,22 @@ impl ModelState {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Metric {
-    StoryDisplacement,
-    StoryDrift,
-    StoryShear,
-    OverturningMoment,
-}
-impl Metric {
-    pub const ALL: [Self; 4] = [
-        Self::StoryDisplacement,
-        Self::StoryDrift,
-        Self::StoryShear,
-        Self::OverturningMoment,
-    ];
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::StoryDisplacement => "Story displacement",
-            Self::StoryDrift => "Story drift",
-            Self::StoryShear => "Story shear",
-            Self::OverturningMoment => "Overturning moment",
-        }
-    }
-}
+/// A stored story response (`lab-results`): wind or seismic drift, wind
+/// displacement, story shear, or the stored story moment components Mx and My
+/// (no overturning axis is inferred).
+pub use lab_results::response::Response as Metric;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     X,
     Y,
+}
+impl Direction {
+    pub fn cached(self) -> lab_results::data::Direction {
+        match self {
+            Self::X => lab_results::data::Direction::X,
+            Self::Y => lab_results::data::Direction::Y,
+        }
+    }
 }
 /// Inclusive, by story name; `top` is at or above `bottom`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -251,16 +240,32 @@ pub struct ResultsQuery {
     pub version: Option<VersionId>,
     pub metric: Metric,
     pub direction: Direction,
-    /// A load case or combination; none exist without analyzed results.
+    /// A stored group (drift and displacement envelopes only); only ever one
+    /// the version's cached results hold.
+    pub group: Option<String>,
+    /// A stored load case or combination; none without cached results.
     pub case: Option<String>,
     /// `None` is every story in the version.
     pub stories: Option<StoryRange>,
 }
+/// The Results page's content for the current query.
+#[derive(Debug, PartialEq)]
+pub enum Shown {
+    /// The stored profile, cut to the requested story range.
+    Plot(lab_results::data::Plot),
+    /// The requested range names stories (these) the cached profile lacks.
+    RangeMismatch(Vec<String>),
+    /// No cached results, or nothing stored for this query.
+    Unavailable,
+}
+
 pub struct ResultsState {
     pub query: ResultsQuery,
     /// Why the query changed without the user asking, e.g. a story range that
     /// does not exist in the newly selected version.
     pub notice: Option<String>,
+    /// The story highlighted in the chart and the table; per version.
+    pub story: Option<String>,
 }
 
 pub enum Action {
@@ -291,6 +296,10 @@ pub enum Action {
     SetPanelMode(PanelMode),
     SetMetric(Metric),
     SetDirection(Direction),
+    SetGroup(String),
+    SetCase(String),
+    /// Highlight one story of the shown profile in the chart and the table.
+    SelectResultStory(Option<String>),
     SetStoryRange(Option<StoryRange>),
 }
 
@@ -311,6 +320,8 @@ pub enum Refusal {
     StaleSelection,
     UnknownEntity,
     UnknownStory,
+    /// A metric, group or case the version's cached results do not hold.
+    NotInResults,
     NoDocument,
 }
 
@@ -358,12 +369,14 @@ impl State {
             results: ResultsState {
                 query: ResultsQuery {
                     version: None,
-                    metric: Metric::StoryDrift,
+                    metric: Metric::WindDrift,
                     direction: Direction::X,
+                    group: None,
                     case: None,
                     stories: None,
                 },
                 notice: None,
+                story: None,
             },
             stale_discarded: 0,
             generation: 1,
@@ -400,8 +413,15 @@ impl State {
             } => self.pick(scope, entity, toggle, coincident)?,
             Action::SelectStory(story) => self.select_story(story)?,
             Action::SetPanelMode(mode) => self.model.panels = mode,
-            Action::SetMetric(metric) => self.results.query.metric = metric,
-            Action::SetDirection(direction) => self.results.query.direction = direction,
+            Action::SetMetric(metric) => self.set_metric(metric)?,
+            Action::SetDirection(direction) => {
+                self.results.query.direction = direction;
+                let snapshot = self.cached_arc();
+                self.reconcile_results(snapshot.as_ref());
+            }
+            Action::SetGroup(group) => self.set_choice(Some(group), None)?,
+            Action::SetCase(case) => self.set_choice(None, Some(case))?,
+            Action::SelectResultStory(story) => self.select_result_story(story)?,
             Action::SetStoryRange(range) => self.set_story_range(range)?,
         }
         Ok(Vec::new())
@@ -428,6 +448,8 @@ impl State {
         self.model.selection = Selection::default();
         self.model.context = Context::Explorer;
         self.model.ambiguous = 0;
+        // A highlighted result story belongs to the version it was picked in.
+        self.results.story = None;
         Ok(vec![Effect::Load { ticket, entry }])
     }
 
@@ -552,16 +574,24 @@ impl State {
         }
         self.results.query.stories = range;
         self.results.notice = None;
+        // A highlighted story the new range no longer shows is cleared, so the
+        // table and chart never point at a row that is not on screen.
+        let off_screen = self.results.story.as_ref().is_some_and(|story| {
+            !matches!(self.shown_profile(), Shown::Plot(plot) if plot.stories.contains(story))
+        });
+        if off_screen {
+            self.results.story = None;
+        }
         Ok(())
     }
 
     fn revalidate_results(&mut self, document: &Document) {
         // A notice describes one load; a later load starts without it.
         self.results.notice = None;
+        self.results.story = None;
+        self.results.query.version = Some(document.version().clone());
+        self.reconcile_results(cached_of(document));
         let query = &mut self.results.query;
-        query.version = Some(document.version().clone());
-        // No analyzed result set exists for any synthetic version.
-        query.case = None;
         if let Some(range) = &query.stories
             && !valid_range(document, range)
         {
@@ -574,6 +604,200 @@ impl State {
             query.stories = None;
         }
     }
+}
+
+impl State {
+    /// The current version's cached results, if loaded and accepted.
+    pub fn cached(&self) -> Option<&lab_results::data::Snapshot> {
+        let document = self.session.ready()?;
+        cached_of(document).map(|s| &**s)
+    }
+    fn cached_arc(&self) -> Option<Arc<lab_results::data::Snapshot>> {
+        let document = self.session.ready()?;
+        cached_of(document).cloned()
+    }
+
+    /// The stored profile the query asks for, or why there is none.
+    ///
+    /// # Errors
+    /// No cached results, or the query names nothing they hold.
+    pub fn profile(&self) -> Result<lab_results::data::Plot, String> {
+        profile_of(
+            self.cached().ok_or("No cached results")?,
+            &self.results.query,
+        )
+    }
+
+    /// What the Results page shows for the query: the stored profile cut to
+    /// the story range, or why it cannot. A range the cached profile does not
+    /// name is a mismatch, never silently widened to every story.
+    pub fn shown_profile(&self) -> Shown {
+        let Ok(mut plot) = self.profile() else {
+            return Shown::Unavailable;
+        };
+        let Some(range) = &self.results.query.stories else {
+            return Shown::Plot(plot);
+        };
+        let at = |name: &str| plot.stories.iter().position(|s| s == name);
+        match (at(&range.top), at(&range.bottom)) {
+            (Some(a), Some(b)) => {
+                let (from, to) = (a.min(b), a.max(b));
+                plot.stories = plot.stories[from..=to].to_vec();
+                for series in &mut plot.series {
+                    series.values = series.values[from..=to].to_vec();
+                }
+                Shown::Plot(plot)
+            }
+            (top, bottom) => Shown::RangeMismatch(
+                [(top, &range.top), (bottom, &range.bottom)]
+                    .into_iter()
+                    .filter(|(found, _)| found.is_none())
+                    .map(|(_, name)| name.clone())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
+            ),
+        }
+    }
+
+    fn set_metric(&mut self, metric: Metric) -> Result<(), Refusal> {
+        if let Some(snapshot) = self.cached()
+            && !snapshot.responses().contains(&metric)
+        {
+            return Err(Refusal::NotInResults);
+        }
+        self.results.query.metric = metric;
+        let snapshot = self.cached_arc();
+        self.reconcile_results(snapshot.as_ref());
+        Ok(())
+    }
+
+    /// A group or a case, only ever one the cached results pair with the
+    /// rest of the query; a new group keeps the case only if it has rows.
+    fn set_choice(&mut self, group: Option<String>, case: Option<String>) -> Result<(), Refusal> {
+        let snapshot = self.cached_arc().ok_or(Refusal::NotInResults)?;
+        let query = &self.results.query;
+        let group_for_cases = group.as_deref().or(query.group.as_deref());
+        let choices = snapshot
+            .response_choices(query.metric, query.direction.cached(), group_for_cases)
+            .map_err(|_absent| Refusal::NotInResults)?;
+        if group.as_ref().is_some_and(|g| !choices.groups.contains(g))
+            || case.as_ref().is_some_and(|c| !choices.cases.contains(c))
+        {
+            return Err(Refusal::NotInResults);
+        }
+        let query = &mut self.results.query;
+        if group.is_some() {
+            query.group = group;
+        }
+        if case.is_some() {
+            query.case = case;
+        }
+        self.reconcile_results(Some(&snapshot));
+        Ok(())
+    }
+
+    fn select_result_story(&mut self, story: Option<String>) -> Result<(), Refusal> {
+        if let Some(name) = &story {
+            let plot = self.profile().map_err(|_absent| Refusal::NotInResults)?;
+            if !plot.stories.contains(name) {
+                return Err(Refusal::UnknownStory);
+            }
+        }
+        self.results.story = story;
+        Ok(())
+    }
+
+    /// Keeps the metric, group and case to what the current version's cached
+    /// results hold. A choice that is gone becomes the first stored one, with
+    /// a notice; nothing is chosen when there are no cached results.
+    fn reconcile_results(&mut self, snapshot: Option<&Arc<lab_results::data::Snapshot>>) {
+        let Some(snapshot) = snapshot else {
+            let query = &mut self.results.query;
+            query.group = None;
+            query.case = None;
+            return;
+        };
+        let available = snapshot.responses();
+        let query = &self.results.query;
+        let mut notices = Vec::new();
+        let metric = if available.contains(&query.metric) {
+            query.metric
+        } else if let Some(&first) = available.first() {
+            notices.push(format!(
+                "{} is not in these cached results.",
+                query.metric.label()
+            ));
+            first
+        } else {
+            query.metric
+        };
+        let direction = query.direction.cached();
+        let groups = snapshot
+            .response_choices(metric, direction, None)
+            .unwrap_or_default()
+            .groups;
+        let keep = |current: &Option<String>,
+                    options: &[String],
+                    what: &str,
+                    notices: &mut Vec<String>| {
+            match current {
+                Some(value) if options.contains(value) => Some(value.clone()),
+                previous => {
+                    if let Some(value) = previous {
+                        notices.push(format!("{what} {value} is not stored here."));
+                    }
+                    options.first().cloned()
+                }
+            }
+        };
+        let group = if metric.grouped() {
+            keep(&query.group, &groups, "Group", &mut notices)
+        } else {
+            None
+        };
+        // Only cases with rows for that group, so the pair always plots.
+        let cases = snapshot
+            .response_choices(metric, direction, group.as_deref())
+            .unwrap_or_default()
+            .cases;
+        let case = keep(&query.case, &cases, "Case", &mut notices);
+        let story_kept = self.results.story.clone();
+        let query = &mut self.results.query;
+        query.metric = metric;
+        query.group = group;
+        query.case = case;
+        if !notices.is_empty() {
+            self.results.notice = Some(notices.join(" "));
+        }
+        // The highlighted story stays only while the shown profile has it.
+        if let Some(story) = story_kept
+            && !profile_of(snapshot, &self.results.query)
+                .is_ok_and(|plot| plot.stories.contains(&story))
+        {
+            self.results.story = None;
+        }
+    }
+}
+
+fn cached_of(document: &Document) -> Option<&Arc<lab_results::data::Snapshot>> {
+    match document.results() {
+        crate::document::Results::Loaded(snapshot) => Some(snapshot),
+        _ => None,
+    }
+}
+
+fn profile_of(
+    snapshot: &lab_results::data::Snapshot,
+    query: &ResultsQuery,
+) -> Result<lab_results::data::Plot, String> {
+    let case = query.case.as_deref().ok_or("No stored case")?;
+    snapshot.response(
+        query.metric,
+        query.direction.cached(),
+        query.group.as_deref(),
+        case,
+    )
 }
 
 fn valid_range(document: &Document, range: &StoryRange) -> bool {

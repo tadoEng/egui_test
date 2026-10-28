@@ -5,6 +5,8 @@
 use crate::project::{Source, VersionEntry, VersionId};
 use lab_e2k_mesh::pick::PickIndex;
 use lab_e2k_mesh::{ForceUnit, LengthUnit, Mesh, Revision, SourceUnits, TempUnit, Vertex};
+use lab_results::data::Snapshot;
+use std::sync::Arc;
 
 /// Which version a document was loaded for, and the exact bytes and geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,25 +15,81 @@ pub struct DocumentId<'a> {
     pub revision: Revision,
 }
 
+/// A version's cached results, read on the loader thread with its model.
+#[derive(Clone)]
+pub enum Results {
+    /// None stored for this version; the reason is shown as is.
+    Absent(String),
+    /// Checked by `lab-results` against the version's manifest and units.
+    Loaded(Arc<Snapshot>),
+    /// Stored but refused; nothing is plotted.
+    Refused(String),
+}
+
 pub struct Document {
     version: VersionId,
     mesh: Mesh,
     /// Built with the mesh on the loader thread, never on the UI thread.
     pick: PickIndex,
+    results: Results,
 }
 impl Document {
     /// # Errors
     /// The adapter's refusal (units, version, geometry or budget), as text.
     pub fn load(entry: &VersionEntry) -> Result<Self, String> {
-        let Source::Embedded(bytes) = entry.source;
-        let mesh = lab_e2k_mesh::build(bytes, lab_e2k_mesh::Config::default())
+        let (bytes, results): (std::borrow::Cow<'_, [u8]>, Results) = match &entry.source {
+            Source::Embedded(bytes) => (
+                (*bytes).into(),
+                Results::Absent("This synthetic snapshot has no cached results.".to_owned()),
+            ),
+            Source::PublicResultsFixture => {
+                let [manifest, calc, units] = <[_; 3]>::from(lab_results::fixture::values())
+                    .map(|value| value.to_string().into_bytes());
+                let results = match Snapshot::from_bytes([&manifest, &calc, &units]) {
+                    Ok(snapshot) => owned(entry, snapshot),
+                    Err(reason) => Results::Refused(reason),
+                };
+                (
+                    include_bytes!("../../../assets/fixtures/real01.e2k")
+                        .as_slice()
+                        .into(),
+                    results,
+                )
+            }
+            Source::Folder(folder) => {
+                // The folder must still be the version it was opened as.
+                let manifest = lab_results::folder::read_manifest(folder)?;
+                if manifest.branch != entry.id.branch || manifest.id != entry.id.version {
+                    return Err(format!(
+                        "The folder for {} now holds {}/{}",
+                        entry.id, manifest.branch, manifest.id
+                    ));
+                }
+                let bytes = lab_results::folder::read_model(folder)?;
+                let results = match lab_results::folder::read_results(folder) {
+                    lab_results::folder::Cached::Absent => Results::Absent(format!(
+                        "This version folder has no {}.",
+                        lab_results::folder::RESULTS
+                    )),
+                    lab_results::folder::Cached::Loaded(snapshot) => owned(entry, *snapshot),
+                    lab_results::folder::Cached::Refused(reason) => Results::Refused(reason),
+                };
+                (bytes.into(), results)
+            }
+        };
+        let mesh = lab_e2k_mesh::build(&bytes, lab_e2k_mesh::Config::default())
             .map_err(|error| error.to_string())?;
         let pick = PickIndex::new(mesh.vertices(), mesh.indices(), mesh.entities());
         Ok(Self {
             version: entry.id.clone(),
             mesh,
             pick,
+            results,
         })
+    }
+    /// This version's cached results, or why there are none.
+    pub fn results(&self) -> &Results {
+        &self.results
     }
     pub fn id(&self) -> DocumentId<'_> {
         DocumentId {
@@ -122,4 +180,16 @@ pub fn length(metres: f64, units: SourceUnits) -> String {
 fn trim(value: f64) -> String {
     let text = format!("{value:.6}");
     text.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
+/// Cached results are shown only for the version their manifest names.
+fn owned(entry: &VersionEntry, snapshot: Snapshot) -> Results {
+    if snapshot.manifest.branch == entry.id.branch && snapshot.manifest.id == entry.id.version {
+        Results::Loaded(Arc::new(snapshot))
+    } else {
+        Results::Refused(format!(
+            "Cached results belong to {}/{}, not {}",
+            snapshot.manifest.branch, snapshot.manifest.id, entry.id
+        ))
+    }
 }

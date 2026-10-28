@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Clean-worktree gate: every step runs, each RC recorded.
+set -u
+cd /home/user/egui_01b
+export CARGO_NET_GIT_FETCH_WITH_CLI=true
+T="--locked --offline --target-dir .codex-target -j 2"
+echo "SHA=$(git rev-parse HEAD) dirty=$(git status --porcelain | wc -l) rustc=$(rustc --version) jobs=2 target=$PWD/.codex-target sccache=absent nextest=absent os=$(uname -sr)"
+echo "start=$(date -u +%FT%TZ)"
+step() { local name=$1; shift; echo "### STEP $name: $*"; "$@" > /tmp/gate-$name.log 2>&1; local rc=$?; grep -E "^test result|^error(\[|:)|^warning: unused|-->" /tmp/gate-$name.log | head -40; echo "### RC $name=$rc"; }
+step check cargo check --workspace --all-targets $T
+step fmt cargo fmt --all -- --check
+step clippy cargo clippy --workspace --all-targets --all-features $T -- -D warnings
+step clippy-talos cargo clippy -p talos-native -p lab-viewport -p lab-e2k-mesh -p lab-fixture -p lab-results --all-targets --all-features $T -- -D warnings -W clippy::all
+step clippy-root cargo clippy -p eframe_template --lib --bins --tests --all-features $T -- -D warnings
+for ex in native_workbench native_dashboard native_results native_renderer native_e2k stress; do
+  step clippy-ex-$ex cargo clippy -p eframe_template --example $ex --all-features $T -- -D warnings
+done
+step test cargo test --workspace --all-targets --all-features $T
+step doctest cargo test --workspace --doc --all-features $T
+# One workspace-wide GPU run (superset of the former talos/lab-viewport and
+# example GPU steps): -p scoping now builds a separate ext-calc/Polars copy per
+# step, which no longer fits this container's disk.
+step gpu env VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --workspace --all-targets --all-features $T -- --include-ignored
+step wasm cargo check --workspace --all-features --lib --target wasm32-unknown-unknown $T
+echo "end=$(date -u +%FT%TZ)"
+echo "dirty_after=$(git status --porcelain | wc -l)"

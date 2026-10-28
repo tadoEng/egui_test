@@ -17,10 +17,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(cc: &eframe::CreationContext<'_>, mode: LoadMode) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, mode: LoadMode, project: Project) -> Self {
         crate::theme::install(&cc.egui_ctx);
         Self::with_parts(
-            Project::public_demo(),
+            project,
             Box::new(crate::native_view::NativeModelView::new(
                 cc.wgpu_render_state.as_ref(),
             )),

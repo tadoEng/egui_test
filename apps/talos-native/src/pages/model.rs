@@ -442,6 +442,35 @@ fn fidelity_chip(
     });
 }
 
+/// "2 synthetic snapshots", "1 version folder", … for the strip.
+fn count(authority: crate::project::Authority, n: usize) -> String {
+    use crate::project::Authority;
+    let (one, many) = match authority {
+        Authority::PublicSyntheticDemo => ("synthetic snapshot", "synthetic snapshots"),
+        Authority::PublicResultsFixture => {
+            ("authored fixture version", "authored fixture versions")
+        }
+        Authority::LocalVersions => ("version folder", "version folders"),
+    };
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// What the strip is not: no history beyond the versions listed.
+fn strip_note(authority: crate::project::Authority) -> &'static str {
+    use crate::project::Authority;
+    match authority {
+        Authority::PublicSyntheticDemo => {
+            "Synthetic snapshots: no commit history, dates or analysis runs."
+        }
+        Authority::PublicResultsFixture => {
+            "Authored fixture: no commit history or analysis runs; cached values are authored."
+        }
+        Authority::LocalVersions => {
+            "Version folders as given: no repository history is loaded (APP-01D)."
+        }
+    }
+}
+
 /// The version strip: every version of the branch as a node; clicking one is
 /// the same `SwitchVersion` the header picker sends.
 fn version_strip(ui: &mut egui::Ui, rect: egui::Rect, state: &State, actions: &mut Vec<Action>) {
@@ -472,9 +501,9 @@ fn version_strip(ui: &mut egui::Ui, rect: egui::Rect, state: &State, actions: &m
                             });
                             if note {
                                 ui.label(
-                                    egui::RichText::new(format!(
-                                        "{} synthetic snapshots",
-                                        session.project.versions.len()
+                                    egui::RichText::new(count(
+                                        session.project.authority,
+                                        session.project.versions.len(),
                                     ))
                                     .size(theme::SMALL)
                                     .color(tokens.muted),
@@ -504,12 +533,11 @@ fn version_strip(ui: &mut egui::Ui, rect: egui::Rect, state: &State, actions: &m
                             }
                             previous = Some(node.rect);
                         }
-                        const NOTE: &str =
-                            "Synthetic snapshots: no commit history, dates or analysis runs.";
+                        let note_text = strip_note(session.project.authority);
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if note {
                                 ui.label(
-                                    egui::RichText::new(NOTE)
+                                    egui::RichText::new(note_text)
                                         .size(theme::SMALL)
                                         .color(tokens.faint),
                                 );
@@ -525,10 +553,10 @@ fn version_strip(ui: &mut egui::Ui, rect: egui::Rect, state: &State, actions: &m
                                     egui::WidgetInfo::labeled(
                                         egui::accesskit::Role::Label,
                                         true,
-                                        NOTE,
+                                        note_text,
                                     )
                                 });
-                                response.on_hover_text(NOTE);
+                                response.on_hover_text(note_text);
                             }
                         });
                     },
@@ -577,9 +605,13 @@ fn version_node(
             if summaries {
                 ui.add(
                     egui::Label::new(
-                        egui::RichText::new(if loading { "loading…" } else { entry.summary })
-                            .size(theme::SMALL)
-                            .color(tokens.muted),
+                        egui::RichText::new(if loading {
+                            "loading…"
+                        } else {
+                            entry.summary.as_str()
+                        })
+                        .size(theme::SMALL)
+                        .color(tokens.muted),
                     )
                     .truncate(),
                 );

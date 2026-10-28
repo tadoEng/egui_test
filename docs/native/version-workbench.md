@@ -17,7 +17,7 @@ The optional `real-workbench` feature selects the existing `real-geometry`, `sna
 
 | Component | Source reused | Combined-host responsibility |
 | --- | --- | --- |
-| DTOs, canonical unit/provenance checks and signed/gapped plot values | #35 `examples/native_results/data.rs`, pinned ext-calc/ext-core | Build the same `Snapshot` from the exact bytes held by preflight; preserve stored order/values |
+| DTOs, canonical unit/provenance checks and signed/gapped plot values | #35 `crates/lab-results/src/data.rs` (moved from `examples/native_results/data.rs`), pinned ext-calc/ext-core | Build the same `Snapshot` from the exact bytes held by preflight; preserve stored order/values |
 | Snapshot/E2K/metadata checks | #39 `examples/native_results/preflight.rs`, pinned ext-e2k/ext-sidecar DTO | Retain all read handles through mesh/packet preparation, then repeat path/time/byte/partial and relevant-entry checks |
 | Geometry conversion and source attribution | #40 `crates/lab-e2k-mesh` | Consume its validated mesh without recreating parser or engineering domain logic |
 | GPU upload/cache/depth/orbit | #41 `examples/support/native_viewport.rs` | Move arrays plus EntityKey/story/index ranges; add one bounded selected-story index overlay |
