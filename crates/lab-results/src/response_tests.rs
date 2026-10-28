@@ -2,6 +2,7 @@ use super::*;
 use crate::data::Snapshot;
 use serde_json::{Value, json};
 use std::fs;
+use std::io::Write as _;
 
 fn load(edit: impl FnOnce(&mut Value)) -> Result<Snapshot, String> {
     let (root, mut calc) = crate::fixture::fixture().expect("owned authored fixture");
@@ -42,7 +43,7 @@ fn only_stored_responses_are_offered() {
         .response_choices(Response::StoryShear, Direction::Y, None)
         .expect("profiles");
     assert_eq!(choices.cases, ["FX"]);
-    assert!(choices.groups.is_empty());
+    assert_eq!(choices.groups, Vec::<String>::new());
 }
 
 #[test]
@@ -153,7 +154,8 @@ fn a_named_local_version_folder_loads_through_the_same_checks() {
                         .to_owned()
                     },
                 );
-            println!("{response:?} {direction:?}: {status}");
+            // Categorical only: response kind, direction and whether it plots.
+            writeln!(std::io::stdout(), "{response:?} {direction:?}: {status}").ok();
         }
     }
 }

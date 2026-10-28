@@ -10,7 +10,7 @@ step() { local name=$1; shift; echo "### STEP $name: $*"; "$@" > /tmp/gate-$name
 step check cargo check --workspace --all-targets $T
 step fmt cargo fmt --all -- --check
 step clippy cargo clippy --workspace --all-targets --all-features $T -- -D warnings
-step clippy-talos cargo clippy -p talos-native -p lab-viewport -p lab-e2k-mesh -p lab-fixture --all-targets --all-features $T -- -D warnings -W clippy::all
+step clippy-talos cargo clippy -p talos-native -p lab-viewport -p lab-e2k-mesh -p lab-fixture -p lab-results --all-targets --all-features $T -- -D warnings -W clippy::all
 step clippy-root cargo clippy -p eframe_template --lib --bins --tests --all-features $T -- -D warnings
 for ex in native_workbench native_dashboard native_results native_renderer native_e2k stress; do
   step clippy-ex-$ex cargo clippy -p eframe_template --example $ex --all-features $T -- -D warnings
