@@ -111,33 +111,36 @@ pub(crate) fn run() -> eframe::Result {
             }))
         }),
     )?;
-    if interactive {
-        // Dropping the TempDir removes the owned fixture; there is no receipt.
-        drop(owned);
-        return Ok(());
+    // Interactive mode has no receipt: its TempDir is removed on drop here.
+    match owned {
+        Some(owned) if smoke_mode => finish_public_smoke(owned, &receipt),
+        _ => Ok(()),
     }
-    if let Some(owned) = owned {
-        let path = owned.path().to_owned();
-        drop(owned);
-        let mut report = receipt
-            .lock()
-            .map_err(|_poisoned| failure("public_smoke_report_lock"))?
-            .take()
-            .ok_or_else(|| failure("public_smoke_report_missing"))?;
-        report["owned_input_removed"] = serde_json::json!(!path.exists());
-        let pass = report["assessment"] == "PASS" && !path.exists();
-        if !pass {
-            report["assessment"] = serde_json::json!("FAIL");
-        }
-        let mut out = std::io::stdout().lock();
-        serde_json::to_writer_pretty(&mut out, &report)
-            .map_err(|_private_error| failure("public_report_write_failed"))?;
-        writeln!(out)
-            .and_then(|()| out.flush())
-            .map_err(|_private_error| failure("public_report_write_failed"))?;
-        if !pass {
-            return Err(failure("public_workbench_smoke_failed"));
-        }
+}
+
+/// Remove the owned smoke fixture, then print the receipt with the removal
+/// proof; a failed assessment or a fixture left behind is an error exit.
+fn finish_public_smoke(owned: tempfile::TempDir, receipt: &SmokeReport) -> eframe::Result {
+    let path = owned.path().to_owned();
+    drop(owned);
+    let mut report = receipt
+        .lock()
+        .map_err(|_poisoned| failure("public_smoke_report_lock"))?
+        .take()
+        .ok_or_else(|| failure("public_smoke_report_missing"))?;
+    report["owned_input_removed"] = serde_json::json!(!path.exists());
+    let pass = report["assessment"] == "PASS" && !path.exists();
+    if !pass {
+        report["assessment"] = serde_json::json!("FAIL");
+    }
+    let mut out = std::io::stdout().lock();
+    serde_json::to_writer_pretty(&mut out, &report)
+        .map_err(|_private_error| failure("public_report_write_failed"))?;
+    writeln!(out)
+        .and_then(|()| out.flush())
+        .map_err(|_private_error| failure("public_report_write_failed"))?;
+    if !pass {
+        return Err(failure("public_workbench_smoke_failed"));
     }
     Ok(())
 }
