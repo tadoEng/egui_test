@@ -100,8 +100,9 @@ pub enum GeometryFidelity {
     Symbolic,
 }
 /// `ext-api` `SceneFidelityReason` names for frames, plus one native-only
-/// reason. Declaration order matches the backend's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// reason. Declaration order matches the backend's, which publishes reasons
+/// sorted in that order and deduplicated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrameReason {
     SectionNotAssigned,
     SectionDefinitionMissing,
@@ -692,6 +693,8 @@ fn frame_source(
     if swept && frame.insertion.is_mirrored() && !symmetric {
         degrade(FrameReason::SectionMirrorIgnored);
     }
+    reasons.sort_unstable();
+    reasons.dedup();
     FrameSource {
         section: frame.section.as_ref().map(|s| s.as_str().into()),
         material: frame.material.as_ref().map(|m| m.as_str().into()),

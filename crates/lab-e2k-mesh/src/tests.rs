@@ -483,7 +483,16 @@ fn unproven_profiles_and_unresolved_sections_follow_the_backend_reasons() {
     // swept, as the backend viewer does, but never Resolved.
     let tube = frame(&mesh, "T");
     assert_eq!(tube.fidelity, GeometryFidelity::Approximate);
-    assert!(tube.swept() && tube.reasons.contains(&R::RectangularProfileEnvelope));
+    assert!(tube.swept());
+    assert_eq!(
+        tube.reasons,
+        [
+            R::RectangularProfileEnvelope,
+            R::LocalAxisRotationUnavailable,
+            R::CardinalPointOffsetIgnored
+        ],
+        "backend declaration order, as ext-api publishes them"
+    );
     // Unresolved dimensions: Symbolic, a typed missing-dimension reason, and
     // the labelled fixed proxy in place of the backend's bare centreline.
     for (id, reason) in [
