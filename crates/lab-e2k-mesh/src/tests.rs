@@ -247,7 +247,7 @@ fn proxy_face_normals_point_away_from_the_independent_source_centerline() {
     for entity in mesh
         .entities()
         .iter()
-        .filter(|e| e.mode == DisplayMode::RectangularProxy)
+        .filter(|e| e.mode == DisplayMode::RectangularFrame)
     {
         let ends = entity.source_centerline_m.expect("source endpoints");
         let center = local(
@@ -377,4 +377,160 @@ fn a_perpendicular_wall_through_the_void_footprint_is_not_its_host() {
         entity(&mesh, "S").limitation,
         Some(Limitation::HostOpeningSubtractionUnavailable)
     );
+}
+/// Public fixture with one section per fidelity class. ft units: D 2 B 1 is
+/// 0.6096 m deep (local 2) by 0.3048 m wide (local 3).
+fn sectioned_source() -> String {
+    SOURCE
+        .replace(
+            "$ POINT COORDINATES",
+            "$ FRAME SECTIONS\n FRAMESECTION \"RECT\" MATERIAL \"C\" SHAPE \"Concrete Rectangular\" D 2 B 1\n FRAMESECTION \"ROUND\" MATERIAL \"C\" SHAPE \"Concrete Circle\" D 1.5\n FRAMESECTION \"W14\" MATERIAL \"S\" SHAPE \"W14X90\" FILE \"AISC16\"\n$ POINT COORDINATES",
+        )
+        .replace(
+            " LINE \"B\" BEAM \"1\" \"2\" 0\n",
+            " LINE \"B\" BEAM \"1\" \"2\" 0\n LINE \"G\" BEAM \"2\" \"3\" 0\n LINE \"K\" BEAM \"3\" \"4\" 0\n LINE \"X\" BRACE \"4\" \"2\" 0\n",
+        )
+        .replace(" LINEASSIGN \"C\" \"Roof\"\n", " LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"\n")
+        .replace(
+            " LINEASSIGN \"B\" \"Roof\"\n",
+            " LINEASSIGN \"B\" \"Roof\" SECTION \"RECT\" CARDINALPT 8\n LINEASSIGN \"G\" \"Roof\" SECTION \"ROUND\"\n LINEASSIGN \"K\" \"Roof\" SECTION \"W14\"\n LINEASSIGN \"X\" \"Roof\" SECTION \"RECT\"\n",
+        )
+}
+fn extent(mesh: &Mesh, e: &EntityMesh) -> [f64; 3] {
+    let range = e.indices.start as usize..e.indices.end as usize;
+    let mut lo = [f64::INFINITY; 3];
+    let mut hi = [f64::NEG_INFINITY; 3];
+    for &i in &mesh.indices()[range] {
+        for axis in 0..3 {
+            let v = f64::from(mesh.vertices()[i as usize].position[axis]);
+            lo[axis] = lo[axis].min(v);
+            hi[axis] = hi[axis].max(v);
+        }
+    }
+    std::array::from_fn(|axis| hi[axis] - lo[axis])
+}
+#[test]
+fn rectangular_source_sections_use_source_depth_and_width_in_default_local_axes() {
+    let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-5;
+    // Beam along +X: local 2 is +Z (depth), local 3 is horizontal (width).
+    let beam = entity(&mesh, "B");
+    let source = beam.frame.as_ref().expect("frame source attributes");
+    assert_eq!(source.fidelity, SectionFidelity::SourceRectangle);
+    assert_eq!(source.section.as_deref(), Some("RECT"));
+    assert_eq!(source.material.as_deref(), Some("C"));
+    assert!(near(source.depth_m.expect("D"), 0.6096) && near(source.width_m.expect("B"), 0.3048));
+    let [x, y, z] = extent(&mesh, beam);
+    assert!(
+        near(x, 3.048) && near(y, 0.3048) && near(z, 0.6096),
+        "{x} {y} {z}"
+    );
+    // Column: local 2 is global +X (depth), local 3 is +Y (width).
+    let [x, y, z] = extent(&mesh, entity(&mesh, "C"));
+    assert!(
+        near(x, 0.6096) && near(y, 0.3048) && near(z, 3.048),
+        "{x} {y} {z}"
+    );
+}
+#[test]
+fn diagonal_and_inclined_members_use_the_csi_default_local_two_axis() {
+    let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
+    let brace = entity(&mesh, "X");
+    assert_eq!(
+        brace.frame.as_ref().expect("frame").fidelity,
+        SectionFidelity::SourceRectangle
+    );
+    // Plan diagonal at roof elevation: local 1 is horizontal, so depth is vertical.
+    let [_, _, z] = extent(&mesh, brace);
+    assert!((z - 0.6096).abs() < 1e-5, "{z}");
+    // Truly inclined local 1: local 2 is unit, perpendicular and upward in the
+    // vertical plane through local 1; vertical members take global +X.
+    let axis = unit([3.0, 4.0, 5.0]).expect("axis");
+    let two = default_local_two(axis);
+    assert!((dot(two, two) - 1.0).abs() < 1e-12 && dot(two, axis).abs() < 1e-12);
+    assert!(two[2] > 0.0 && dot(cross(axis, [0.0, 0.0, 1.0]), two).abs() < 1e-12);
+    assert_eq!(default_local_two([0.0, 0.0, -1.0]), [1.0, 0.0, 0.0]);
+    assert_eq!(default_local_two([1.0e-4, 0.0, 1.0]), [1.0, 0.0, 0.0]);
+}
+#[test]
+fn circular_catalog_and_unassigned_sections_are_never_presented_as_actual() {
+    let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
+    let round = entity(&mesh, "G").frame.as_ref().expect("frame");
+    assert_eq!(round.fidelity, SectionFidelity::CircleBoundingSquare);
+    assert_eq!(round.width_m, None, "a circle declares no width");
+    // Beam G runs along +Y, so local 3 is global X.
+    let [x, _, z] = extent(&mesh, entity(&mesh, "G"));
+    assert!(
+        (x - 0.4572).abs() < 1e-5 && (z - 0.4572).abs() < 1e-5,
+        "{x} {z}"
+    );
+    let catalog = entity(&mesh, "K").frame.as_ref().expect("frame");
+    assert_eq!(catalog.fidelity, SectionFidelity::UnsupportedProxy);
+    assert_eq!(catalog.section.as_deref(), Some("W14"));
+    let [_, y, z] = extent(&mesh, entity(&mesh, "K"));
+    assert!(
+        (y - 0.1).abs() < 1e-6 && (z - 0.1).abs() < 1e-6,
+        "fixed proxy"
+    );
+    let plain = build(SOURCE.as_bytes(), Config::default()).expect("source");
+    let unassigned = entity(&plain, "B").frame.as_ref().expect("frame");
+    assert_eq!(unassigned.fidelity, SectionFidelity::UnsupportedProxy);
+    assert_eq!(unassigned.section, None);
+}
+#[test]
+fn declared_cardinal_points_and_offsets_are_reported_as_not_applied() {
+    let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
+    let beam = entity(&mesh, "B").frame.as_ref().expect("frame");
+    assert_eq!(beam.cardinal_point, Some(8));
+    assert!(!beam.placement_applied, "top-centre insertion is not drawn");
+    let column = entity(&mesh, "C").frame.as_ref().expect("frame");
+    assert_eq!(column.cardinal_point, None);
+    assert!(
+        column.placement_applied,
+        "default centroid is the drawn centreline"
+    );
+    let offset = sectioned_source().replace(
+        "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"",
+        "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\" OFFSETXI 0.5",
+    );
+    let mesh = build(offset.as_bytes(), Config::default()).expect("source");
+    assert!(
+        !entity(&mesh, "C")
+            .frame
+            .as_ref()
+            .expect("frame")
+            .placement_applied
+    );
+}
+#[test]
+fn a_section_change_between_versions_changes_geometry_and_source_attribution() {
+    let v1 = build(sectioned_source().as_bytes(), Config::default()).expect("v1");
+    let v2_source = sectioned_source().replace("D 2 B 1\n", "D 3 B 1\n");
+    let v2 = build(v2_source.as_bytes(), Config::default()).expect("v2");
+    assert_ne!(v1.revision().geometry_sha256, v2.revision().geometry_sha256);
+    let depth = |m: &Mesh| entity(m, "B").frame.as_ref().and_then(|f| f.depth_m);
+    assert!((depth(&v2).expect("D") - 0.9144).abs() < 1e-9);
+    assert_ne!(depth(&v1), depth(&v2));
+}
+#[test]
+fn shell_source_attributes_carry_section_thickness_and_insertion_without_inferring_kind() {
+    let source = SOURCE
+        .replace(
+            "$ POINT COORDINATES",
+            "$ SLAB PROPERTIES\n SHELLPROP \"SL\" PROPTYPE \"Slab\" MATERIAL \"C\" MODELINGTYPE \"ShellThin\" SLABTYPE \"Slab\" SLABTHICKNESS 0.5\n$ POINT COORDINATES",
+        )
+        .replace(
+            "AREAASSIGN \"S\" \"Roof\" OPENING \"NO\"",
+            "AREAASSIGN \"S\" \"Roof\" SECTION \"SL\" OPENING \"NO\" CARDINALPOINT \"TOP\"",
+        );
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    let shell = entity(&mesh, "S")
+        .shell
+        .as_ref()
+        .expect("shell source attributes");
+    assert_eq!(shell.section.as_deref(), Some("SL"));
+    assert!((shell.thickness_m.expect("thickness") - 0.1524).abs() < 1e-9);
+    assert_eq!(shell.insertion_point.as_deref(), Some("TOP"));
+    assert!(!shell.thickness_drawn, "surfaces stay zero thickness");
+    assert!(entity(&mesh, "B").shell.is_none());
 }

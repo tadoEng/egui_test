@@ -1,8 +1,11 @@
 //! REAL-02 first slice: pure, immutable GPU-ready display buffers, not a renderer.
-//! Source keys/coordinates come from pinned ext-e2k. All frame solids are proxies;
-//! shell surfaces are zero thickness. No engineering calculations or result joins.
+//! Source keys/coordinates come from pinned ext-e2k. Only inline rectangular
+//! frame sections use source dimensions; every other frame body is a labelled
+//! approximation. Shell surfaces are zero thickness. No engineering
+//! calculations or result joins.
 use ext_e2k::{
-    EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellKind, SourceMap, TempUnit,
+    EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellInsertionPoint, ShellKind,
+    SourceMap, TempUnit,
 };
 use lab_fixture::{Bounds, Geometry, PRISM_FACE_RINGS, Point};
 use sha2::{Digest as _, Sha256};
@@ -13,9 +16,11 @@ const EPS: f64 = 1.0e-7;
 mod openings;
 pub mod public_fixture;
 /// Fixed limitations, never inferred model-specific engineering status.
-pub const FIDELITY_LIMITATIONS: [&str; 4] = [
+pub const FIDELITY_LIMITATIONS: [&str; 6] = [
     "project_scene_geometry_assumptions_not_certified",
-    "proxy_sections_local_axes_offsets_and_insertion_not_applied",
+    "frame_local_axis_rotation_unparsed_default_csi_axes_assumed",
+    "frame_cardinal_insertion_and_end_offsets_not_applied",
+    "shell_thickness_and_insertion_not_drawn",
     "shell_void_subtraction_unavailable",
     "no_group_or_member_result_inference",
 ];
@@ -62,7 +67,9 @@ pub enum SourceClass {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayMode {
-    RectangularProxy,
+    /// A swept rectangle; whether its size is the source section is
+    /// [`FrameSource::fidelity`], never implied by this mode.
+    RectangularFrame,
     ZeroThicknessSurface,
     Withheld,
 }
@@ -74,6 +81,40 @@ pub enum Limitation {
     HostOpeningSubtractionUnavailable,
     InvalidOrConcaveShell,
 }
+/// How a frame body relates to its source section. Never certifies design.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SectionFidelity {
+    /// Inline `Concrete Rectangular` D×B: depth along local 2, width along local 3.
+    SourceRectangle,
+    /// `Concrete Circle` drawn as its D×D bounding square.
+    CircleBoundingSquare,
+    /// Catalog, other-shape, unassigned or dimensionless section: fixed proxy.
+    UnsupportedProxy,
+}
+/// Source frame attributes for an inspector, in metres where dimensional.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameSource {
+    pub section: Option<String>,
+    pub material: Option<String>,
+    pub shape: Option<String>,
+    pub depth_m: Option<f64>,
+    pub width_m: Option<f64>,
+    pub cardinal_point: Option<i32>,
+    pub fidelity: SectionFidelity,
+    /// False when a declared off-centroid cardinal point or joint offset is not
+    /// drawn: the body is centred on the joint centreline instead.
+    pub placement_applied: bool,
+}
+/// Source shell attributes for an inspector, in metres where dimensional.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShellSource {
+    pub section: Option<String>,
+    pub material: Option<String>,
+    pub thickness_m: Option<f64>,
+    pub insertion_point: Option<String>,
+    /// Surfaces are zero thickness at the connectivity plane; always false today.
+    pub thickness_drawn: bool,
+}
 #[derive(Clone, Debug)]
 pub struct EntityMesh {
     pub key: EntityKey,
@@ -83,6 +124,8 @@ pub struct EntityMesh {
     pub mode: DisplayMode,
     pub limitation: Option<Limitation>,
     pub source_centerline_m: Option<[Point; 2]>,
+    pub frame: Option<FrameSource>,
+    pub shell: Option<ShellSource>,
 }
 #[derive(Clone, Debug)]
 pub struct Story {
@@ -244,7 +287,11 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
         origin_m,
     };
     for frame in &scene.frames {
-        builder.frame(frame, factor, config.proxy_half_extents_m)?;
+        let section = match &frame.key {
+            EntityKey::Instance { id, .. } => model.frame_section_for(id, frame.story.as_str()),
+            _ => None,
+        };
+        builder.frame(frame, section, factor, config.proxy_half_extents_m)?;
     }
     builder.shells(&scene.shells, factor)?;
     if builder.indices.is_empty() {
@@ -346,8 +393,9 @@ impl Builder {
     fn frame(
         &mut self,
         frame: &ext_e2k::FrameSegment,
+        section: Option<&ext_e2k::FrameSectionDef>,
         factor: f64,
-        half_extents: [f64; 2],
+        proxy_half_extents: [f64; 2],
     ) -> Result<(), Error> {
         if !self.seen.insert(frame.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -361,18 +409,20 @@ impl Builder {
             FrameKind::Brace => SourceClass::Brace,
             _ => SourceClass::OtherFrame,
         };
+        let source = frame_source(frame, section, factor);
+        let half_extents = match source.fidelity {
+            SectionFidelity::SourceRectangle => {
+                [source.depth_m, source.width_m].map(|v| v.unwrap_or(0.0) / 2.0)
+            }
+            SectionFidelity::CircleBoundingSquare => [source.depth_m.unwrap_or(0.0) / 2.0; 2],
+            SectionFidelity::UnsupportedProxy => proxy_half_extents,
+        };
         let first = self.index()?;
         let limitation = if let Some(axis) = unit(sub(end, start)) {
-            let helper = if axis[2].abs() < 0.9 {
-                [0.0, 0.0, 1.0]
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            let y = unit(cross(helper, axis)).ok_or(Error::InvalidGeometry)?;
             let corners = Geometry::OrientedPrism {
                 start,
                 end,
-                transverse_y: y,
+                transverse_y: default_local_two(axis),
                 half_extents,
             }
             .control_points();
@@ -392,12 +442,14 @@ impl Builder {
             class,
             indices: first..self.index()?,
             mode: if limitation.is_none() {
-                DisplayMode::RectangularProxy
+                DisplayMode::RectangularFrame
             } else {
                 DisplayMode::Withheld
             },
             limitation,
             source_centerline_m: Some(ends),
+            frame: Some(source),
+            shell: None,
         });
 
         Ok(())
@@ -423,7 +475,7 @@ impl Builder {
         for (shell, ring) in shells.iter().zip(&rings) {
             let hosts_opening = shell.opening != Some(true)
                 && openings.iter().any(|opening| opening.withholds(ring));
-            self.shell(shell, ring, hosts_opening)?;
+            self.shell(shell, ring, factor, hosts_opening)?;
         }
         Ok(())
     }
@@ -431,6 +483,7 @@ impl Builder {
         &mut self,
         shell: &ext_e2k::ShellPolygon,
         points: &[Point],
+        factor: f64,
         hosts_opening: bool,
     ) -> Result<(), Error> {
         if !self.seen.insert(shell.key.as_stable_str()) {
@@ -466,6 +519,19 @@ impl Builder {
             },
             limitation,
             source_centerline_m: None,
+            frame: None,
+            shell: Some(ShellSource {
+                section: shell.section.as_ref().map(|s| s.as_str().into()),
+                material: shell.material.as_ref().map(|m| m.as_str().into()),
+                thickness_m: shell.thickness.map(|t| t * factor),
+                insertion_point: shell.insertion_point.as_ref().map(|p| match p {
+                    ShellInsertionPoint::Top => "TOP".into(),
+                    ShellInsertionPoint::Middle => "MIDDLE".into(),
+                    ShellInsertionPoint::Bottom => "BOTTOM".into(),
+                    ShellInsertionPoint::Other(value) => value.as_str().into(),
+                }),
+                thickness_drawn: false,
+            }),
         });
 
         Ok(())
@@ -517,6 +583,66 @@ impl Builder {
         }
         Ok(())
     }
+}
+/// Largest source section dimension accepted as drawable, in metres.
+const MAX_SECTION_M: f64 = 20.0;
+fn frame_source(
+    frame: &ext_e2k::FrameSegment,
+    section: Option<&ext_e2k::FrameSectionDef>,
+    factor: f64,
+) -> FrameSource {
+    let dimension = |v: Option<f64>| {
+        v.map(|v| v * factor)
+            .filter(|v| v.is_finite() && *v > EPS && *v <= MAX_SECTION_M)
+    };
+    let (depth_m, width_m) = (dimension(frame.depth), dimension(frame.width));
+    let shape = section
+        .and_then(|s| s.shape.as_ref())
+        .map(|s| s.as_str().trim());
+    // Only verified inline shape tokens; a library file means dimensions live elsewhere.
+    let inline = section.is_some_and(|s| s.section_file.is_none());
+    let fidelity = match shape.map(str::to_ascii_lowercase).as_deref() {
+        Some("concrete rectangular") if inline && depth_m.is_some() && width_m.is_some() => {
+            SectionFidelity::SourceRectangle
+        }
+        Some("concrete circle") if inline && depth_m.is_some() => {
+            SectionFidelity::CircleBoundingSquare
+        }
+        _ => SectionFidelity::UnsupportedProxy,
+    };
+    // CSI cardinal points 5 and 10 are the centroid; 11 (shear centre) equals it
+    // only for the doubly symmetric shapes drawn here. Absent means default 10.
+    let centred = matches!(frame.cardinal_point, None | Some(5 | 10))
+        || (frame.cardinal_point == Some(11) && fidelity != SectionFidelity::UnsupportedProxy);
+    FrameSource {
+        section: frame.section.as_ref().map(|s| s.as_str().into()),
+        material: frame.material.as_ref().map(|m| m.as_str().into()),
+        shape: shape.map(Into::into),
+        depth_m,
+        width_m: if fidelity == SectionFidelity::CircleBoundingSquare {
+            None
+        } else {
+            width_m
+        },
+        cardinal_point: frame.cardinal_point,
+        fidelity,
+        placement_applied: centred && !frame.insertion.is_displaced(),
+    }
+}
+/// CSI default frame local 2 axis for a unit local 1 axis: global +X for a
+/// vertical member (sine of the angle to Z below 1e-3), otherwise the upward
+/// direction in the vertical plane containing local 1. Local 3 is 1×2. Section
+/// rotation (`ANG`) is not parsed by the pinned source, so it is never applied.
+fn default_local_two(axis: Point) -> Point {
+    if axis[0].hypot(axis[1]) < 1.0e-3 {
+        return [1.0, 0.0, 0.0];
+    }
+    unit([
+        -axis[2] * axis[0],
+        -axis[2] * axis[1],
+        1.0 - axis[2] * axis[2],
+    ])
+    .unwrap_or([0.0, 0.0, 1.0])
 }
 fn point_bounds(points: &[Point]) -> Option<Bounds> {
     let first = *points.first()?;
