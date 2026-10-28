@@ -7100,6 +7100,7 @@ dependencies = [
  "egui",
  "egui_kittest",
  "env_logger",
+ "image",
  "lab-e2k-mesh",
  "lab-viewport",
  "log",

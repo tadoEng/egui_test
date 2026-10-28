@@ -6,6 +6,7 @@
 //! `ext-e2k`. This crate owns only application state, routing and layout.
 pub mod app;
 pub mod document;
+pub mod icons;
 pub mod loader;
 pub mod native_view;
 pub mod pages;

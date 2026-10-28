@@ -1,0 +1,3 @@
+Lucide icons (lucide-static 1.63.0, ISC, LICENSE-lucide.txt), npm tarball sha256
+521f0d535c03b159c6ea9b475920724dee2755005ad7360fd621b9bab7bf211d. Rasterized unmodified to 48 px
+white-on-transparent PNG masks (stroke 2) with Chromium; tinted at runtime.

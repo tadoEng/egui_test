@@ -506,3 +506,136 @@ fn an_explicit_story_change_clears_the_member_selection() {
     state.apply(Action::SelectStory(None)).expect("clear");
     assert_eq!(state.model.selected(scope), [] as [usize; 0]);
 }
+
+#[test]
+fn a_compact_window_shows_one_panel_and_keeps_the_panel_intent() {
+    let mut state = ready_demo();
+    let scope = state.session.scope().expect("ready");
+    let shown = |state: &State| (state.model.shows_explorer(), state.model.shows_inspector());
+    state.apply(Action::SetCompact(true)).expect("width class");
+    assert_eq!(shown(&state), (true, false), "Explorer by default");
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: Some(3),
+            toggle: false,
+            coincident: 0,
+        })
+        .expect("in scope");
+    assert_eq!(
+        shown(&state),
+        (false, true),
+        "a member pick shows the Inspector"
+    );
+    state.apply(Action::ToggleInspector).expect("I");
+    assert_eq!(shown(&state), (true, false), "I swaps back to the Explorer");
+    state.apply(Action::ToggleExplorer).expect("E");
+    assert_eq!(shown(&state), (false, true), "E swaps to the Inspector");
+    assert!(state.model.explorer_open && state.model.inspector_open);
+    assert_eq!(
+        state.model.selected(scope),
+        [3],
+        "swapping never drops the pick"
+    );
+
+    // Widening restores both, with the same selection and no reload.
+    state.apply(Action::SetCompact(false)).expect("width class");
+    assert_eq!(shown(&state), (true, true));
+    assert_eq!(state.session.scope(), Some(scope));
+    assert_eq!(state.model.selected(scope), [3]);
+
+    // An Inspector the user closed stays closed when a pick happens compact.
+    state
+        .apply(Action::ToggleInspector)
+        .expect("I, wide: close");
+    state.apply(Action::SetCompact(true)).expect("width class");
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: Some(4),
+            toggle: false,
+            coincident: 0,
+        })
+        .expect("in scope");
+    assert_eq!(shown(&state), (true, false));
+    state
+        .apply(Action::ToggleInspector)
+        .expect("I, compact: open");
+    assert_eq!(
+        shown(&state),
+        (false, true),
+        "an explicit toggle always works"
+    );
+
+    // Clearing the selection or switching versions hands the context back.
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: None,
+            toggle: false,
+            coincident: 0,
+        })
+        .expect("empty click");
+    assert_eq!(shown(&state), (true, false));
+    state
+        .apply(Action::Pick {
+            scope,
+            entity: Some(4),
+            toggle: false,
+            coincident: 0,
+        })
+        .expect("in scope");
+    let _load = switch(&mut state, "v1");
+    assert_eq!(state.model.context, crate::state::Context::Explorer);
+}
+
+#[test]
+fn show_in_explorer_moves_the_filter_to_the_selection_and_keeps_it() {
+    let mut state = ready_demo();
+    let scope = state.session.scope().expect("ready");
+    let entities = state
+        .session
+        .ready()
+        .expect("ready")
+        .mesh()
+        .entities()
+        .to_vec();
+    let on = |story: &str| {
+        entities
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.story == story)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+    };
+    let (l1, l2) = (on("L1"), on("L2"));
+    state
+        .apply(Action::SelectStory(Some("L5".to_owned())))
+        .expect("story");
+    let pick = |entity, toggle| Action::Pick {
+        scope,
+        entity: Some(entity),
+        toggle,
+        coincident: 0,
+    };
+    state
+        .apply(pick(l1[0], false))
+        .expect("a pick on another story");
+    assert_eq!(
+        state.model.story.as_deref(),
+        Some("L5"),
+        "picking keeps the filter"
+    );
+    state.apply(Action::RevealSelection).expect("reveal");
+    assert_eq!(state.model.story.as_deref(), Some("L1"));
+    assert_eq!(
+        state.model.selected(scope),
+        [l1[0]],
+        "the selection is kept"
+    );
+    // A selection across stories clears the filter instead.
+    state.apply(pick(l2[0], true)).expect("ctrl-add");
+    state.apply(Action::RevealSelection).expect("reveal");
+    assert_eq!(state.model.story, None);
+    assert_eq!(state.model.selected(scope).len(), 2);
+}

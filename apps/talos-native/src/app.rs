@@ -5,6 +5,10 @@ use crate::project::Project;
 use crate::state::{Action, DocumentState, Refusal, State, Workspace};
 use crate::view::ModelView;
 
+/// Below this window width the header collapses and Model shows one
+/// contextual panel at a time.
+pub const COMPACT_WIDTH: f32 = 1100.0;
+
 pub struct App {
     state: State,
     view: Box<dyn ModelView>,
@@ -96,43 +100,74 @@ impl App {
         actions
     }
 
+    /// One 48 pt row: identity, version, workspaces and the read-only status.
+    /// Below `COMPACT_WIDTH` the project name and status text collapse and the
+    /// later workspaces move into More.
     fn header(&self, ui: &mut egui::Ui) -> Vec<Action> {
         let mut actions = Vec::new();
         let session = &self.state.session;
         let tokens = crate::theme::Tokens::of(ui);
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("TALOS").strong());
-            ui.add_space(10.0);
-            ui.label(&session.project.name);
-            ui.label(egui::RichText::new("›").color(tokens.muted));
-            let requested = session.requested();
-            ui.label(&requested.branch);
-            ui.label(egui::RichText::new("›").color(tokens.muted));
-            let version = egui::ComboBox::from_id_salt("talos-version")
-                .selected_text(&requested.version)
-                .show_ui(ui, |ui| {
-                    for entry in &session.project.versions {
-                        let text = format!("{}   {}", entry.id.version, entry.summary);
-                        if ui.selectable_label(&entry.id == requested, text).clicked() {
-                            actions.push(Action::SwitchVersion(entry.id.clone()));
+        let compact = ui.available_width() < COMPACT_WIDTH;
+        let row = egui::vec2(ui.available_width(), 48.0);
+        ui.allocate_ui_with_layout(
+            row,
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                brand(ui);
+                ui.add_space(10.0);
+                if !compact {
+                    ui.label(
+                        egui::RichText::new(&session.project.name)
+                            .family(crate::theme::medium())
+                            .color(tokens.text),
+                    );
+                    ui.label(egui::RichText::new("/").color(tokens.faint));
+                }
+                let requested = session.requested();
+                ui.label(egui::RichText::new(&requested.branch).color(tokens.muted));
+                ui.label(egui::RichText::new("/").color(tokens.faint));
+                let version = egui::ComboBox::from_id_salt("talos-version")
+                    .selected_text(
+                        egui::RichText::new(&requested.version).family(crate::theme::semibold()),
+                    )
+                    .width(56.0)
+                    .show_ui(ui, |ui| {
+                        for entry in &session.project.versions {
+                            let text = format!("{}   {}", entry.id.version, entry.summary);
+                            if ui.selectable_label(&entry.id == requested, text).clicked() {
+                                actions.push(Action::SwitchVersion(entry.id.clone()));
+                            }
                         }
-                    }
-                })
-                .response;
-            ui.ctx()
-                .accesskit_node_builder(version.id, |node| node.set_label("Version"));
-            version.on_hover_text("Version");
-            let authority = session.project.authority;
-            crate::theme::tag(ui, authority.label(), authority.detail());
-            if let DocumentState::Loading(ticket) = &session.document {
-                ui.spinner();
-                ui.label(
-                    egui::RichText::new(format!("Loading {}…", ticket.version))
-                        .small()
-                        .color(tokens.muted),
+                    })
+                    .response;
+                ui.ctx()
+                    .accesskit_node_builder(version.id, |node| node.set_label("Version"));
+                version.on_hover_text("Version");
+                let authority = session.project.authority;
+                crate::theme::pill(
+                    ui,
+                    authority.label(),
+                    tokens.synthetic,
+                    tokens.synthetic_weak,
+                    authority.detail(),
                 );
-            }
-        });
+                if let DocumentState::Loading(ticket) = &session.document {
+                    ui.spinner();
+                    ui.label(
+                        egui::RichText::new(format!("Loading {}…", ticket.version))
+                            .size(crate::theme::SMALL)
+                            .color(tokens.muted),
+                    );
+                }
+                ui.add_space(14.0);
+                if let Some(workspace) = crate::tabs::show(ui, self.state.workspace, compact) {
+                    actions.push(Action::SelectWorkspace(workspace));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    status(ui, compact);
+                });
+            },
+        );
         actions
     }
 
@@ -142,34 +177,91 @@ impl App {
             let tokens = crate::theme::Tokens::of(ui);
             egui::Frame::new()
                 .fill(tokens.warning_fill)
-                .inner_margin(egui::Margin::symmetric(12, 6))
+                .inner_margin(egui::Margin::symmetric(14, 8))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Could not load {}: {message}",
-                            ticket.version
-                        ))
-                        .color(tokens.warning_text),
-                    );
+                    ui.horizontal(|ui| {
+                        crate::icons::show(
+                            ui,
+                            crate::icons::Icon::Warning,
+                            16.0,
+                            tokens.warning_text,
+                        );
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "Could not load {}: {message}",
+                                ticket.version
+                            ))
+                            .color(tokens.warning_text),
+                        );
+                    });
                 });
         }
     }
+}
 
-    fn status(ui: &mut egui::Ui) {
-        let tokens = crate::theme::Tokens::of(ui);
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Read-only").small().color(tokens.muted))
-                .on_hover_text("Nothing in this prototype writes files, commits or runs analysis.");
-            ui.label(egui::RichText::new("·").small().color(tokens.muted));
-            ui.label(
-                egui::RichText::new("ETABS not connected")
-                    .small()
-                    .color(tokens.muted),
-            )
-            .on_hover_text("This prototype never starts or controls ETABS.");
-        });
-    }
+/// The TALOS mark: a rounded accent tile with a column, and the wordmark.
+fn brand(ui: &mut egui::Ui) {
+    let tokens = crate::theme::Tokens::of(ui);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 5.0, tokens.accent);
+    ui.painter().rect_filled(
+        egui::Rect::from_min_max(
+            rect.left_top() + egui::vec2(8.0, 5.0),
+            rect.right_bottom() - egui::vec2(8.0, 4.0),
+        ),
+        1.0,
+        tokens.chrome,
+    );
+    ui.label(
+        egui::RichText::new("TALOS")
+            .family(crate::theme::semibold())
+            .extra_letter_spacing(1.2)
+            .color(tokens.text),
+    );
+}
+
+/// Read-only and ETABS status; icon-only (with tooltips) when compact.
+fn status(ui: &mut egui::Ui, compact: bool) {
+    use crate::icons::{Icon, show};
+    let tokens = crate::theme::Tokens::of(ui);
+    // Inside the header's right-to-left layout the first item drawn is the
+    // rightmost, so each item adds its text before its icon.
+    let item = |ui: &mut egui::Ui, icon: Icon, text: &str, hover: &str| {
+        let response = ui
+            .horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 5.0;
+                if !compact {
+                    ui.label(
+                        egui::RichText::new(text)
+                            .size(crate::theme::SMALL)
+                            .color(tokens.muted),
+                    );
+                }
+                show(ui, icon, 14.0, tokens.muted);
+            })
+            .response
+            .on_hover_text(hover);
+        if compact {
+            // The icon alone still names its state for assistive technology.
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::accesskit::Role::Label, true, text)
+            });
+        }
+    };
+    // Right-to-left layout: the last item drawn is leftmost.
+    item(
+        ui,
+        Icon::Unplug,
+        "ETABS not connected",
+        "ETABS not connected: this prototype never starts or controls ETABS.",
+    );
+    item(
+        ui,
+        Icon::Lock,
+        "Read-only",
+        "Read-only: nothing in this prototype writes files, commits or runs analysis.",
+    );
 }
 
 impl eframe::App for App {
@@ -183,11 +275,13 @@ impl eframe::App for App {
         let ctx = ui.ctx().clone();
         let mut actions = self.shortcuts(&ctx);
         let tokens = crate::theme::Tokens::of(ui);
-        let chrome = egui::Frame::new()
-            .fill(tokens.chrome)
-            .inner_margin(egui::Margin::symmetric(12, 6));
         egui::Panel::top("talos-header")
-            .frame(chrome)
+            .frame(
+                egui::Frame::new()
+                    .fill(tokens.chrome)
+                    .stroke(egui::Stroke::new(1.0, tokens.chrome_line))
+                    .inner_margin(egui::Margin::symmetric(14, 0)),
+            )
             .show(ui, |ui| actions.extend(self.header(ui)));
         // Only drawn when something is wrong; an empty panel would still take space.
         if matches!(self.state.session.document, DocumentState::Failed { .. }) {
@@ -195,16 +289,6 @@ impl eframe::App for App {
                 .frame(egui::Frame::NONE)
                 .show(ui, |ui| self.warning(ui));
         }
-        egui::Panel::top("talos-tabs")
-            .frame(chrome.inner_margin(egui::Margin::symmetric(8, 0)))
-            .show(ui, |ui| {
-                if let Some(workspace) = crate::tabs::show(ui, self.state.workspace) {
-                    actions.push(Action::SelectWorkspace(workspace));
-                }
-            });
-        egui::Panel::bottom("talos-status")
-            .frame(chrome.inner_margin(egui::Margin::symmetric(12, 3)))
-            .show(ui, Self::status);
         let workspace = self.state.workspace;
         egui::CentralPanel::no_frame().show(ui, |ui| match workspace {
             Workspace::Model => {
