@@ -153,7 +153,24 @@ pages, if the separate no-patch spike shows it compiles against published egui
 
 ## Test receipts (agent-reported)
 
-_Filled from the clean-worktree gate; see `evidence/app-01a/`._
+Clean detached worktree @ `900949f` (`evidence/app-01a/gate-900949f.txt`,
+script `gate.sh.txt`; Linux, no GPU, `--locked --offline -j 2`):
+
+- check, fmt, doc tests and WASM (`--workspace --lib`): **pass**.
+- Tests: **140 passed, 0 failed, 6 ignored** across the workspace, of which
+  `talos-native` has **19** (13 state-transition and 6 headless egui_kittest UI
+  tests). The 6 ignored tests are the existing GPU-only probes, not run here.
+- Whole-workspace strict Clippy **returns 101**, only because of the recorded
+  pre-existing `webview_stage_a` Linux `eprintln!` exception (G-ENV-1). Every
+  other target was linted explicitly and is clean: `talos-native`,
+  `lab-e2k-mesh` and `lab-fixture` (all targets, plus `-W clippy::all`), the root
+  lib, bins and tests, and each other example.
+
+Mutation check: accepting any response while loading (dropping the ticket
+comparison) fails 2 state tests and the UI rapid-switch test.
+
+Not run: Windows build, GPU, WebView2, screen reader, DPI scaling (owner
+check below).
 
 ## Owner Windows check (public data only)
 
