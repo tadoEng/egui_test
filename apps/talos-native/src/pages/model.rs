@@ -1186,12 +1186,8 @@ fn property(ui: &mut egui::Ui, name: &str, value: &str) {
         );
         ui.add(value);
     });
-    let y = ui.cursor().top() - 2.0;
-    ui.painter().hline(
-        ui.max_rect().x_range(),
-        y,
-        egui::Stroke::new(1.0, tokens.border.gamma_multiply(0.6)),
-    );
+    // Rows are separated by space, not rules (calm surfaces, few borders).
+    ui.add_space(2.0);
 }
 
 /// The backend tier and reasons this native viewer mirrors; never upgraded by

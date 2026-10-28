@@ -21,17 +21,21 @@ TALOS binary and the real GPU viewport. EtabExtension #467 stays HOLD. Tracks
 Inter is registered at three weights from one variable font: 400 body, 500
 controls, 600 titles.
 
-The type scale is:
+The type scale is 12/13/15/18:
 
 | Use | Size |
 |---|---|
-| Body | 14 |
-| Small | 12 |
-| Section labels | 11, uppercase |
+| Small and section labels (uppercase) | 12 |
+| Body | 13 |
 | Titles | 15 |
 | Entity names | 18 |
 
-Engineering values and warnings never go below 12 pt.
+Nothing (engineering values, warnings, labels) goes below 12 pt.
+
+Surfaces are calm, with one accent colour:
+- Results selectors and cards have no borders.
+- Inspector rows are separated by space, not rules.
+- The only remaining rule is the docked panes' edge.
 
 Dark and light tokens follow the system theme. The canvas keeps the
 renderer's own background. State is never shown by colour alone: every dot has
@@ -52,19 +56,27 @@ appears only on failure. Below 1100 pt:
 - Compare, History and Reports move into **More**, except the active workspace;
 - Ctrl+1…5 still reach every workspace.
 
-### Model: Docked or Floating, never over picking
+### Model: Floating or Docked, never picking through
 
-Docked and Floating are a presentation toggle in the view toolbar, not a
+Floating and Docked are a presentation toggle in the view toolbar, not a
 permanent mode. Both show the same Explorer and Inspector and keep the
 selection.
 
-- **Docked (default).** Side panes, so geometry is never covered. The panes cap
-  at a share of the window. At 900 pt the canvas keeps about 390 pt, including
-  after shrinking from a wider window.
-- **Floating.** Cards over a full-width canvas. A card, the toolbar, the
-  version strip, the fidelity chip and the gizmo each block clicks and drags
-  under them, so nothing picks or orbits through an overlay. The canvas still
-  picks everywhere else.
+- **Floating (default).** Explorer, Inspector and the view tools are cards with
+  margins, rounded corners and a soft shadow. The canvas runs edge to edge
+  underneath. A card, the toolbar, the version strip, the fidelity chip and the
+  gizmo each block clicks and drags under them, so nothing picks or orbits
+  through an overlay. The canvas still picks everywhere else.
+- **Docked.** Side panes, so geometry is never covered. The panes cap at a
+  share of the window. At 900 pt the canvas keeps about 390 pt, including after
+  shrinking from a wider window.
+
+**Known cost:** at 900 pt, Floating leaves about 360 pt between the cards, and
+the inspector card covers the right side of the model. Picking never goes
+through it, but the geometry is hidden until you orbit, close the card or
+switch to Docked. One way to fix this is for Fit to frame the model in the free
+area instead of the whole canvas. That is a camera change for a follow-up, and
+it is open for your decision against the "never over critical geometry" rule.
 
 ### Canvas overlays
 
@@ -119,11 +131,11 @@ values are plotted or invented.
 | Rule | Where it holds |
 |---|---|
 | Docked vs floating is not a permanent mode | Toolbar toggle; `PanelMode` is presentation-only; the test keeps the selection across both |
-| Never place the inspector over critical geometry or picking | Docked is the default. Floating cards and every overlay block picks under them (tested), and the canvas still picks outside them (tested) |
+| Never place the inspector over critical geometry or picking | Floating cards and every overlay block picks under them (tested), and the canvas still picks outside them (tested). Docked never covers geometry. At 900 pt, Floating does cover part of the model (see **Known cost**) |
 | 48 pt header target; validate at 900 pt and 100/125/150 % | One-row header (tested). 900 pt overflow, no overlaps, Ctrl+3 (tested). Real-binary captures at 1×, 1.25× and 1.5×, including 900 × 700 |
 | No microtext for engineering values | 12 pt floor for values and warnings |
 | Timeline: no invented data; synced with the header; no second controller | The strip sends the header's `SwitchVersion`; both reflect `session.requested()` (tested); the "no commit history" note is shown or named |
-| Renderer beautification is separate | `lab-viewport` is untouched in this PR |
+| Renderer beautification is separate | `lab-viewport` is untouched in this PR. The design table's grid floor and gradient canvas are therefore **not** here; they belong in that separate renderer change |
 | Real Windows screenshots before approving a polish PR | **Still required.** Everything here is Linux, Xvfb and lavapipe |
 
 ## Tests
@@ -132,8 +144,8 @@ There are 35 `talos-native` tests. The UI tests run the real `App` and
 `NativeModelView` through egui's AccessKit tree. Seven are new or rewritten
 for A.2:
 
-- panel modes keep the selection; overlays never pick through; the canvas still
-  picks outside them;
+- Floating is the default; panel modes keep the selection; overlays never pick
+  through in either mode; the canvas still picks outside them;
 - the version strip and the header picker act as one controller;
 - the explorer text filter and type filter;
 - at 900 pt: the More overflow, no header overlaps, shortcuts still route, and
@@ -149,9 +161,9 @@ chips.
 ## Evidence (`docs/native/evidence/app-01a2/`)
 
 - `capture_talos.py`: the real binary under Xvfb + Mesa lavapipe with real
-  XTest clicks, at 1, 1.25 and 1.5. It captures Model docked, a real pick, the
-  same pick floating, Results, then the window resized to 900 × 700 (floating,
-  then docked).
+  XTest clicks, at 1, 1.25 and 1.5. It captures Model floating (the default), a
+  real pick, the same pick docked, Results, then the window resized to
+  900 × 700 (docked, then floating).
 - `*.png`: those 18 frames, all public synthetic tower data.
 - `gate.sh.txt` and `gate-a2-<sha>.txt`: the clean-worktree gate.
 

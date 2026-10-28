@@ -47,7 +47,6 @@ fn group<R>(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui) -> R
     let tokens = Tokens::of(ui);
     egui::Frame::new()
         .fill(tokens.card)
-        .stroke(egui::Stroke::new(1.0, tokens.border))
         .corner_radius(10)
         .inner_margin(egui::Margin::symmetric(10, 4))
         .show(ui, |ui| {
@@ -190,7 +189,6 @@ fn chart_card(ui: &mut egui::Ui, document: &Document, query: &ResultsQuery) {
     let tokens = Tokens::of(ui);
     egui::Frame::new()
         .fill(tokens.card)
-        .stroke(egui::Stroke::new(1.0, tokens.border))
         .corner_radius(tokens.card_radius)
         .inner_margin(egui::Margin::symmetric(22, 18))
         .show(ui, |ui| {
@@ -279,7 +277,6 @@ fn empty_state(ui: &mut egui::Ui, plot: egui::Rect, document: &Document, query: 
         |ui| {
             egui::Frame::new()
                 .fill(tokens.card)
-                .stroke(egui::Stroke::new(1.0, tokens.border))
                 .corner_radius(tokens.card_radius)
                 .shadow(tokens.shadow)
                 .inner_margin(egui::Margin::symmetric(24, 18))

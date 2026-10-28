@@ -5,9 +5,9 @@ Linux container only: Xvfb + Mesa lavapipe (software Vulkan), ImageMagick
 `import`, and real X11 input through XTest (libXtst). Public synthetic tower
 data only. Not Windows evidence: the owner's Windows check stays required.
 
-For each scale: Model docked, a real pick, the same pick with floating
-panels, Results, then the window resized to 900 x 700 points (Model,
-floating and docked).
+For each scale: Model with floating panels (the default), a real pick, the
+same pick docked, Results, then the window resized to 900 x 700 points
+(Model, docked and floating).
 Coordinates are logical points of the default 1280 x 800 layout.
 
     python3 -I capture_talos.py <talos-native binary> <out-dir>
@@ -92,31 +92,30 @@ for scale in ("1", "1.25", "1.5"):
         s = float(scale)
         width, height = round(1280 * s), round(800 * s)
         tag = f"{scale.replace('.', '_')}x"
-        shot(f"model-docked-{tag}", width, height)
-        # A column near the middle of the docked canvas: a real pick through
-        # the real viewport.
+        shot(f"model-floating-{tag}", width, height)
+        # A real pick through the real viewport, between the floating cards.
         click(handle, 600 * s, 430 * s)
         time.sleep(3)
-        shot(f"model-docked-picked-{tag}", width, height)
-        # The view toolbar's Floating panels toggle.
-        click(handle, 629 * s, 691 * s)
-        time.sleep(3)
         shot(f"model-floating-picked-{tag}", width, height)
+        # The view toolbar's Docked panels toggle (floating layout).
+        click(handle, 595 * s, 691 * s)
+        time.sleep(3)
+        shot(f"model-docked-picked-{tag}", width, height)
         # Results tab (Xvfb has no window manager to give keyboard focus).
         click(handle, 640 * s, 26 * s)
         time.sleep(3)
         shot(f"results-{tag}", width, height)
-        # Back to Model (still floating: the mode is kept), then the 900 x 700
-        # minimum, floating and docked.
+        # Back to Model (still docked: the mode is kept), then the 900 x 700
+        # minimum, docked and floating.
         click(handle, 548 * s, 26 * s)
         time.sleep(2)
         resize_top_level(handle, 900 * s, 700 * s)
         time.sleep(4)
-        shot(f"model-900-floating-{tag}", round(900 * s), round(700 * s))
-        # The toolbar's Docked panels toggle at 900 x 700, floating layout.
-        click(handle, 410 * s, 592 * s)
-        time.sleep(3)
         shot(f"model-900-docked-{tag}", round(900 * s), round(700 * s))
+        # The toolbar's Floating panels toggle at 900 x 700, docked layout.
+        click(handle, 439 * s, 591 * s)
+        time.sleep(3)
+        shot(f"model-900-floating-{tag}", round(900 * s), round(700 * s))
     finally:
         app.terminate()
         app.wait(timeout=10)

@@ -480,25 +480,23 @@ fn inspector_text_stays_inside_its_panel_in_the_app() {
         } else {
             "centred middle"
         };
-        // Docked: between the panel's splitter and the window edge.
-        let labels = inspector_labels(&harness);
-        let left = harness
-            .get_all_by_role(Role::Splitter)
-            .map(|splitter| splitter.rect().center().x)
-            .fold(f32::MIN, f32::max);
-        assert_within(&labels, left, 1280.0, version);
-        assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
-        // Floating: inside the card, which sits inside the canvas margin.
-        harness.get_by_label("Floating panels").click();
-        settle(&mut harness);
+        // Floating (the default): inside the card, inside the canvas margin.
         let canvas = harness.get_by_label("3D model view").rect();
         let right = canvas.right() - crate::pages::model::MARGIN;
         let left = right - crate::pages::model::pane_widths(canvas.width()).1;
         let labels = inspector_labels(&harness);
         assert_within(&labels, left, right, &format!("{version} floating"));
         assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
-        harness.get_by_label("Docked panels").click();
-        settle(&mut harness);
+        // Docked: between the panel's splitter and the window edge.
+        set_mode(&mut harness, "Docked panels");
+        let labels = inspector_labels(&harness);
+        let left = harness
+            .get_all_by_role(Role::Splitter)
+            .map(|splitter| splitter.rect().center().x)
+            .fold(f32::MIN, f32::max);
+        assert_within(&labels, left, 1280.0, &format!("{version} docked"));
+        assert!(labels.iter().any(|(text, _)| text == expected), "{version}");
+        set_mode(&mut harness, "Floating panels");
     }
 }
 
@@ -657,31 +655,29 @@ fn selected(harness: &Harness<'_, App>) -> Vec<usize> {
     state.model.selected(scope).to_vec()
 }
 
+fn set_mode(harness: &mut Harness<'_, App>, toggle: &str) {
+    harness.get_by_label(toggle).click();
+    settle(harness);
+}
+
 #[test]
 fn panel_modes_keep_the_selection_and_overlays_never_pick_through() {
     let mut harness = harness(LoadMode::Inline);
+    let toggled = |harness: &Harness<'_, App>, label: &str| {
+        harness.get_by_label(label).accesskit_node().toggled() == Some(Toggled::True)
+    };
+    // Floating is the default: cards over an edge-to-edge canvas.
+    assert_eq!(harness.state().state().model.panels, PanelMode::Floating);
+    assert!(toggled(&harness, "Floating panels"));
+    assert!(!toggled(&harness, "Docked panels"));
+    let canvas = harness.get_by_label("3D model view").rect();
+    assert!(canvas.width() > 1270.0, "{canvas:?}");
+
     select(&mut harness, "|F|L12");
     let slab = selected(&harness);
     assert_eq!(slab.len(), 1);
-    let toggle = |harness: &Harness<'_, App>, label: &str| {
-        harness.get_by_label(label).accesskit_node().toggled() == Some(Toggled::True)
-    };
-    assert!(toggle(&harness, "Docked panels"));
-    assert!(!toggle(&harness, "Floating panels"));
-
-    harness.get_by_label("Floating panels").click();
-    settle(&mut harness);
-    assert_eq!(harness.state().state().model.panels, PanelMode::Floating);
-    assert!(toggle(&harness, "Floating panels"));
-    assert_eq!(selected(&harness), slab, "the mode is presentation only");
-    assert!(present(&harness, "flat at declared face"));
-    assert!(present(&harness, "ALL ENTITIES (672)"));
-
-    // The canvas now spans the page under the cards.
-    let canvas = harness.get_by_label("3D model view").rect();
-    assert!(canvas.width() > 1270.0, "{canvas:?}");
-    // Empty card space, the version strip and the toolbar's gaps are not
-    // pick targets: a click there would otherwise pick or clear.
+    // Empty card space and the version strip are not pick targets: a click
+    // there would otherwise pick or clear.
     let close = harness.get_by_label("Hide inspector (I)").rect();
     let strip = harness.get_by_label("Version v1").rect();
     for at in [
@@ -702,11 +698,27 @@ fn panel_modes_keep_the_selection_and_overlays_never_pick_through() {
     click_at(&mut harness, at, egui::Modifiers::NONE);
     assert_eq!(selected(&harness), [column]);
 
-    harness.get_by_label("Docked panels").click();
-    settle(&mut harness);
+    // Docked keeps the selection and the content; the strip still blocks.
+    set_mode(&mut harness, "Docked panels");
     assert_eq!(harness.state().state().model.panels, PanelMode::Docked);
+    assert!(toggled(&harness, "Docked panels"));
+    assert_eq!(
+        selected(&harness),
+        [column],
+        "the mode is presentation only"
+    );
+    assert!(present(&harness, "ALL ENTITIES (672)"));
+    let docked = harness.get_by_label("3D model view").rect();
+    assert!(docked.width() < canvas.width() - 400.0, "{docked:?}");
+    let strip = harness.get_by_label("Version v1").rect();
+    click_at(
+        &mut harness,
+        egui::pos2(docked.right() - 40.0, strip.center().y),
+        egui::Modifiers::NONE,
+    );
     assert_eq!(selected(&harness), [column]);
-    assert!(present(&harness, "C0_0"));
+    set_mode(&mut harness, "Floating panels");
+    assert_eq!(selected(&harness), [column]);
 }
 
 #[test]
@@ -811,6 +823,7 @@ fn at_900_points_the_header_overflows_into_more_and_shortcuts_still_route() {
     }
     assert!(row.last().expect("items").right() <= 900.0);
     // The canvas keeps a usable width between the docked panes.
+    set_mode(&mut harness, "Docked panels");
     let canvas = harness.get_by_label("3D model view").rect();
     assert!(canvas.width() >= 380.0, "{canvas:?}");
 
@@ -858,6 +871,7 @@ fn results_selector_labels_come_before_their_controls() {
 #[test]
 fn shrinking_a_wide_window_to_900_points_narrows_the_docked_panes() {
     let mut harness = harness(LoadMode::Inline);
+    set_mode(&mut harness, "Docked panels");
     let wide = harness.get_by_label("3D model view").rect().width();
     harness.set_size(egui::vec2(900.0, 700.0));
     settle(&mut harness);

@@ -128,8 +128,8 @@ impl Session {
 
 /// How the Model workspace places its Explorer and Inspector.
 ///
-/// Docked panes never cover geometry; floating cards give the model the whole
-/// canvas. Both show the same content; neither is a permanent decision
+/// Floating cards (the default) give the model the whole canvas; docked
+/// panes never cover geometry. Both show the same content; neither is a permanent decision
 /// (owner, #52).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PanelMode {
@@ -287,7 +287,7 @@ impl State {
             workspace: Workspace::Model,
             session: Session { project, document },
             model: ModelState {
-                panels: PanelMode::Docked,
+                panels: PanelMode::Floating,
                 explorer_open: true,
                 inspector_open: true,
                 story: None,

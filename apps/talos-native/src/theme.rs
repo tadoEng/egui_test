@@ -104,10 +104,10 @@ impl Tokens {
     }
 }
 
-/// Body text is 14 pt: engineering values and warnings never drop below 12.
-pub const BODY: f32 = 14.0;
+/// The 12/13/15/18 scale: body text is 13 pt, and nothing (engineering
+/// values, warnings, section labels) drops below 12.
+pub const BODY: f32 = 13.0;
 pub const SMALL: f32 = 12.0;
-pub const LABEL: f32 = 11.0;
 pub const TITLE: f32 = 15.0;
 pub const NAME: f32 = 18.0;
 
@@ -168,12 +168,12 @@ pub fn install(ctx: &egui::Context) {
     });
 }
 
-/// A label in the uppercase section style (`SECTION`), 11 pt, muted.
+/// A label in the uppercase section style (`SECTION`), 12 pt, muted.
 pub fn section(ui: &mut egui::Ui, text: &str) {
     let tokens = Tokens::of(ui);
     ui.label(
         RichText::new(text.to_uppercase())
-            .size(LABEL)
+            .size(SMALL)
             .family(semibold())
             .extra_letter_spacing(0.6)
             .color(tokens.muted),
