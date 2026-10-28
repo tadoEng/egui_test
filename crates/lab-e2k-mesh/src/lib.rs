@@ -1,8 +1,11 @@
 //! REAL-02 first slice: pure, immutable GPU-ready display buffers, not a renderer.
-//! Source keys/coordinates come from pinned ext-e2k. All frame solids are proxies;
-//! shell surfaces are zero thickness. No engineering calculations or result joins.
+//! Source keys/coordinates come from pinned ext-e2k. Only inline rectangular
+//! frame sections use source dimensions; every other frame body is a labelled
+//! approximation. Shell surfaces are zero thickness. No engineering
+//! calculations or result joins.
 use ext_e2k::{
-    EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellKind, SourceMap, TempUnit,
+    EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellInsertionPoint, ShellKind,
+    SourceMap, TempUnit,
 };
 use lab_fixture::{Bounds, Geometry, PRISM_FACE_RINGS, Point};
 use sha2::{Digest as _, Sha256};
@@ -10,11 +13,17 @@ use std::{collections::BTreeSet, fmt, ops::Range};
 const MAX_SOURCE_BYTES: usize = 64 * 1024 * 1024;
 const CONTRACT_VERSION: u32 = 1;
 const EPS: f64 = 1.0e-7;
+mod openings;
+pub mod pick;
 pub mod public_fixture;
+mod triangulate;
 /// Fixed limitations, never inferred model-specific engineering status.
-pub const FIDELITY_LIMITATIONS: [&str; 4] = [
+pub const FIDELITY_LIMITATIONS: [&str; 7] = [
     "project_scene_geometry_assumptions_not_certified",
-    "proxy_sections_local_axes_offsets_and_insertion_not_applied",
+    "frame_fidelity_is_a_native_mirror_of_ext_api_not_the_authority",
+    "frame_local_axis_rotation_unparsed_default_csi_axes_assumed",
+    "frame_cardinal_insertion_and_end_offsets_not_applied",
+    "shell_thickness_and_insertion_not_drawn",
     "shell_void_subtraction_unavailable",
     "no_group_or_member_result_inference",
 ];
@@ -61,7 +70,9 @@ pub enum SourceClass {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DisplayMode {
-    RectangularProxy,
+    /// A swept rectangle; whether its size is the source section is
+    /// [`FrameSource::fidelity`], never implied by this mode.
+    RectangularFrame,
     ZeroThicknessSurface,
     Withheld,
 }
@@ -69,9 +80,78 @@ pub enum DisplayMode {
 pub enum Limitation {
     DegenerateFrame,
     OpeningVoid,
-    UnknownOpeningState,
+    /// The pinned `ext-api` host rule: a declared opening lies within this
+    /// coplanar same-story shell, and the projection does not subtract it.
     HostOpeningSubtractionUnavailable,
-    InvalidOrConcaveShell,
+    /// Not a host by the `ext-api` rule, but coplanar with and sharing area with
+    /// a declared opening (or touching one that has no plane). Withheld by this
+    /// viewer rather than painted over the void; the backend draws it.
+    OverlapsUnsubtractedOpening,
+    /// Degenerate, nonplanar or self-intersecting ring; concave simple rings
+    /// are triangulated, not withheld.
+    InvalidShellRing,
+}
+/// The `ext-api` `SceneGeometryFidelity` tiers a frame can take.
+///
+/// Mirrors `model_inspect/fidelity.rs::classify_frame` at 9eb1c879. The backend
+/// classification is the authority; this mirror exists only until the native
+/// host can consume it (#18 holds `ext-api`), and must never be more optimistic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GeometryFidelity {
+    Resolved,
+    Approximate,
+    Symbolic,
+}
+/// `ext-api` `SceneFidelityReason` names for frames, plus one native-only
+/// reason. Declaration order matches the backend's, which publishes reasons
+/// sorted in that order and deduplicated.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FrameReason {
+    SectionNotAssigned,
+    SectionDefinitionMissing,
+    SectionDimensionsMissing,
+    SectionDimensionsInLibrary,
+    RectangularProfileEnvelope,
+    ProfileShapeUnknown,
+    LocalAxisRotationUnavailable,
+    CardinalPointOffsetIgnored,
+    FrameJointOffsetsIgnored,
+    SectionMirrorIgnored,
+    /// Native only: where the backend's viewer draws a bare centreline, this
+    /// one draws the configured fixed proxy so the member stays pickable.
+    FixedDisplayProxy,
+}
+/// Source frame attributes for an inspector, in metres where dimensional.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameSource {
+    pub section: Option<String>,
+    pub material: Option<String>,
+    pub shape: Option<String>,
+    pub depth_m: Option<f64>,
+    pub width_m: Option<f64>,
+    pub cardinal_point: Option<i32>,
+    pub fidelity: GeometryFidelity,
+    pub reasons: Vec<FrameReason>,
+}
+impl FrameSource {
+    /// Whether the body is swept from the source depth × width.
+    pub fn swept(&self) -> bool {
+        self.fidelity != GeometryFidelity::Symbolic
+    }
+}
+/// Source shell attributes for an inspector, in metres where dimensional.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShellSource {
+    pub section: Option<String>,
+    pub material: Option<String>,
+    pub thickness_m: Option<f64>,
+    pub insertion_point: Option<String>,
+    /// The source `OPENING` flag. `None` means the row said nothing; like the
+    /// pinned `ext-api`, only an explicit `true` makes a void, so such a shell
+    /// is drawn and this field is what discloses that nothing was declared.
+    pub opening: Option<bool>,
+    /// Surfaces are zero thickness at the connectivity plane; always false today.
+    pub thickness_drawn: bool,
 }
 #[derive(Clone, Debug)]
 pub struct EntityMesh {
@@ -82,6 +162,8 @@ pub struct EntityMesh {
     pub mode: DisplayMode,
     pub limitation: Option<Limitation>,
     pub source_centerline_m: Option<[Point; 2]>,
+    pub frame: Option<FrameSource>,
+    pub shell: Option<ShellSource>,
 }
 #[derive(Clone, Debug)]
 pub struct Story {
@@ -243,12 +325,13 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
         origin_m,
     };
     for frame in &scene.frames {
-        builder.frame(frame, factor, config.proxy_half_extents_m)?;
+        let section = frame
+            .section
+            .as_ref()
+            .and_then(|section| model.find_frame_section(section.as_str()));
+        builder.frame(frame, section, factor, config.proxy_half_extents_m)?;
     }
-    let has_void = scene.shells.iter().any(|s| s.opening == Some(true));
-    for shell in &scene.shells {
-        builder.shell(shell, factor, has_void)?;
-    }
+    builder.shells(&scene.shells, factor)?;
     if builder.indices.is_empty() {
         return Err(Error::NoGeometry);
     }
@@ -348,8 +431,9 @@ impl Builder {
     fn frame(
         &mut self,
         frame: &ext_e2k::FrameSegment,
+        section: Option<&ext_e2k::FrameSectionDef>,
         factor: f64,
-        half_extents: [f64; 2],
+        proxy_half_extents: [f64; 2],
     ) -> Result<(), Error> {
         if !self.seen.insert(frame.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -363,18 +447,18 @@ impl Builder {
             FrameKind::Brace => SourceClass::Brace,
             _ => SourceClass::OtherFrame,
         };
+        let source = frame_source(frame, section, factor);
+        let half_extents = if source.swept() {
+            [source.depth_m, source.width_m].map(|v| v.unwrap_or(0.0) / 2.0)
+        } else {
+            proxy_half_extents
+        };
         let first = self.index()?;
         let limitation = if let Some(axis) = unit(sub(end, start)) {
-            let helper = if axis[2].abs() < 0.9 {
-                [0.0, 0.0, 1.0]
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            let y = unit(cross(helper, axis)).ok_or(Error::InvalidGeometry)?;
             let corners = Geometry::OrientedPrism {
                 start,
                 end,
-                transverse_y: y,
+                transverse_y: default_local_two(axis),
                 half_extents,
             }
             .control_points();
@@ -394,21 +478,62 @@ impl Builder {
             class,
             indices: first..self.index()?,
             mode: if limitation.is_none() {
-                DisplayMode::RectangularProxy
+                DisplayMode::RectangularFrame
             } else {
                 DisplayMode::Withheld
             },
             limitation,
             source_centerline_m: Some(ends),
+            frame: Some(source),
+            shell: None,
         });
 
+        Ok(())
+    }
+    /// Opening attribution needs every ring first, so shells are built together.
+    fn shells(&mut self, shells: &[ext_e2k::ShellPolygon], factor: f64) -> Result<(), Error> {
+        let rings = shells
+            .iter()
+            .map(|shell| {
+                shell
+                    .points
+                    .iter()
+                    .map(|p| world(*p, factor).map(|p| local(p, self.origin_m)))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Scoped by exact source story, like the backend host rule: geometry at
+        // another story identity is never this opening's host, however close.
+        let openings: Vec<_> = shells
+            .iter()
+            .zip(&rings)
+            .filter(|(shell, _)| shell.opening == Some(true))
+            .map(|(shell, ring)| (shell.story.as_str(), openings::Opening::new(ring)))
+            .collect();
+        let hosts = openings::authoritative_hosts(shells);
+        for (index, (shell, ring)) in shells.iter().zip(&rings).enumerate() {
+            let opening = if shell.opening == Some(true) {
+                None
+            } else if hosts.contains(&index) {
+                Some(Limitation::HostOpeningSubtractionUnavailable)
+            } else if openings
+                .iter()
+                .any(|(story, opening)| *story == shell.story.as_str() && opening.withholds(ring))
+            {
+                Some(Limitation::OverlapsUnsubtractedOpening)
+            } else {
+                None
+            };
+            self.shell(shell, ring, factor, opening)?;
+        }
         Ok(())
     }
     fn shell(
         &mut self,
         shell: &ext_e2k::ShellPolygon,
+        points: &[Point],
         factor: f64,
-        has_void: bool,
+        opening_limitation: Option<Limitation>,
     ) -> Result<(), Error> {
         if !self.seen.insert(shell.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -419,22 +544,18 @@ impl Builder {
             _ => SourceClass::OtherShell,
         };
         let first = self.index()?;
-        let points = shell
-            .points
-            .iter()
-            .map(|p| world(*p, factor).map(|p| local(p, self.origin_m)))
-            .collect::<Result<Vec<_>, _>>()?;
         let limitation = if shell.opening == Some(true) {
             Some(Limitation::OpeningVoid)
-        } else if has_void {
-            Some(Limitation::HostOpeningSubtractionUnavailable)
-        } else if shell.opening.is_none() {
-            Some(Limitation::UnknownOpeningState)
-        } else if let Some(normal) = convex_normal(&points) {
-            self.polygon(&points, normal, color(class))?;
+        } else if opening_limitation.is_some() {
+            opening_limitation
+        } else if let Some(normal) = convex_normal(points) {
+            self.polygon(points, normal, color(class))?;
+            None
+        } else if let Some((normal, triangles)) = triangulate::ear_clip(points) {
+            self.triangles(points, &triangles, normal, color(class))?;
             None
         } else {
-            Some(Limitation::InvalidOrConcaveShell)
+            Some(Limitation::InvalidShellRing)
         };
         self.entities.push(EntityMesh {
             key: shell.key.clone(),
@@ -448,6 +569,20 @@ impl Builder {
             },
             limitation,
             source_centerline_m: None,
+            frame: None,
+            shell: Some(ShellSource {
+                section: shell.section.as_ref().map(|s| s.as_str().into()),
+                material: shell.material.as_ref().map(|m| m.as_str().into()),
+                thickness_m: shell.thickness.map(|t| t * factor),
+                insertion_point: shell.insertion_point.as_ref().map(|p| match p {
+                    ShellInsertionPoint::Top => "TOP".into(),
+                    ShellInsertionPoint::Middle => "MIDDLE".into(),
+                    ShellInsertionPoint::Bottom => "BOTTOM".into(),
+                    ShellInsertionPoint::Other(value) => value.as_str().into(),
+                }),
+                opening: shell.opening,
+                thickness_drawn: false,
+            }),
         });
 
         Ok(())
@@ -456,12 +591,22 @@ impl Builder {
         u32::try_from(self.indices.len()).map_err(|_private_error| Error::Budget)
     }
     fn polygon(&mut self, points: &[Point], normal: Point, color: [f32; 3]) -> Result<(), Error> {
-        let count = points
-            .len()
-            .checked_sub(2)
-            .ok_or(Error::InvalidGeometry)?
-            .checked_mul(3)
-            .ok_or(Error::Budget)?;
+        let fan: Vec<[usize; 3]> = (1..points.len().saturating_sub(1))
+            .map(|i| [0, i, i + 1])
+            .collect();
+        self.triangles(points, &fan, normal, color)
+    }
+    fn triangles(
+        &mut self,
+        points: &[Point],
+        triangles: &[[usize; 3]],
+        normal: Point,
+        color: [f32; 3],
+    ) -> Result<(), Error> {
+        if triangles.is_empty() || triangles.iter().flatten().any(|&i| i >= points.len()) {
+            return Err(Error::InvalidGeometry);
+        }
+        let count = triangles.len().checked_mul(3).ok_or(Error::Budget)?;
         let vertices = self
             .vertices
             .len()
@@ -492,13 +637,114 @@ impl Builder {
                 color,
             });
         }
-        for i in 1..points.len() - 1 {
-            let i = u32::try_from(i).map_err(|_private_error| Error::Budget)?;
-            self.indices
-                .extend_from_slice(&[start, start + i, start + i + 1]);
+        for triangle in triangles {
+            for &i in triangle {
+                let i = u32::try_from(i).map_err(|_private_error| Error::Budget)?;
+                self.indices.push(start + i);
+            }
         }
         Ok(())
     }
+}
+/// Largest source section dimension accepted as drawable, in metres.
+const MAX_SECTION_M: f64 = 20.0;
+/// `ext-api` `RECTANGULAR_SHAPES` and `DOUBLY_SYMMETRIC_SHAPES` at 9eb1c879.
+const RECTANGULAR_SHAPES: [&str; 2] = ["concrete rectangular", "rectangular"];
+const DOUBLY_SYMMETRIC_SHAPES: [&str; 1] = ["concrete rectangular"];
+/// Mirrors `ext-api` `classify_frame`; see [`GeometryFidelity`].
+fn frame_source(
+    frame: &ext_e2k::FrameSegment,
+    section: Option<&ext_e2k::FrameSectionDef>,
+    factor: f64,
+) -> FrameSource {
+    let dimension = |v: Option<f64>| {
+        v.map(|v| v * factor)
+            .filter(|v| v.is_finite() && *v > EPS && *v <= MAX_SECTION_M)
+    };
+    let (depth_m, width_m) = (dimension(frame.depth), dimension(frame.width));
+    let shape = section
+        .and_then(|s| s.shape.as_ref())
+        .map(|s| s.as_str().trim());
+    let normalized = shape.map(str::to_ascii_lowercase);
+    let symmetric = normalized
+        .as_deref()
+        .is_some_and(|s| DOUBLY_SYMMETRIC_SHAPES.contains(&s));
+    let mut reasons = Vec::new();
+    // A box is swept only when BOTH dimensions resolved, as in the backend; an
+    // out-of-range source value is treated as unresolved, never drawn.
+    let swept = depth_m.is_some() && width_m.is_some();
+    let mut fidelity = if swept {
+        reasons.push(FrameReason::LocalAxisRotationUnavailable);
+        match normalized.as_deref() {
+            Some(s) if RECTANGULAR_SHAPES.contains(&s) => GeometryFidelity::Resolved,
+            Some(_) => {
+                reasons.push(FrameReason::RectangularProfileEnvelope);
+                GeometryFidelity::Approximate
+            }
+            None => {
+                reasons.push(FrameReason::ProfileShapeUnknown);
+                GeometryFidelity::Approximate
+            }
+        }
+    } else {
+        reasons.push(match (&frame.section, section) {
+            (None, _) => FrameReason::SectionNotAssigned,
+            (Some(_), None) => FrameReason::SectionDefinitionMissing,
+            (Some(_), Some(d)) if d.section_file.is_some() => {
+                FrameReason::SectionDimensionsInLibrary
+            }
+            (Some(_), Some(_)) => FrameReason::SectionDimensionsMissing,
+        });
+        reasons.push(FrameReason::FixedDisplayProxy);
+        GeometryFidelity::Symbolic
+    };
+    // CSI cardinal 10 (or the absent default) is the centroid; 5 and 11 are
+    // only where a proven doubly symmetric family makes them coincide.
+    let displaced = match frame.cardinal_point {
+        None | Some(10) => false,
+        Some(5 | 11) => !symmetric,
+        Some(_) => true,
+    };
+    let mut degrade = |reason| {
+        reasons.push(reason);
+        fidelity = fidelity.max(GeometryFidelity::Approximate);
+    };
+    if swept && displaced {
+        degrade(FrameReason::CardinalPointOffsetIgnored);
+    }
+    if frame.insertion.is_displaced() {
+        degrade(FrameReason::FrameJointOffsetsIgnored);
+    }
+    if swept && frame.insertion.is_mirrored() && !symmetric {
+        degrade(FrameReason::SectionMirrorIgnored);
+    }
+    reasons.sort_unstable();
+    reasons.dedup();
+    FrameSource {
+        section: frame.section.as_ref().map(|s| s.as_str().into()),
+        material: frame.material.as_ref().map(|m| m.as_str().into()),
+        shape: shape.map(Into::into),
+        depth_m,
+        width_m,
+        cardinal_point: frame.cardinal_point,
+        fidelity,
+        reasons,
+    }
+}
+/// CSI default frame local 2 axis for a unit local 1 axis: global +X for a
+/// vertical member (sine of the angle to Z below 1e-3), otherwise the upward
+/// direction in the vertical plane containing local 1. Local 3 is 1×2. Section
+/// rotation (`ANG`) is not parsed by the pinned source, so it is never applied.
+fn default_local_two(axis: Point) -> Point {
+    if axis[0].hypot(axis[1]) < 1.0e-3 {
+        return [1.0, 0.0, 0.0];
+    }
+    unit([
+        -axis[2] * axis[0],
+        -axis[2] * axis[1],
+        1.0 - axis[2] * axis[2],
+    ])
+    .unwrap_or([0.0, 0.0, 1.0])
 }
 fn point_bounds(points: &[Point]) -> Option<Bounds> {
     let first = *points.first()?;

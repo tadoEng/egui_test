@@ -14,6 +14,8 @@ use wgpu::util::DeviceExt as _;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 const BACKGROUND: egui::Color32 = egui::Color32::from_rgb(18, 25, 35);
+/// Vertical field of view shared by drawing and picking.
+const FIELD_OF_VIEW_DEGREES: f32 = 50.0;
 
 const SHADER: &str = r"
 struct Camera {
@@ -74,12 +76,19 @@ struct Vertex {
 )]
 fn source_mesh(source: lab_e2k_mesh::Mesh) -> MeshData {
     let source = source.into_render_parts();
+    #[cfg(feature = "real-workbench")]
+    let pick =
+        lab_e2k_mesh::pick::PickIndex::new(&source.vertices, &source.indices, &source.entities);
     MeshData {
         key: MeshKey::SourceGeometry(source.revision.geometry_sha256),
         vertices: source.vertices,
         indices: source.indices,
         #[cfg(feature = "real-workbench")]
         source_entities: source.entities,
+        #[cfg(feature = "real-workbench")]
+        revision: Some(source.revision),
+        #[cfg(feature = "real-workbench")]
+        pick,
         bounds: Bounds {
             min: source.bounds.min.map(|v| v as f32),
             max: source.bounds.max.map(|v| v as f32),
@@ -103,6 +112,11 @@ struct MeshData {
     indices: Vec<u32>,
     #[cfg(feature = "real-workbench")]
     source_entities: Vec<lab_e2k_mesh::EntityMesh>,
+    /// Source revision for selection scoping; `None` for authored lab meshes.
+    #[cfg(feature = "real-workbench")]
+    revision: Option<lab_e2k_mesh::Revision>,
+    #[cfg(feature = "real-workbench")]
+    pick: lab_e2k_mesh::pick::PickIndex,
     bounds: Bounds,
 }
 
@@ -232,6 +246,10 @@ impl MeshBuilder {
             indices: self.indices,
             #[cfg(feature = "real-workbench")]
             source_entities: Vec::new(),
+            #[cfg(feature = "real-workbench")]
+            revision: None,
+            #[cfg(feature = "real-workbench")]
+            pick: lab_e2k_mesh::pick::PickIndex::default(),
             bounds: self.bounds,
         }
     }
@@ -335,20 +353,52 @@ impl OrbitCamera {
         (right, up, back)
     }
 
+    fn eye(self) -> [f32; 3] {
+        add(self.target, scale(self.basis().2, self.distance))
+    }
+
+    /// Near/far view depths; picking must clip with exactly the drawn window.
+    fn clip_planes(self) -> (f32, f32) {
+        let near = (self.distance - self.radius * 2.0)
+            .max(self.distance * 0.001)
+            .max(0.001);
+        (near, (self.distance + self.radius * 2.0).max(near + 0.01))
+    }
+
+    /// World ray through normalized device coordinates (x right, y up), with
+    /// the distance window that maps to the drawn near/far depth range.
+    #[cfg(feature = "real-workbench")]
+    fn ray(self, aspect: f32, ndc: [f32; 2]) -> Option<lab_e2k_mesh::pick::Ray> {
+        let (right, up, back) = self.basis();
+        let half = (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan();
+        let direction = normalized(add(
+            add(
+                scale(right, ndc[0] * half * aspect.max(0.001)),
+                scale(up, ndc[1] * half),
+            ),
+            scale(back, -1.0),
+        ))?;
+        let forward = -dot(direction, back);
+        let (near, far) = self.clip_planes();
+        Some(lab_e2k_mesh::pick::Ray {
+            origin: self.eye().map(f64::from),
+            direction: direction.map(f64::from),
+            min_distance: f64::from(near / forward),
+            max_distance: f64::from(far / forward),
+        })
+    }
+
     fn view_projection(self, aspect: f32) -> [[f32; 4]; 4] {
         let (right, up, back) = self.basis();
-        let eye = add(self.target, scale(back, self.distance));
+        let eye = self.eye();
         let view = [
             [right[0], up[0], back[0], 0.0],
             [right[1], up[1], back[1], 0.0],
             [right[2], up[2], back[2], 0.0],
             [-dot(right, eye), -dot(up, eye), -dot(back, eye), 1.0],
         ];
-        let near = (self.distance - self.radius * 2.0)
-            .max(self.distance * 0.001)
-            .max(0.001);
-        let far = (self.distance + self.radius * 2.0).max(near + 0.01);
-        let f = 1.0 / (50.0_f32.to_radians() * 0.5).tan();
+        let (near, far) = self.clip_planes();
+        let f = 1.0 / (FIELD_OF_VIEW_DEGREES.to_radians() * 0.5).tan();
         let projection = [
             [f / aspect.max(0.001), 0.0, 0.0, 0.0],
             [0.0, f, 0.0, 0.0],
@@ -688,6 +738,63 @@ pub(crate) struct NativeViewport {
     selection_error: Option<&'static str>,
     #[cfg(feature = "real-workbench")]
     selection: Arc<Vec<u32>>,
+    #[cfg(feature = "real-workbench")]
+    story_indices: Arc<Vec<u32>>,
+    #[cfg(feature = "real-workbench")]
+    picking: Picking,
+}
+
+/// Individual element hover/selection, scoped to the mesh revision and the
+/// host's load generation. The story highlight is separate and never counts as
+/// an element selection.
+#[cfg(feature = "real-workbench")]
+#[derive(Default)]
+struct Picking {
+    generation: u64,
+    /// Set while the host's source provenance is not validated (UNLINKED). The
+    /// last-good mesh stays visible, but nothing in it can be picked.
+    blocked: bool,
+    selection: lab_e2k_mesh::pick::Selection,
+    hovered: Option<lab_e2k_mesh::pick::Hit>,
+    clicked: Option<lab_e2k_mesh::pick::Hit>,
+    last_pick_cpu_us: Option<u128>,
+}
+
+#[cfg(feature = "real-workbench")]
+impl Picking {
+    /// Fail closed: blocking clears selection, hover and the last click.
+    /// Returns whether element state was cleared.
+    fn set_blocked(&mut self, blocked: bool) -> bool {
+        if self.blocked == blocked {
+            return false;
+        }
+        self.blocked = blocked;
+        if blocked {
+            self.selection = lab_e2k_mesh::pick::Selection::default();
+            self.hovered = None;
+            self.clicked = None;
+        }
+        blocked
+    }
+
+    fn hover(&mut self, hit: Option<lab_e2k_mesh::pick::Hit>) {
+        self.hovered = if self.blocked { None } else { hit };
+    }
+
+    /// Applies a click unless blocked; returns whether it was accepted.
+    fn click(
+        &mut self,
+        scope: lab_e2k_mesh::pick::Scope,
+        hit: Option<lab_e2k_mesh::pick::Hit>,
+        toggle: bool,
+    ) -> bool {
+        if self.blocked {
+            return false;
+        }
+        self.selection.click(scope, hit.map(|h| h.entity), toggle);
+        self.clicked = hit;
+        true
+    }
 }
 
 impl NativeViewport {
@@ -735,6 +842,10 @@ impl NativeViewport {
             selection_error: None,
             #[cfg(feature = "real-workbench")]
             selection: Arc::new(Vec::new()),
+            #[cfg(feature = "real-workbench")]
+            story_indices: Arc::new(Vec::new()),
+            #[cfg(feature = "real-workbench")]
+            picking: Picking::default(),
         })
     }
 }
@@ -767,20 +878,41 @@ impl NativeViewport {
         (self.mesh.vertices.len(), self.mesh.indices.len() / 3)
     }
 
-    pub(crate) fn show(&mut self, ui: &mut egui::Ui, selected_story: Option<&str>) {
+    /// `load_generation` is the host's load identity; a change expires the
+    /// element selection even when the new load has byte-identical geometry.
+    /// `selection_allowed` is false while source provenance is not validated
+    /// (UNLINKED): element picking is refused and its state cleared until the
+    /// host allows it again, which a workbench does only on an explicit reopen.
+    pub(crate) fn show(
+        &mut self,
+        ui: &mut egui::Ui,
+        selected_story: Option<&str>,
+        load_generation: u64,
+        selection_allowed: bool,
+    ) {
+        #[cfg(feature = "real-workbench")]
+        {
+            self.set_load_generation(load_generation);
+            if self.picking.set_blocked(!selection_allowed) {
+                self.refresh_overlay();
+            }
+        }
+        #[cfg(not(feature = "real-workbench"))]
+        let _unused_selection_state = (load_generation, selection_allowed);
         #[cfg(feature = "real-workbench")]
         if self.selected_story.as_deref() != selected_story {
             self.selected_story = selected_story.map(str::to_owned);
             match story_indices(&self.mesh, selected_story) {
                 Ok(indices) => {
-                    self.selection = Arc::new(indices);
+                    self.story_indices = Arc::new(indices);
                     self.selection_error = None;
                 }
                 Err(error) => {
-                    self.selection = Arc::new(Vec::new());
+                    self.story_indices = Arc::new(Vec::new());
                     self.selection_error = Some(error);
                 }
             }
+            self.refresh_overlay();
         }
         #[cfg(feature = "real-workbench")]
         if let Some(error) = self.selection_error {
@@ -810,6 +942,8 @@ impl NativeViewport {
                 ctx.request_repaint();
             }
         }
+        #[cfg(feature = "real-workbench")]
+        self.interact(ui, &response, rect, aspect);
         ui.painter().rect_filled(rect, 0.0, BACKGROUND);
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(
             rect,
@@ -843,7 +977,198 @@ impl NativeViewport {
             egui::FontId::monospace(10.0),
             egui::Color32::LIGHT_GRAY,
         );
+        #[cfg(feature = "real-workbench")]
+        self.inspector(ui, rect);
     }
+}
+
+#[cfg(feature = "real-workbench")]
+impl NativeViewport {
+    fn set_load_generation(&mut self, generation: u64) {
+        if self.picking.generation != generation {
+            self.picking.generation = generation;
+            self.picking.hovered = None;
+            self.picking.clicked = None;
+            self.refresh_overlay();
+        }
+    }
+
+    fn scope(&self) -> Option<lab_e2k_mesh::pick::Scope> {
+        self.mesh.revision.map(|r| (r, self.picking.generation))
+    }
+
+    pub(crate) fn selected_entities(&self) -> Vec<&lab_e2k_mesh::EntityMesh> {
+        self.scope().map_or_else(Vec::new, |scope| {
+            self.picking
+                .selection
+                .entities(scope)
+                .iter()
+                .filter_map(|&i| self.mesh.source_entities.get(i))
+                .collect()
+        })
+    }
+
+    fn interact(
+        &mut self,
+        ui: &egui::Ui,
+        response: &egui::Response,
+        rect: egui::Rect,
+        aspect: f32,
+    ) {
+        let Some(scope) = self.scope().filter(|_| !self.picking.blocked) else {
+            self.picking.hover(None);
+            return;
+        };
+        let at = |pos: egui::Pos2| {
+            let ndc = [
+                (pos.x - rect.left()) / rect.width() * 2.0 - 1.0,
+                1.0 - (pos.y - rect.top()) / rect.height() * 2.0,
+            ];
+            pick_at(&self.mesh, self.camera, aspect, ndc)
+        };
+        let moved = ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO);
+        match response.hover_pos() {
+            Some(pos) if moved || self.picking.hovered.is_none() => {
+                let hit = at(pos);
+                self.picking.hover(hit);
+            }
+            None => self.picking.hover(None),
+            Some(_) => {}
+        }
+        if response.clicked()
+            && let Some(pos) = response.interact_pointer_pos()
+        {
+            let started = web_time::Instant::now();
+            let hit = at(pos);
+            let toggle = ui.input(|i| i.modifiers.command);
+            self.picking.click(scope, hit, toggle);
+            self.refresh_overlay();
+            self.picking.last_pick_cpu_us = Some(started.elapsed().as_micros());
+            ui.ctx().request_repaint();
+        }
+    }
+
+    /// Element selection takes precedence over the story highlight. Only the
+    /// selected index ranges are uploaded; vertex buffers are never re-sent.
+    fn refresh_overlay(&mut self) {
+        let mut indices = Vec::new();
+        for entity in self.selected_entities() {
+            if let Some(range) = self
+                .mesh
+                .indices
+                .get(entity.indices.start as usize..entity.indices.end as usize)
+            {
+                indices.extend_from_slice(range);
+            }
+        }
+        self.selection = if indices.is_empty() {
+            Arc::clone(&self.story_indices)
+        } else {
+            Arc::new(indices)
+        };
+    }
+
+    fn inspector(&self, ui: &egui::Ui, rect: egui::Rect) {
+        if self.picking.blocked {
+            ui.painter().with_clip_rect(rect).text(
+                rect.left_top() + egui::vec2(10.0, 8.0),
+                egui::Align2::LEFT_TOP,
+                "UNLINKED preview: element selection disabled until the version is reopened",
+                egui::FontId::monospace(11.0),
+                egui::Color32::LIGHT_RED,
+            );
+            return;
+        }
+        let selected = self.selected_entities();
+        let mut lines = vec![format!(
+            "Selected {} element(s){}",
+            selected.len(),
+            self.picking
+                .last_pick_cpu_us
+                .map_or_else(String::new, |us| format!(" · last pick CPU {us} µs"))
+        )];
+        let coincident = self.picking.clicked.map_or(0, |h| h.coincident);
+        lines.extend(selected.iter().take(6).map(|e| describe(e)));
+        if selected.len() > 6 {
+            lines.push(format!("… {} more", selected.len() - 6));
+        }
+        if coincident > 0 {
+            lines.push(format!(
+                "⚠ {coincident} other element(s) at the same depth; pick is ambiguous"
+            ));
+        }
+        if let Some(entity) = self
+            .picking
+            .hovered
+            .and_then(|h| self.mesh.source_entities.get(h.entity))
+        {
+            lines.push(format!("Hover: {}", describe(entity)));
+        }
+        ui.painter().with_clip_rect(rect).text(
+            rect.left_top() + egui::vec2(10.0, 8.0),
+            egui::Align2::LEFT_TOP,
+            lines.join("\n"),
+            egui::FontId::monospace(11.0),
+            egui::Color32::WHITE,
+        );
+    }
+}
+
+/// Nearest visible element under normalized device coordinates.
+#[cfg(feature = "real-workbench")]
+fn pick_at(
+    mesh: &MeshData,
+    camera: OrbitCamera,
+    aspect: f32,
+    ndc: [f32; 2],
+) -> Option<lab_e2k_mesh::pick::Hit> {
+    let ray = camera.ray(aspect, ndc)?;
+    mesh.pick.pick(
+        &mesh.vertices,
+        &mesh.indices,
+        &mesh.source_entities,
+        &ray,
+        |_| true,
+    )
+}
+
+/// Source attributes and fidelity for one entity; never inferred engineering data.
+#[cfg(feature = "real-workbench")]
+fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
+    let metres = |v: Option<f64>| v.map_or_else(|| "—".to_owned(), |v| format!("{v:.3} m"));
+    let detail = if let Some(frame) = &entity.frame {
+        format!(
+            "section {} · {} · material {} · D {} × B {} · {:?} {:?}",
+            frame.section.as_deref().unwrap_or("unassigned"),
+            frame.shape.as_deref().unwrap_or("shape unknown"),
+            frame.material.as_deref().unwrap_or("—"),
+            metres(frame.depth_m),
+            metres(frame.width_m),
+            frame.fidelity,
+            frame.reasons,
+        )
+    } else if let Some(shell) = &entity.shell {
+        format!(
+            "section {} · material {} · t {} (not drawn) · insertion {} · opening {}",
+            shell.section.as_deref().unwrap_or("unassigned"),
+            shell.material.as_deref().unwrap_or("—"),
+            metres(shell.thickness_m),
+            shell.insertion_point.as_deref().unwrap_or("undeclared"),
+            match shell.opening {
+                Some(true) => "declared void",
+                Some(false) => "declared no",
+                None => "not declared by source",
+            },
+        )
+    } else {
+        String::new()
+    };
+    format!(
+        "{} {:?} · {:?} · {detail}",
+        entity.key.as_stable_str(),
+        entity.class,
+        entity.mode
+    )
 }
 
 fn add(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
@@ -1261,6 +1586,137 @@ mod tests {
         );
         assert_eq!(std::mem::size_of::<Vertex>(), 36);
         assert_triangle_winding_matches_normals(&mesh);
+    }
+
+    #[cfg(feature = "real-workbench")]
+    fn project(m: [[f32; 4]; 4], p: [f32; 3]) -> [f32; 3] {
+        let clip: [f32; 4] =
+            std::array::from_fn(|row| (0..3).map(|c| m[c][row] * p[c]).sum::<f32>() + m[3][row]);
+        [clip[0] / clip[3], clip[1] / clip[3], clip[2] / clip[3]]
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn pick_rays_pass_through_drawn_pixels_inside_the_drawn_depth_window() {
+        let mesh = synthetic_structure();
+        let mut checked = 0;
+        for (aspect, yaw, pitch, zoom) in [
+            (1.0, 0.0, 0.0, 0.0),
+            (1.8, 1.1, 0.7, 300.0),
+            (0.45, -2.4, -0.9, -500.0),
+        ] {
+            let mut camera = OrbitCamera::fit(mesh.bounds, aspect);
+            camera.orbit(egui::vec2(yaw / 0.008, pitch / 0.008));
+            camera.zoom(zoom);
+            let m = camera.view_projection(aspect);
+            for p in mesh.vertices.iter().step_by(5).map(|v| v.position) {
+                let ndc = project(m, p);
+                if ndc.iter().any(|v| v.abs() > 1.0) || ndc[2] < 0.0 {
+                    continue;
+                }
+                let ray = camera.ray(aspect, [ndc[0], ndc[1]]).expect("ray");
+                let to = std::array::from_fn::<f64, 3, _>(|i| f64::from(p[i]) - ray.origin[i]);
+                let t: f64 = (0..3).map(|i| to[i] * ray.direction[i]).sum();
+                let miss: f64 = (0..3)
+                    .map(|i| (to[i] - t * ray.direction[i]).powi(2))
+                    .sum::<f64>()
+                    .sqrt();
+                assert!(
+                    miss < 1.0e-3 * t.max(1.0),
+                    "ray misses drawn point by {miss}"
+                );
+                assert!(t >= ray.min_distance - 1e-3 && t <= ray.max_distance + 1e-3);
+                checked += 1;
+            }
+        }
+        assert!(checked > 30, "only {checked} drawn points were checked");
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn clicking_a_projected_source_surface_picks_that_entity_and_empty_space_picks_none() {
+        let source = lab_e2k_mesh::build(
+            lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+            Default::default(),
+        )
+        .expect("public source");
+        let mesh = source_mesh(source);
+        let aspect = 1.5;
+        let camera = OrbitCamera::fit(mesh.bounds, aspect);
+        let floor = mesh
+            .source_entities
+            .iter()
+            .position(|e| e.class == lab_e2k_mesh::SourceClass::FloorShell)
+            .expect("floor");
+        let range = &mesh.indices[mesh.source_entities[floor].indices.start as usize
+            ..mesh.source_entities[floor].indices.end as usize];
+        // Centroid of the floor's first triangle, which no frame covers from this view.
+        let p: [f32; 3] = std::array::from_fn(|axis| {
+            range[..3]
+                .iter()
+                .map(|&i| mesh.vertices[i as usize].position[axis])
+                .sum::<f32>()
+                / 3.0
+        });
+        let ndc = project(camera.view_projection(aspect), p);
+        let hit = pick_at(&mesh, camera, aspect, [ndc[0], ndc[1]]).expect("floor hit");
+        assert_eq!(hit.entity, floor);
+        assert_eq!(
+            pick_at(&mesh, camera, aspect, [0.99, 0.99]),
+            None,
+            "empty corner"
+        );
+        let described = describe(&mesh.source_entities[floor]);
+        assert!(described.contains("FloorShell") && described.contains("not drawn"));
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn unlinked_provenance_clears_and_refuses_element_picking_until_reopen() {
+        let mesh = source_mesh(
+            lab_e2k_mesh::build(
+                lab_e2k_mesh::public_fixture::E2K.as_bytes(),
+                Default::default(),
+            )
+            .expect("public source"),
+        );
+        let revision = mesh.revision.expect("source revision");
+        let hit = |entity| {
+            Some(lab_e2k_mesh::pick::Hit {
+                entity,
+                distance: 1.0,
+                coincident: 0,
+            })
+        };
+        let mut picking = Picking::default();
+        // Linked: a pick and a hover are accepted.
+        assert!(!picking.set_blocked(false));
+        assert!(picking.click((revision, 1), hit(2), false));
+        picking.hover(hit(0));
+        assert_eq!(picking.selection.entities((revision, 1)), [2]);
+        // Invalidate (host reports UNLINKED): state is cleared at once.
+        assert!(picking.set_blocked(true), "unlink must clear element state");
+        assert!(picking.selection.entities((revision, 1)).is_empty());
+        assert!(picking.hovered.is_none() && picking.clicked.is_none());
+        // Refused while unlinked, including after the same bytes are restored
+        // on disk: the host keeps `linked = false` until an explicit reopen.
+        for generation in [2, 2, 3] {
+            assert!(!picking.set_blocked(true), "already blocked");
+            assert!(!picking.click((revision, generation), hit(2), false));
+            picking.hover(hit(2));
+            assert!(picking.hovered.is_none());
+            assert!(
+                picking
+                    .selection
+                    .entities((revision, generation))
+                    .is_empty()
+            );
+        }
+        // Explicit reopen: picking resumes, starting from an empty selection.
+        assert!(!picking.set_blocked(false));
+        assert!(picking.selection.entities((revision, 4)).is_empty());
+        assert!(picking.click((revision, 4), hit(0), false));
+        assert_eq!(picking.selection.entities((revision, 4)), [0]);
     }
 
     #[cfg(feature = "real-workbench")]

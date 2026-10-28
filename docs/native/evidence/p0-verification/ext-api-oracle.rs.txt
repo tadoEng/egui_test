@@ -1,0 +1,26 @@
+//! LOCAL-ONLY authoritative oracle: runs the pinned ext-api scene packet path
+//! (init → commit no_e2k → snapshot → model_scene_packet) on one E2K file and
+//! prints the per-entity fidelity entries as JSON. Never launches ETABS.
+use ext_api::{AppContext, SceneLoadGuard};
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    let e2k = std::fs::read_to_string(std::env::args().nth(1).expect("e2k path")).expect("read");
+    let temp = tempfile::tempdir().expect("temp");
+    let root = temp.path().join("project");
+    let edb = temp.path().join("source").join("model.edb");
+    std::fs::create_dir_all(edb.parent().unwrap()).unwrap();
+    std::fs::write(&edb, b"dummy-edb-content").unwrap();
+    ext_api::init::init_project(ext_api::init::InitRequest {
+        name: "Oracle".into(), edb_path: edb, project_path: root.clone(),
+        author: Some("oracle".into()), email: Some("oracle@example.invalid".into()),
+        one_drive_dir: None, reports_dir: None, allow_onedrive: true,
+    }).await.expect("init");
+    let ctx = AppContext::new(&root).expect("ctx");
+    ext_api::commit::commit_version(&ctx, "oracle", ext_api::commit::CommitOptions { no_e2k: true, analyze: false })
+        .await.expect("commit");
+    std::fs::write(root.join(".etabs-ext").join("main").join("v1").join("model.e2k"), e2k).unwrap();
+    let mut guard = SceneLoadGuard::default();
+    let ticket = guard.begin("v1");
+    let packet = ext_api::model_scene_packet(&ctx, "v1", ticket).expect("packet");
+    println!("{}", serde_json::to_string(&packet.fidelity).expect("json"));
+}
