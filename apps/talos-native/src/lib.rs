@@ -8,6 +8,7 @@
 //! A desktop application: on wasm32 the library is empty.
 #![cfg(not(target_arch = "wasm32"))]
 pub mod app;
+pub mod charts;
 pub mod document;
 pub mod icons;
 pub mod loader;

@@ -14,18 +14,21 @@ pub struct App {
     view: Box<dyn ModelView>,
     loader: Loader,
     last_refusal: Option<Refusal>,
+    charts: crate::charts::Charts,
 }
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, mode: LoadMode, project: Project) -> Self {
         crate::theme::install(&cc.egui_ctx);
-        Self::with_parts(
+        let mut app = Self::with_parts(
             project,
             Box::new(crate::native_view::NativeModelView::new(
                 cc.wgpu_render_state.as_ref(),
             )),
             Loader::new(mode, Some(cc.egui_ctx.clone())),
-        )
+        );
+        app.charts = crate::charts::Charts::new(cc);
+        app
     }
     pub fn with_parts(project: Project, view: Box<dyn ModelView>, loader: Loader) -> Self {
         let (state, effects) = State::new(project);
@@ -34,11 +37,23 @@ impl App {
             view,
             loader,
             last_refusal: None,
+            charts: crate::charts::Charts::headless(),
         };
         for effect in effects {
             app.loader.run(effect);
         }
         app
+    }
+    #[cfg(test)]
+    pub(crate) fn refuse_chart_for_test(&mut self) {
+        self.charts.refuse_for_test();
+    }
+    pub fn chart_error(&self) -> Option<&str> {
+        self.charts.error()
+    }
+    #[cfg(target_os = "windows")]
+    pub fn attach_public_smoke(&mut self, smoke: crate::charts::PublicSmoke) {
+        self.charts.attach_smoke(smoke);
     }
     pub fn state(&self) -> &State {
         &self.state
@@ -273,6 +288,9 @@ impl eframe::App for App {
             self.dispatch(Action::Loaded { ticket, result });
         }
         let ctx = ui.ctx().clone();
+        for action in self.charts.actions(&self.state) {
+            self.dispatch(action);
+        }
         let mut actions = self.shortcuts(&ctx);
         let tokens = crate::theme::Tokens::of(ui);
         egui::Panel::top("talos-header")
@@ -284,12 +302,27 @@ impl eframe::App for App {
             )
             .show(ui, |ui| actions.extend(self.header(ui)));
         // Only drawn when something is wrong; an empty panel would still take space.
-        if matches!(self.state.session.document, DocumentState::Failed { .. }) {
+        if matches!(self.state.session.document, DocumentState::Failed { .. })
+            || self.charts.error().is_some()
+        {
             egui::Panel::top("talos-warning")
                 .frame(egui::Frame::NONE)
-                .show(ui, |ui| self.warning(ui));
+                .show(ui, |ui| {
+                    self.warning(ui);
+                    if let Some(error) = self.charts.error() {
+                        ui.colored_label(
+                            tokens.warning_text,
+                            format!("ECharts / WebView2 unavailable: {error}"),
+                        );
+                    }
+                });
         }
         let workspace = self.state.workspace;
+        if workspace != Workspace::Results {
+            self.charts.update(&self.state, None, &ctx);
+        }
+        let mut chart_rect = None;
+        let chart_status = self.charts.status().to_owned();
         egui::CentralPanel::no_frame().show(ui, |ui| match workspace {
             Workspace::Model => {
                 actions.extend(crate::pages::model::show(
@@ -298,11 +331,24 @@ impl eframe::App for App {
                     self.view.as_mut(),
                 ));
             }
-            Workspace::Results => actions.extend(crate::pages::results::show(ui, &self.state)),
+            Workspace::Results => actions.extend(crate::pages::results::show(
+                ui,
+                &self.state,
+                &chart_status,
+                &mut chart_rect,
+            )),
             other => crate::pages::placeholder::show(ui, other),
         });
         for action in actions {
             self.dispatch(action);
+        }
+        self.charts.update(&self.state, chart_rect, &ctx);
+        #[cfg(target_os = "windows")]
+        {
+            for action in self.charts.smoke_step(&self.state, &ctx) {
+                self.dispatch(action);
+            }
+            self.charts.update(&self.state, chart_rect, &ctx);
         }
     }
 }

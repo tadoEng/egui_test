@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src data:; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<style>html,body,#chart{width:100%;height:100%;margin:0;overflow:hidden;background:transparent;font:13px system-ui,sans-serif}#chart:focus{outline:1px solid #0d9488;outline-offset:-1px}</style></head>
+<body><div id="chart" tabindex="0" aria-label="Stored response ECharts"></div>
+<script>/*__ECHARTS_RUNTIME__*/</script><script>
+"use strict";
+const palette=['#1f77b4','#ff7f0e','#2ca02c','#d62728','#8c564b','#17becf'];
+let chart=null,active=null;
+function post(value){window.chrome.webview.postMessage(JSON.stringify(value));}
+function markers(packet){return packet.selected===null?[]:[{yAxis:packet.selected,lineStyle:{color:'#0d9488',width:2}}];}
+function option(packet){const p=packet.plot;
+ const series=p.series.map((s,i)=>({id:'stored-'+i,name:s.name,type:'line',smooth:false,showSymbol:true,symbolSize:6,connectNulls:false,itemStyle:{color:palette[i%palette.length]},lineStyle:{width:2},data:p.stories.map((story,j)=>[s.values[j],story]),...(i===0?{markLine:{silent:true,symbol:'none',data:markers(packet)}}:{})}));
+ if(p.reference!==null)series.push({id:'stored-reference',name:'Stored allowable',type:'line',silent:true,showSymbol:false,lineStyle:{color:'#cc0000',type:'dashed'},data:p.stories.map(s=>[p.reference,s])});
+ return {animation:false,backgroundColor:'transparent',color:palette,textStyle:{fontFamily:'system-ui,sans-serif'},tooltip:{trigger:'axis',confine:true,renderMode:'richText'},legend:{type:'scroll',top:0,textStyle:{color:'#a1a1aa'}},grid:{left:76,right:30,top:42,bottom:46},xAxis:{type:'value',name:p.unit,nameLocation:'middle',nameGap:25,axisLabel:{color:'#a1a1aa'},splitLine:{lineStyle:{color:'#3f3f46'}}},yAxis:{type:'category',inverse:true,data:p.stories,axisLabel:{color:'#a1a1aa'},axisTick:{show:false}},dataZoom:[{type:'inside',yAxisIndex:0,filterMode:'none'},{type:'slider',yAxisIndex:0,right:0,width:9,filterMode:'none',showDetail:false}],series};
+}
+window.talos={receive(packet){
+ if(packet.protocol!==1)throw Error('Unsupported chart protocol');
+ const same=active!==null&&JSON.stringify(packet.scope)===JSON.stringify(active.scope);
+ active=packet;
+ if(same)chart.setOption({series:[{id:'stored-0',markLine:{silent:true,symbol:'none',data:markers(packet)}}]});
+ else chart.setOption(option(packet),{notMerge:true});
+},probe(label){const option=chart.getOption();const stored=(option.series??[]).filter(s=>s.id.startsWith('stored-'));post({type:'probe',label,scope:active?.scope??null,selected:stored[0]?.markLine?.data?.[0]?.yAxis??null,stories:option.yAxis?.[0]?.data??[],values:stored.map(s=>s.data.map(p=>p[0])),width:chart.getWidth(),height:chart.getHeight()});},click(story){
+ const p=active.plot; const at=p.stories.indexOf(story); const value=p.series[0].values[at];
+ if(at<0||value===null)throw Error('Public click fixture missing');
+ const pixel=chart.convertToPixel({xAxisIndex:0,yAxisIndex:0},[value,story]);
+ const root=chart.getZr().dom;const canvas=root.querySelector('canvas');const box=root.getBoundingClientRect();
+ for(const type of ['mousemove','mousedown','mouseup','click'])canvas.dispatchEvent(new MouseEvent(type,{bubbles:true,clientX:box.left+pixel[0],clientY:box.top+pixel[1],button:0}));
+},stale(){const scope=JSON.parse(JSON.stringify(active.scope));scope.generation=0;post({protocol:1,type:'select',scope,story:active.plot.stories[0]});}};
+try{
+ chart=echarts.init(document.getElementById('chart'));
+ chart.on('click',e=>{if(active&&e.componentType==='series'&&e.seriesId!=='stored-reference'){const story=active.plot.stories[e.dataIndex];post({protocol:1,type:'select',scope:active.scope,story:active.selected===story?null:story});}});
+ new ResizeObserver(()=>chart.resize()).observe(document.getElementById('chart'));
+ post({protocol:1,type:'chart_ready'});
+}catch(error){post({type:'chart_error',message:String(error).slice(0,256)});}
+window.addEventListener('error',e=>post({type:'chart_error',message:String(e.message).slice(0,256)}));
+document.addEventListener('keydown',e=>{if(active&&(e.ctrlKey||e.metaKey)&&/^[1-5]$/.test(e.key)){e.preventDefault();post({protocol:1,type:'workspace',scope:active.scope,workspace:['Model','Results','Compare','History','Reports'][Number(e.key)-1]});}});
+</script></body></html>

@@ -1115,7 +1115,7 @@ fn results_demo() -> Harness<'static, App> {
 }
 
 #[test]
-fn results_chart_and_story_table_show_stored_values_and_link_selection() {
+fn results_echarts_slot_and_story_table_keep_stored_values_and_selection() {
     let mut harness = results_demo();
     assert!(
         present(&harness, "Story drift · wind X · G · W"),
@@ -1123,6 +1123,10 @@ fn results_chart_and_story_table_show_stored_values_and_link_selection() {
     );
     assert!(present(&harness, "Cached · freshness not verified"));
     assert!(present(&harness, "Authored fixture"));
+    assert!(present(
+        &harness,
+        "ECharts host not attached (headless harness)"
+    ));
     // Table rows carry the stored values, signs kept, in stored order.
     let roof = "Roof  ·  0.00200  ·  -0.00250";
     assert!(present(&harness, roof), "Roof row");
@@ -1216,4 +1220,18 @@ fn results_fit_a_900_point_window() {
             node.accesskit_node().role()
         );
     }
+}
+
+#[test]
+fn webview_failure_is_explicit_and_keeps_the_stored_table_available() {
+    let mut harness = results_demo();
+    harness.state_mut().refuse_chart_for_test();
+    settle(&mut harness);
+    assert!(present(&harness, "ECharts / WebView2 unavailable"));
+    assert!(present(
+        &harness,
+        "WebView2 creation refused (test control)"
+    ));
+    assert!(present(&harness, "Roof  ·  0.00200  ·  -0.00250"));
+    assert!(harness.state().chart_error().is_some());
 }
