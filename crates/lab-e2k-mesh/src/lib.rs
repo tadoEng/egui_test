@@ -3,9 +3,9 @@
 //! frame sections use source dimensions; every other frame body is a labelled
 //! approximation. Shell surfaces are zero thickness. No engineering
 //! calculations or result joins.
+pub use ext_e2k::{EntityKey, ForceUnit, LengthUnit, TempUnit};
 use ext_e2k::{
-    EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellInsertionPoint, ShellKind,
-    ShellThickness, SkipReason, SourceMap, TempUnit,
+    FrameKind, ScenePoint, ShellInsertionPoint, ShellKind, ShellThickness, SkipReason, SourceMap,
 };
 use lab_fixture::{Bounds, Geometry, PRISM_FACE_RINGS, Point};
 use sha2::{Digest as _, Sha256};
@@ -40,6 +40,25 @@ impl Default for Config {
             proxy_half_extents_m: [0.05; 2],
             max_entities: 100_000,
             max_buffer_bytes: 256 * 1024 * 1024,
+        }
+    }
+}
+/// The source `$ CONTROLS` units. Every `_m` field is a source length
+/// multiplied by [`Self::metres_per_length_unit`]; no other unit is converted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SourceUnits {
+    pub force: ForceUnit,
+    pub length: LengthUnit,
+    pub temperature: TempUnit,
+}
+impl SourceUnits {
+    pub fn metres_per_length_unit(self) -> f64 {
+        match self.length {
+            LengthUnit::Ft => 0.3048,
+            LengthUnit::In => 0.0254,
+            LengthUnit::M => 1.0,
+            LengthUnit::Cm => 0.01,
+            LengthUnit::Mm => 0.001,
         }
     }
 }
@@ -256,6 +275,7 @@ pub struct Story {
 }
 pub struct Mesh {
     revision: Revision,
+    source_units: SourceUnits,
     origin_m: Point,
     bounds: Bounds,
     vertices: Vec<Vertex>,
@@ -289,6 +309,9 @@ impl Mesh {
     }
     pub fn revision(&self) -> Revision {
         self.revision
+    }
+    pub fn source_units(&self) -> SourceUnits {
+        self.source_units
     }
     pub fn origin_m(&self) -> Point {
         self.origin_m
@@ -359,14 +382,8 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
         return Err(Error::Budget);
     }
     let text = std::str::from_utf8(source).map_err(|_private_error| Error::Parse)?;
-    let length = declared_length(text)?;
-    let factor = match length {
-        LengthUnit::Ft => 0.3048,
-        LengthUnit::In => 0.0254,
-        LengthUnit::M => 1.0,
-        LengthUnit::Cm => 0.01,
-        LengthUnit::Mm => 0.001,
-    };
+    let source_units = declared_units(text)?;
+    let factor = source_units.metres_per_length_unit();
     let (model, source_map) =
         ext_e2k::parse_str_with_sources(text).map_err(|_private_error| Error::Parse)?;
     let major = model
@@ -433,6 +450,7 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
             contract_version: CONTRACT_VERSION,
             proxy_bits: config.proxy_half_extents_m.map(f64::to_bits),
         },
+        source_units,
         origin_m,
         bounds: point_bounds(&local_points).ok_or(Error::NoGeometry)?,
         vertices: builder.vertices,
@@ -1097,7 +1115,7 @@ fn color(kind: SourceClass) -> [f32; 3] {
         _ => [0.6; 3],
     }
 }
-fn declared_length(text: &str) -> Result<LengthUnit, Error> {
+fn declared_units(text: &str) -> Result<SourceUnits, Error> {
     // Reject only: upstream sections.rs retains defaults for unknown unit tokens.
     // Geometry/sections/connectivity parsing remains solely in ext-e2k.
     let mut controls = false;
@@ -1113,29 +1131,27 @@ fn declared_length(text: &str) -> Result<LengthUnit, Error> {
                 .is_some_and(|s| s.eq_ignore_ascii_case("UNITS"))
         {
             let parts: Vec<_> = line.split('"').skip(1).step_by(2).collect();
-            let units = (
-                parts
+            let units = SourceUnits {
+                force: parts
                     .first()
                     .and_then(|s| ForceUnit::from_e2k(s))
                     .ok_or(Error::InvalidUnits)?,
-                parts
+                length: parts
                     .get(1)
                     .and_then(|s| LengthUnit::from_e2k(s))
                     .ok_or(Error::InvalidUnits)?,
-                parts
+                temperature: parts
                     .get(2)
                     .and_then(|s| TempUnit::from_e2k(s))
                     .ok_or(Error::InvalidUnits)?,
-            );
+            };
             if prior.is_some_and(|v| v != units) {
                 return Err(Error::InvalidUnits);
             }
             prior = Some(units);
         }
     }
-    prior
-        .map(|(_, length, _)| length)
-        .ok_or(Error::InvalidUnits)
+    prior.ok_or(Error::InvalidUnits)
 }
 #[cfg(test)]
 mod tests;

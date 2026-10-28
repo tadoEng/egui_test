@@ -7080,6 +7080,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "talos-native"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "egui_kittest",
+ "env_logger",
+ "lab-e2k-mesh",
+ "log",
+]
+
+[[package]]
 name = "tao-macros"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
