@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TALOS design target</title>
+<!--
+  APP-01 visual design target (static mock, not the application).
+  The 3D image is an unmodified crop of the real native wgpu viewport rendering
+  the public synthetic tower fixture (docs/native/fixtures/tower). Everything
+  around it is a proposal. Values in the Explorer and Inspector are the real
+  lab-e2k-mesh output for that fixture. Icons: Lucide (ISC). Font: Inter (OFL).
+  Built by build.py from this template; rendered by capture.mjs.
+-->
+<style>
+@font-face {
+  font-family: "Inter";
+  src: url("assets/fonts/Inter-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+}
+:root {
+  --font: "Inter", system-ui, sans-serif;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 18px;
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px;
+  --canvas: rgb(18, 25, 35); /* the real viewport background */
+}
+.dark {
+  --chrome: #12161c; --chrome-line: rgba(255,255,255,0.06);
+  --surface: rgba(22, 27, 35, 0.94); --surface-2: rgba(255,255,255,0.04);
+  --border: rgba(255,255,255,0.08); --shadow: 0 8px 28px rgba(0,0,0,0.45);
+  --text: #e8ebef; --muted: #8d96a5; --faint: #5f6876;
+  --accent: #6aa5ff; --accent-weak: rgba(106,165,255,0.14);
+  --synthetic: #c3b1ff; --synthetic-weak: rgba(160,130,255,0.14);
+  --exact: #4fc58f; --resolved: #6aa5ff; --approx: #f0b257;
+  --page: #0f1318; --card: #161b22;
+}
+.light {
+  --chrome: #f7f8fa; --chrome-line: #e4e7ec;
+  --surface: rgba(255,255,255,0.96); --surface-2: #f3f5f8;
+  --border: #e1e5eb; --shadow: 0 8px 28px rgba(15,23,42,0.18);
+  --text: #171b21; --muted: #5d6675; --faint: #8b93a1;
+  --accent: #2d6fe0; --accent-weak: rgba(45,111,224,0.10);
+  --synthetic: #6b45c8; --synthetic-weak: rgba(107,69,200,0.09);
+  --exact: #1f8f5c; --resolved: #2d6fe0; --approx: #b26a00;
+  --page: #eef1f5; --card: #ffffff;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: var(--font); font-size: var(--fs-md); color: var(--text);
+  background: var(--chrome); font-feature-settings: "tnum" 1, "cv11" 1;
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+.app { display: flex; flex-direction: column; height: 100vh; }
+svg.i { width: 16px; height: 16px; flex: none; stroke-width: 1.75; }
+svg.i.sm { width: 14px; height: 14px; }
+
+/* ---- Top bar: identity + workspaces in one row, overflow when narrow ---- */
+.topbar {
+  height: 48px; flex: none; display: flex; align-items: center; gap: 16px;
+  padding: 0 14px; background: var(--chrome); border-bottom: 1px solid var(--chrome-line);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: 0.08em; font-size: var(--fs-md); }
+.mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(140deg, var(--accent), #7b61ff); position: relative; }
+.mark::after { content: ""; position: absolute; inset: 5px 8px 4px 8px; background: var(--chrome); border-radius: 1px; }
+.crumbs { display: flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.crumbs .sep { color: var(--faint); }
+.crumbs .project { color: var(--text); font-weight: 500; }
+.version {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 9px; border-radius: var(--r-sm);
+  color: var(--text); font-weight: 600; background: var(--surface-2); border: 1px solid var(--border);
+}
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 500; }
+.pill.synthetic { color: var(--synthetic); background: var(--synthetic-weak); }
+.tabs { display: flex; align-items: stretch; height: 48px; margin-left: 8px; }
+.tab {
+  display: flex; align-items: center; gap: 7px; padding: 0 12px; color: var(--muted); font-weight: 500;
+  position: relative; white-space: nowrap;
+}
+.tab.active { color: var(--text); }
+.tab.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--accent); }
+.tab.unavailable { color: var(--faint); }
+.spacer { flex: 1; }
+.status { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+.status span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---- Model: full-bleed real viewport with anchored overlays ---- */
+.canvas { position: relative; flex: 1; background: var(--canvas); overflow: hidden; }
+/* The camera fits the unobstructed area above the view tools and version strip. */
+.canvas > img.viewport { position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 150px); object-fit: contain; object-position: 50% 50%; }
+.card {
+  position: absolute; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); backdrop-filter: blur(10px);
+}
+.card-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 8px; }
+.card-head h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.card-head .count { color: var(--muted); font-size: var(--fs-sm); }
+.card-head .end { margin-left: auto; color: var(--muted); display: flex; gap: 8px; }
+.explorer { top: 14px; left: 14px; width: 268px; bottom: 98px; display: flex; flex-direction: column; }
+.field {
+  margin: 2px 12px 8px; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-sm);
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--faint);
+}
+.group { padding: 6px 8px 4px; }
+.group-title { padding: 4px 8px; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--r-sm); color: var(--text); }
+.row .n { margin-left: auto; color: var(--faint); font-size: var(--fs-sm); }
+.row .chev { color: var(--faint); }
+.row.selected { background: var(--accent-weak); }
+.dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.card-foot { margin-top: auto; padding: 10px 14px 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--fs-sm); line-height: 1.45; }
+.inspector { top: 14px; right: 14px; width: 344px; max-height: calc(100% - 112px); overflow: hidden; }
+.ins-title { padding: 14px 16px 4px; display: flex; align-items: flex-start; gap: 10px; }
+.ins-title .name { font-size: var(--fs-xl); font-weight: 650; letter-spacing: -0.01em; }
+.ins-title .sub { color: var(--muted); margin-top: 2px; }
+.ins-title .end { margin-left: auto; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: var(--fs-sm); font-weight: 500; border: 1px solid var(--border); background: var(--surface-2); }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+.callout {
+  margin: 10px 16px 6px; padding: 10px 12px; border-radius: var(--r-md); font-size: var(--fs-sm); line-height: 1.45;
+  background: color-mix(in srgb, var(--approx) 12%, transparent); border: 1px solid color-mix(in srgb, var(--approx) 30%, transparent);
+}
+.callout b { color: var(--approx); font-weight: 600; }
+.props { padding: 6px 16px 14px; }
+.props h3 { margin: 12px 0 4px; font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.prop { display: grid; grid-template-columns: 112px 1fr; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border); line-height: 1.4; }
+.prop:last-child { border-bottom: 0; }
+.prop .k { color: var(--muted); }
+.prop .v { overflow-wrap: anywhere; }
+.prop .v .src { color: var(--faint); }
+.key { font-size: var(--fs-sm); color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.viewtools {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 96px; display: flex; gap: 2px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow);
+}
+.tool { width: 34px; height: 30px; display: grid; place-items: center; border-radius: var(--r-sm); color: var(--muted); }
+.tool.on { color: var(--text); background: var(--surface-2); }
+.vsep { width: 1px; margin: 5px 4px; background: var(--border); }
+.fidelity {
+  position: absolute; left: 296px; bottom: 98px; display: flex; gap: 12px; align-items: center; padding: 7px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 999px; font-size: var(--fs-sm); color: var(--muted);
+}
+.fidelity span { display: inline-flex; align-items: center; gap: 6px; }
+.gizmo { position: absolute; right: 374px; top: 18px; width: 64px; height: 64px; opacity: 0.9; }
+
+/* ---- Version timeline: the TALOS signature strip ---- */
+.timeline {
+  position: absolute; left: 14px; right: 14px; bottom: 14px; height: 70px; display: flex; align-items: center; gap: 18px;
+  padding: 0 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow);
+}
+.tl-label { display: flex; flex-direction: column; gap: 2px; min-width: 120px; }
+.tl-label .t { font-weight: 600; }
+.tl-label .s { color: var(--muted); font-size: var(--fs-sm); }
+.track { position: relative; flex: 1; height: 100%; display: flex; align-items: center; gap: 0; }
+.track::before { content: ""; position: absolute; left: 8px; right: 40%; top: 50%; height: 2px; background: var(--border); }
+.node { position: relative; display: flex; align-items: center; gap: 10px; margin-right: 140px; z-index: 1; }
+.node .pt { width: 14px; height: 14px; border-radius: 50%; background: var(--chrome); border: 2px solid var(--muted); }
+.node.current .pt { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 4px var(--accent-weak); }
+.node .lbl { display: flex; flex-direction: column; }
+.node .lbl .v { font-weight: 600; }
+.node .lbl .d { color: var(--muted); font-size: var(--fs-sm); }
+.tl-note { color: var(--faint); font-size: var(--fs-sm); max-width: 260px; text-align: right; line-height: 1.4; }
+
+/* ---- Results: chart-first ---- */
+.page { flex: 1; background: var(--page); padding: 18px 22px 22px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+.querybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sel {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-md);
+  background: var(--card); border: 1px solid var(--border); white-space: nowrap;
+}
+.sel .k { color: var(--muted); }
+.sel .v { font-weight: 600; }
+.sel.disabled { opacity: 0.55; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--r-md); background: var(--card); border: 1px solid var(--border); }
+.seg span { padding: 4px 12px; border-radius: 7px; color: var(--muted); font-weight: 500; }
+.seg span.on { background: var(--accent-weak); color: var(--text); }
+.for { margin-left: auto; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.chartcard { position: relative; flex: 1; background: var(--card); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 18px 22px; display: flex; flex-direction: column; }
+.chartcard h1 { margin: 0; font-size: var(--fs-lg); font-weight: 600; }
+.chartcard .sub { color: var(--muted); margin-top: 3px; }
+.plot { position: relative; flex: 1; margin-top: 12px; }
+.plot > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.empty {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); text-align: center; max-width: 520px;
+  padding: 22px 26px; border-radius: var(--r-lg); background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.empty .ic { width: 40px; height: 40px; margin: 0 auto 10px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-weak); color: var(--accent); }
+.empty h2 { margin: 0 0 6px; font-size: var(--fs-lg); font-weight: 600; }
+.empty p { margin: 0 0 10px; color: var(--muted); line-height: 1.5; }
+.empty code { font-family: var(--font); font-size: var(--fs-sm); color: var(--faint); }
+.watermark {
+  position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
+  font-size: 44px; font-weight: 800; letter-spacing: 0.08em; color: var(--approx); opacity: 0.16; transform: rotate(-14deg);
+}
+.banner { padding: 9px 12px; border-radius: var(--r-md); font-size: var(--fs-sm); background: color-mix(in srgb, var(--approx) 12%, transparent); border: 1px solid color-mix(in srgb, var(--approx) 35%, transparent); }
+.banner b { color: var(--approx); }
+
+/* ---- Narrow (900 px): overflow tabs, rail explorer, compact strip ---- */
+.narrow .crumbs .project, .narrow .crumbs .sep.first, .narrow .status .etabs-text { display: none; }
+.narrow .tab.overflowed { display: none; }
+.narrow .tab.more { display: flex; }
+.tab.more { display: none; }
+.narrow .explorer { display: none; }
+.rail { display: none; }
+.narrow .rail {
+  display: flex; flex-direction: column; gap: 4px; position: absolute; top: 14px; left: 14px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow);
+}
+.narrow .inspector { width: 300px; max-height: calc(100% - 100px); }
+.narrow .canvas > img.viewport { height: calc(100% - 130px); object-position: 30% 50%; }
+.narrow .fidelity, .narrow .gizmo { display: none; }
+.narrow .viewtools { bottom: 84px; }
+.narrow .timeline { height: 58px; }
+.narrow .tl-note, .narrow .node .lbl .d { display: none; }
+.narrow .node { margin-right: 60px; }
+.narrow .tl-label { min-width: 0; }
+.narrow .tl-label .s { display: none; }
+.narrow .querybar .for { display: none; }
+
+/* ---- Docked comparison: same content as edge-anchored panes ---- */
+.docked .explorer { top: 0; left: 0; bottom: 0; border-radius: 0; box-shadow: none; border-width: 0 1px 0 0; backdrop-filter: none; background: var(--chrome); }
+.docked .inspector { top: 0; right: 0; bottom: 0; max-height: none; border-radius: 0; box-shadow: none; border-width: 0 0 0 1px; backdrop-filter: none; background: var(--chrome); }
+.docked .canvas > img.viewport { left: 268px; width: calc(100% - 268px - 344px); }
+.docked .timeline { left: 282px; right: 358px; }
+.docked .fidelity { left: 282px; }
+.docked .viewtools { left: calc(268px + (100% - 268px - 344px) / 2); }
+.docked .gizmo { right: 358px; }
+.docked.narrow .canvas > img.viewport { left: 0; width: calc(100% - 300px); }
+.docked.narrow .timeline { left: 14px; right: 314px; }
+.docked.narrow .viewtools { left: calc((100% - 300px) / 2); }
+.docked.narrow .rail { top: 14px; }
+
+/* Found by the 150 % render: below 1500 px the fidelity chip met the view tools. */
+@media (max-width: 1500px) {
+  .fidelity { bottom: auto; top: 14px; left: 296px; }
+  .docked .fidelity { left: 282px; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand"><div class="mark"></div>TALOS</div>
+    <nav class="crumbs">
+      <span class="project">Public demo tower</span><span class="sep first">/</span>
+      <span>main</span><span class="sep">/</span>
+      <span class="version">v2 {{icon:chevron-down:sm}}</span>
+      <span class="pill synthetic">Synthetic</span>
+    </nav>
+    <nav class="tabs" role="tablist">
+      <span class="tab" data-ws="model">{{icon:box}}Model</span>
+      <span class="tab" data-ws="results">{{icon:chart-line}}Results</span>
+      <span class="tab unavailable overflowed">{{icon:git-compare}}Compare</span>
+      <span class="tab unavailable overflowed">{{icon:history}}History</span>
+      <span class="tab unavailable overflowed">{{icon:file-text}}Reports</span>
+      <span class="tab more">{{icon:ellipsis}}More</span>
+    </nav>
+    <div class="spacer"></div>
+    <div class="status">
+      <span>{{icon:lock:sm}}Read-only</span>
+      <span>{{icon:unplug:sm}}<span class="etabs-text">ETABS not connected</span></span>
+    </div>
+  </header>
+
+  <!-- MODEL -->
+  <main class="canvas" id="model">
+    <img class="viewport" src="assets/viewport-tower-v2.png" alt="Real native wgpu viewport: public synthetic tower, main/v2">
+    <svg class="gizmo" viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="30" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.10)"/>
+      <line x1="32" y1="36" x2="52" y2="44" stroke="#ef6461" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="32" y1="36" x2="14" y2="44" stroke="#4fc58f" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="32" y1="36" x2="32" y2="12" stroke="#6aa5ff" stroke-width="2.5" stroke-linecap="round"/>
+      <text x="55" y="50" fill="#ef6461" font-size="9" font-family="Inter" font-weight="700">X</text>
+      <text x="5" y="50" fill="#4fc58f" font-size="9" font-family="Inter" font-weight="700">Y</text>
+      <text x="35" y="12" fill="#6aa5ff" font-size="9" font-family="Inter" font-weight="700">Z</text>
+    </svg>
+
+    <div class="rail">
+      <span class="tool on">{{icon:panel-left}}</span>
+      <span class="tool">{{icon:layers}}</span>
+    </div>
+
+    <section class="card explorer" aria-label="Explorer">
+      <div class="card-head"><h2>Explorer</h2><span class="count">672</span><span class="end">{{icon:panel-left:sm}}</span></div>
+      <div class="field">{{icon:search:sm}}Filter by name or section</div>
+      <div class="group">
+        <div class="group-title">Stories</div>
+        <div class="row selected"><span class="chev">{{icon:chevron-down:sm}}</span>L12<span class="n">56</span></div>
+        <div class="row"><span class="chev">{{icon:chevron-right:sm}}</span>L11<span class="n">56</span></div>
+        <div class="row"><span class="chev">{{icon:chevron-right:sm}}</span>L10<span class="n">56</span></div>
+        <div class="row"><span class="chev">{{icon:chevron-right:sm}}</span>L9<span class="n">56</span></div>
+        <div class="row"><span class="chev">{{icon:chevron-right:sm}}</span>L8<span class="n">56</span></div>
+        <div class="row"><span class="chev">{{icon:chevron-right:sm}}</span>L7 … L1<span class="n">7 more</span></div>
+      </div>
+      <div class="group">
+        <div class="group-title">Types</div>
+        <div class="row"><span class="dot" style="background:#3a6ea5"></span>Columns<span class="n">240</span></div>
+        <div class="row"><span class="dot" style="background:#2a9d8f"></span>Beams<span class="n">372</span></div>
+        <div class="row"><span class="dot" style="background:#9a6a3e"></span>Floors<span class="n">12</span></div>
+        <div class="row"><span class="dot" style="background:#8ca0b8"></span>Walls<span class="n">48</span></div>
+      </div>
+      <div class="card-foot">Source units kip · ft · °F. Lengths shown in m, converted at 0.3048 m/ft.</div>
+    </section>
+
+    <section class="card inspector" aria-label="Inspector">
+      <div class="ins-title">
+        <div><div class="name">F</div><div class="sub">Floor shell · L12 · main/v2</div></div>
+        <span class="end">{{icon:x}}</span>
+      </div>
+      <div style="padding: 6px 16px 0; display:flex; gap:8px; flex-wrap:wrap">
+        <span class="chip"><span class="dot" style="background:var(--approx)"></span>Approximate</span>
+        <span class="chip">Flat ring · body not drawn</span>
+      </div>
+      <div class="callout"><b>Insertion point not represented.</b> The source declares TOP. Which side of the ring the body occupies is not certified, so TALOS draws the flat face only and the backend tier is Approximate.</div>
+      <div class="props">
+        <h3>Section</h3>
+        <div class="prop"><span class="k">Section</span><span class="v">S8 · Slab</span></div>
+        <div class="prop"><span class="k">Material</span><span class="v">C</span></div>
+        <div class="prop"><span class="k">Thickness</span><span class="v">0.2286 m <span class="src">(0.75 ft)</span></span></div>
+        <div class="prop"><span class="k">Insertion</span><span class="v">TOP</span></div>
+        <h3>Display</h3>
+        <div class="prop"><span class="k">Native display</span><span class="v">Flat ring only: a TOP/BOTTOM face; body thickness omitted (side unproven)</span></div>
+        <div class="prop"><span class="k">Backend fidelity</span><span class="v">Approximate [ShellInsertionPointIgnored]</span></div>
+        <h3>Source</h3>
+        <div class="prop"><span class="k">Source key</span><span class="v key">inst|sh|F|L12 {{icon:copy:sm}}</span></div>
+      </div>
+    </section>
+
+    <div class="fidelity">
+      <span><span class="dot" style="background:var(--exact);border-radius:50%"></span>59 exact</span>
+      <span><span class="dot" style="background:var(--resolved);border-radius:50%"></span>612 resolved</span>
+      <span><span class="dot" style="background:var(--approx);border-radius:50%"></span>1 approximate</span>
+      <span>0 withheld</span>
+    </div>
+
+    <div class="viewtools" role="toolbar">
+      <span class="tool on" title="Fit">{{icon:scan}}</span>
+      <span class="tool" title="Isometric">{{icon:box}}</span>
+      <span class="tool" title="Orbit">{{icon:rotate-3d}}</span>
+      <span class="tool" title="Pan">{{icon:move}}</span>
+      <span class="tool" title="Zoom">{{icon:zoom-in}}</span>
+      <span class="vsep"></span>
+      <span class="tool" title="Stories">{{icon:layers}}</span>
+      <span class="tool" title="Display">{{icon:eye}}</span>
+      <span class="tool" title="Section box">{{icon:square-dashed}}</span>
+    </div>
+
+    <div class="timeline" aria-label="Versions">
+      <div class="tl-label"><span class="t">{{icon:git-commit-horizontal:sm}} main</span><span class="s">2 synthetic snapshots</span></div>
+      <div class="track">
+        <div class="node"><span class="pt"></span><span class="lbl"><span class="v">v1</span><span class="d">Roof slab MIDDLE · podium beams 2.5 ft</span></span></div>
+        <div class="node current"><span class="pt"></span><span class="lbl"><span class="v">v2 · viewing</span><span class="d">Roof slab TOP · podium beams 3 ft</span></span></div>
+      </div>
+      <div class="tl-note">Synthetic snapshots: no commit history, dates or analysis runs.</div>
+    </div>
+  </main>
+
+  <!-- RESULTS -->
+  <main class="page" id="results">
+    <div class="querybar">
+      <span class="sel"><span class="k">Metric</span><span class="v">Story drift</span>{{icon:chevron-down:sm}}</span>
+      <span class="seg"><span class="on">X</span><span>Y</span></span>
+      <span class="sel disabled"><span class="k">Case</span><span class="v">No analyzed cases</span>{{icon:info:sm}}</span>
+      <span class="sel"><span class="k">Stories</span><span class="v">L12 → Base</span>{{icon:chevron-down:sm}}</span>
+      <span class="for">for <b style="color:var(--text)">main/v2</b><span class="pill synthetic">Synthetic</span></span>
+    </div>
+    <div class="banner" id="illustrative-banner"><b>Illustrative layout only.</b> The curve below uses invented values to show the chart-first layout. TALOS has no analyzed result for this version.</div>
+    <section class="chartcard">
+      <h1>Story drift · X</h1>
+      <div class="sub">main/v2 · 13 stories from the source · ratio, dimensionless</div>
+      <div class="plot">
+        <svg id="plotsvg"></svg>
+        <div class="empty" id="empty-state">
+          <div class="ic">{{icon:chart-line}}</div>
+          <h2>No analyzed results for main/v2</h2>
+          <p>This synthetic snapshot has not been analyzed, so there is nothing to plot. The chart appears here when an analyzed result set exists for exactly this version.</p>
+          <code>Story drift · X · no case · all stories · main/v2</code>
+        </div>
+        <div class="watermark" id="watermark">ILLUSTRATIVE · NOT ANALYSIS OUTPUT</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// #model|results , dark|light , wide|narrow , empty|illustrative
+const opts = new Set(location.hash.slice(1).split(","));
+const app = document.getElementById("app");
+document.body.classList.add(opts.has("light") ? "light" : "dark");
+if (opts.has("narrow")) document.body.classList.add("narrow");
+if (opts.has("docked")) document.body.classList.add("docked");
+const ws = opts.has("results") ? "results" : "model";
+document.getElementById(ws === "model" ? "results" : "model").remove();
+document.querySelector(`.tab[data-ws="${ws}"]`).classList.add("active");
+const illustrative = opts.has("illustrative");
+if (ws === "results") {
+  if (!illustrative) { document.getElementById("watermark").remove(); document.getElementById("illustrative-banner").remove(); }
+  else document.getElementById("empty-state").remove();
+  // Real story elevations (m) from the fixture; axes only unless illustrative.
+  const stories = [["L12",48.463],["L11",44.501],["L10",40.538],["L9",36.576],["L8",32.614],["L7",28.651],["L6",24.689],["L5",20.726],["L4",16.764],["L3",12.802],["L2",8.839],["L1",4.877],["Base",0]];
+  const svg = document.getElementById("plotsvg");
+  const css = getComputedStyle(document.body);
+  const line = css.getPropertyValue("--border"), muted = css.getPropertyValue("--muted"), accent = css.getPropertyValue("--accent");
+  const W = svg.clientWidth, H = svg.clientHeight;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const L = 70, R = W - 20, T = 10, B = H - 44, y = e => B - (e / 50) * (B - T);
+  let s = "";
+  for (const [n, e] of stories) {
+    s += `<line x1="${L}" x2="${R}" y1="${y(e)}" y2="${y(e)}" stroke="${line}"/>`;
+    s += `<text x="${L - 12}" y="${y(e) + 4}" text-anchor="end" fill="${muted}" font-size="12" font-family="Inter">${n}</text>`;
+  }
+  s += `<line x1="${L}" x2="${L}" y1="${T}" y2="${B}" stroke="${muted}"/>`;
+  s += `<text x="${(L + R) / 2}" y="${B + 32}" text-anchor="middle" fill="${muted}" font-size="12" font-family="Inter">Drift ratio</text>`;
+  if (illustrative) {
+    const fake = [0.0021,0.0024,0.0027,0.0029,0.0031,0.0032,0.0032,0.0031,0.0029,0.0026,0.0021,0.0012,0];
+    const x = v => L + (v / 0.004) * (R - L);
+    s += `<polyline fill="none" stroke="${accent}" stroke-width="2.5" points="${stories.map(([, e], i) => `${x(fake[i])},${y(e)}`).join(" ")}"/>`;
+    stories.forEach(([, e], i) => { s += `<circle cx="${x(fake[i])}" cy="${y(e)}" r="3.5" fill="${accent}"/>`; });
+  }
+  svg.innerHTML = s;
+}
+</script>
+</body>
+</html>
