@@ -16,8 +16,9 @@ const EPS: f64 = 1.0e-7;
 mod openings;
 pub mod public_fixture;
 /// Fixed limitations, never inferred model-specific engineering status.
-pub const FIDELITY_LIMITATIONS: [&str; 6] = [
+pub const FIDELITY_LIMITATIONS: [&str; 7] = [
     "project_scene_geometry_assumptions_not_certified",
+    "frame_fidelity_is_a_native_mirror_of_ext_api_not_the_authority",
     "frame_local_axis_rotation_unparsed_default_csi_axes_assumed",
     "frame_cardinal_insertion_and_end_offsets_not_applied",
     "shell_thickness_and_insertion_not_drawn",
@@ -78,18 +79,43 @@ pub enum Limitation {
     DegenerateFrame,
     OpeningVoid,
     UnknownOpeningState,
+    /// The pinned `ext-api` host rule: a declared opening lies within this
+    /// coplanar same-story shell, and the projection does not subtract it.
     HostOpeningSubtractionUnavailable,
+    /// Not a host by the `ext-api` rule, but coplanar with and sharing area with
+    /// a declared opening (or touching one that has no plane). Withheld by this
+    /// viewer rather than painted over the void; the backend draws it.
+    OverlapsUnsubtractedOpening,
     InvalidOrConcaveShell,
 }
-/// How a frame body relates to its source section. Never certifies design.
+/// The `ext-api` `SceneGeometryFidelity` tiers a frame can take.
+///
+/// Mirrors `model_inspect/fidelity.rs::classify_frame` at 9eb1c879. The backend
+/// classification is the authority; this mirror exists only until the native
+/// host can consume it (#18 holds `ext-api`), and must never be more optimistic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum GeometryFidelity {
+    Resolved,
+    Approximate,
+    Symbolic,
+}
+/// `ext-api` `SceneFidelityReason` names for frames, plus one native-only
+/// reason. Declaration order matches the backend's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SectionFidelity {
-    /// Inline `Concrete Rectangular` D×B: depth along local 2, width along local 3.
-    SourceRectangle,
-    /// `Concrete Circle` drawn as its D×D bounding square.
-    CircleBoundingSquare,
-    /// Catalog, other-shape, unassigned or dimensionless section: fixed proxy.
-    UnsupportedProxy,
+pub enum FrameReason {
+    SectionNotAssigned,
+    SectionDefinitionMissing,
+    SectionDimensionsMissing,
+    SectionDimensionsInLibrary,
+    RectangularProfileEnvelope,
+    ProfileShapeUnknown,
+    LocalAxisRotationUnavailable,
+    CardinalPointOffsetIgnored,
+    FrameJointOffsetsIgnored,
+    SectionMirrorIgnored,
+    /// Native only: where the backend's viewer draws a bare centreline, this
+    /// one draws the configured fixed proxy so the member stays pickable.
+    FixedDisplayProxy,
 }
 /// Source frame attributes for an inspector, in metres where dimensional.
 #[derive(Clone, Debug, PartialEq)]
@@ -100,10 +126,14 @@ pub struct FrameSource {
     pub depth_m: Option<f64>,
     pub width_m: Option<f64>,
     pub cardinal_point: Option<i32>,
-    pub fidelity: SectionFidelity,
-    /// False when a declared off-centroid cardinal point or joint offset is not
-    /// drawn: the body is centred on the joint centreline instead.
-    pub placement_applied: bool,
+    pub fidelity: GeometryFidelity,
+    pub reasons: Vec<FrameReason>,
+}
+impl FrameSource {
+    /// Whether the body is swept from the source depth × width.
+    pub fn swept(&self) -> bool {
+        self.fidelity != GeometryFidelity::Symbolic
+    }
 }
 /// Source shell attributes for an inspector, in metres where dimensional.
 #[derive(Clone, Debug, PartialEq)]
@@ -287,10 +317,10 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
         origin_m,
     };
     for frame in &scene.frames {
-        let section = match &frame.key {
-            EntityKey::Instance { id, .. } => model.frame_section_for(id, frame.story.as_str()),
-            _ => None,
-        };
+        let section = frame
+            .section
+            .as_ref()
+            .and_then(|section| model.find_frame_section(section.as_str()));
         builder.frame(frame, section, factor, config.proxy_half_extents_m)?;
     }
     builder.shells(&scene.shells, factor)?;
@@ -410,12 +440,10 @@ impl Builder {
             _ => SourceClass::OtherFrame,
         };
         let source = frame_source(frame, section, factor);
-        let half_extents = match source.fidelity {
-            SectionFidelity::SourceRectangle => {
-                [source.depth_m, source.width_m].map(|v| v.unwrap_or(0.0) / 2.0)
-            }
-            SectionFidelity::CircleBoundingSquare => [source.depth_m.unwrap_or(0.0) / 2.0; 2],
-            SectionFidelity::UnsupportedProxy => proxy_half_extents,
+        let half_extents = if source.swept() {
+            [source.depth_m, source.width_m].map(|v| v.unwrap_or(0.0) / 2.0)
+        } else {
+            proxy_half_extents
         };
         let first = self.index()?;
         let limitation = if let Some(axis) = unit(sub(end, start)) {
@@ -472,10 +500,18 @@ impl Builder {
             .filter(|(shell, _)| shell.opening == Some(true))
             .map(|(_, ring)| openings::Opening::new(ring))
             .collect();
-        for (shell, ring) in shells.iter().zip(&rings) {
-            let hosts_opening = shell.opening != Some(true)
-                && openings.iter().any(|opening| opening.withholds(ring));
-            self.shell(shell, ring, factor, hosts_opening)?;
+        let hosts = openings::authoritative_hosts(shells);
+        for (index, (shell, ring)) in shells.iter().zip(&rings).enumerate() {
+            let opening = if shell.opening == Some(true) {
+                None
+            } else if hosts.contains(&index) {
+                Some(Limitation::HostOpeningSubtractionUnavailable)
+            } else if openings.iter().any(|opening| opening.withholds(ring)) {
+                Some(Limitation::OverlapsUnsubtractedOpening)
+            } else {
+                None
+            };
+            self.shell(shell, ring, factor, opening)?;
         }
         Ok(())
     }
@@ -484,7 +520,7 @@ impl Builder {
         shell: &ext_e2k::ShellPolygon,
         points: &[Point],
         factor: f64,
-        hosts_opening: bool,
+        opening_limitation: Option<Limitation>,
     ) -> Result<(), Error> {
         if !self.seen.insert(shell.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -497,8 +533,8 @@ impl Builder {
         let first = self.index()?;
         let limitation = if shell.opening == Some(true) {
             Some(Limitation::OpeningVoid)
-        } else if hosts_opening {
-            Some(Limitation::HostOpeningSubtractionUnavailable)
+        } else if opening_limitation.is_some() {
+            opening_limitation
         } else if shell.opening.is_none() {
             Some(Limitation::UnknownOpeningState)
         } else if let Some(normal) = convex_normal(points) {
@@ -586,6 +622,10 @@ impl Builder {
 }
 /// Largest source section dimension accepted as drawable, in metres.
 const MAX_SECTION_M: f64 = 20.0;
+/// `ext-api` `RECTANGULAR_SHAPES` and `DOUBLY_SYMMETRIC_SHAPES` at 9eb1c879.
+const RECTANGULAR_SHAPES: [&str; 2] = ["concrete rectangular", "rectangular"];
+const DOUBLY_SYMMETRIC_SHAPES: [&str; 1] = ["concrete rectangular"];
+/// Mirrors `ext-api` `classify_frame`; see [`GeometryFidelity`].
 fn frame_source(
     frame: &ext_e2k::FrameSegment,
     section: Option<&ext_e2k::FrameSectionDef>,
@@ -599,34 +639,68 @@ fn frame_source(
     let shape = section
         .and_then(|s| s.shape.as_ref())
         .map(|s| s.as_str().trim());
-    // Only verified inline shape tokens; a library file means dimensions live elsewhere.
-    let inline = section.is_some_and(|s| s.section_file.is_none());
-    let fidelity = match shape.map(str::to_ascii_lowercase).as_deref() {
-        Some("concrete rectangular") if inline && depth_m.is_some() && width_m.is_some() => {
-            SectionFidelity::SourceRectangle
+    let normalized = shape.map(str::to_ascii_lowercase);
+    let symmetric = normalized
+        .as_deref()
+        .is_some_and(|s| DOUBLY_SYMMETRIC_SHAPES.contains(&s));
+    let mut reasons = Vec::new();
+    // A box is swept only when BOTH dimensions resolved, as in the backend; an
+    // out-of-range source value is treated as unresolved, never drawn.
+    let swept = depth_m.is_some() && width_m.is_some();
+    let mut fidelity = if swept {
+        reasons.push(FrameReason::LocalAxisRotationUnavailable);
+        match normalized.as_deref() {
+            Some(s) if RECTANGULAR_SHAPES.contains(&s) => GeometryFidelity::Resolved,
+            Some(_) => {
+                reasons.push(FrameReason::RectangularProfileEnvelope);
+                GeometryFidelity::Approximate
+            }
+            None => {
+                reasons.push(FrameReason::ProfileShapeUnknown);
+                GeometryFidelity::Approximate
+            }
         }
-        Some("concrete circle") if inline && depth_m.is_some() => {
-            SectionFidelity::CircleBoundingSquare
-        }
-        _ => SectionFidelity::UnsupportedProxy,
+    } else {
+        reasons.push(match (&frame.section, section) {
+            (None, _) => FrameReason::SectionNotAssigned,
+            (Some(_), None) => FrameReason::SectionDefinitionMissing,
+            (Some(_), Some(d)) if d.section_file.is_some() => {
+                FrameReason::SectionDimensionsInLibrary
+            }
+            (Some(_), Some(_)) => FrameReason::SectionDimensionsMissing,
+        });
+        reasons.push(FrameReason::FixedDisplayProxy);
+        GeometryFidelity::Symbolic
     };
-    // CSI cardinal points 5 and 10 are the centroid; 11 (shear centre) equals it
-    // only for the doubly symmetric shapes drawn here. Absent means default 10.
-    let centred = matches!(frame.cardinal_point, None | Some(5 | 10))
-        || (frame.cardinal_point == Some(11) && fidelity != SectionFidelity::UnsupportedProxy);
+    // CSI cardinal 10 (or the absent default) is the centroid; 5 and 11 are
+    // only where a proven doubly symmetric family makes them coincide.
+    let displaced = match frame.cardinal_point {
+        None | Some(10) => false,
+        Some(5 | 11) => !symmetric,
+        Some(_) => true,
+    };
+    let mut degrade = |reason| {
+        reasons.push(reason);
+        fidelity = fidelity.max(GeometryFidelity::Approximate);
+    };
+    if swept && displaced {
+        degrade(FrameReason::CardinalPointOffsetIgnored);
+    }
+    if frame.insertion.is_displaced() {
+        degrade(FrameReason::FrameJointOffsetsIgnored);
+    }
+    if swept && frame.insertion.is_mirrored() && !symmetric {
+        degrade(FrameReason::SectionMirrorIgnored);
+    }
     FrameSource {
         section: frame.section.as_ref().map(|s| s.as_str().into()),
         material: frame.material.as_ref().map(|m| m.as_str().into()),
         shape: shape.map(Into::into),
         depth_m,
-        width_m: if fidelity == SectionFidelity::CircleBoundingSquare {
-            None
-        } else {
-            width_m
-        },
+        width_m,
         cardinal_point: frame.cardinal_point,
         fidelity,
-        placement_applied: centred && !frame.insertion.is_displaced(),
+        reasons,
     }
 }
 /// CSI default frame local 2 axis for a unit local 1 axis: global +X for a

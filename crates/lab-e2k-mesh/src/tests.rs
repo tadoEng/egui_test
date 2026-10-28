@@ -349,16 +349,35 @@ fn an_opening_that_only_touches_a_neighbour_edge_does_not_hide_it() {
 }
 #[test]
 fn a_degenerate_opening_conservatively_withholds_hosts_by_bounds() {
-    // Collinear void ring: no plane, so overlap cannot be proven absent.
+    // Collinear void ring: no plane, so the backend names no host, but overlap
+    // cannot be proven absent either.
     let source = scoped_opening_source()
         .replace("POINT \"7\" 6 6", "POINT \"7\" 8 4")
         .replace("POINT \"8\" 4 6", "POINT \"8\" 5 4");
     let mesh = build(source.as_bytes(), Config::default()).expect("source");
     assert_eq!(
         entity(&mesh, "S").limitation,
-        Some(Limitation::HostOpeningSubtractionUnavailable)
+        Some(Limitation::OverlapsUnsubtractedOpening)
     );
     assert_eq!(entity(&mesh, "R").limitation, None);
+}
+#[test]
+fn a_partial_overlap_is_not_a_backend_host_but_is_never_painted_solid() {
+    // Void x 8..12 straddles S's x=10 edge: not contained, so not a host.
+    let source = scoped_opening_source()
+        .replace("POINT \"5\" 4 4", "POINT \"5\" 8 4")
+        .replace("POINT \"6\" 6 4", "POINT \"6\" 12 4")
+        .replace("POINT \"7\" 6 6", "POINT \"7\" 12 6")
+        .replace("POINT \"8\" 4 6", "POINT \"8\" 8 6");
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    let host = entity(&mesh, "S");
+    assert_eq!(
+        host.limitation,
+        Some(Limitation::OverlapsUnsubtractedOpening)
+    );
+    assert!(host.indices.is_empty());
+    assert_eq!(entity(&mesh, "R").limitation, None);
+    assert_eq!(entity(&mesh, "W").limitation, None);
 }
 #[test]
 fn a_perpendicular_wall_through_the_void_footprint_is_not_its_host() {
@@ -378,22 +397,25 @@ fn a_perpendicular_wall_through_the_void_footprint_is_not_its_host() {
         Some(Limitation::HostOpeningSubtractionUnavailable)
     );
 }
-/// Public fixture with one section per fidelity class. ft units: D 2 B 1 is
-/// 0.6096 m deep (local 2) by 0.3048 m wide (local 3).
+/// Public fixture with one section per backend fidelity arm. ft units: D 2 B 1
+/// is 0.6096 m deep (local 2) by 0.3048 m wide (local 3).
 fn sectioned_source() -> String {
     SOURCE
         .replace(
             "$ POINT COORDINATES",
-            "$ FRAME SECTIONS\n FRAMESECTION \"RECT\" MATERIAL \"C\" SHAPE \"Concrete Rectangular\" D 2 B 1\n FRAMESECTION \"ROUND\" MATERIAL \"C\" SHAPE \"Concrete Circle\" D 1.5\n FRAMESECTION \"W14\" MATERIAL \"S\" SHAPE \"W14X90\" FILE \"AISC16\"\n$ POINT COORDINATES",
+            "$ FRAME SECTIONS\n FRAMESECTION \"RECT\" MATERIAL \"C\" SHAPE \"Concrete Rectangular\" D 2 B 1\n FRAMESECTION \"TUBE\" MATERIAL \"S\" SHAPE \"Steel Tube\" D 1 B 1\n FRAMESECTION \"ROUND\" MATERIAL \"C\" SHAPE \"Concrete Circle\" D 1.5\n FRAMESECTION \"W14\" MATERIAL \"S\" SHAPE \"W14X90\" FILE \"AISC16\"\n$ POINT COORDINATES",
         )
         .replace(
             " LINE \"B\" BEAM \"1\" \"2\" 0\n",
-            " LINE \"B\" BEAM \"1\" \"2\" 0\n LINE \"G\" BEAM \"2\" \"3\" 0\n LINE \"K\" BEAM \"3\" \"4\" 0\n LINE \"X\" BRACE \"4\" \"2\" 0\n",
+            " LINE \"B\" BEAM \"1\" \"2\" 0\n LINE \"G\" BEAM \"2\" \"3\" 0\n LINE \"K\" BEAM \"3\" \"4\" 0\n LINE \"X\" BRACE \"4\" \"2\" 0\n LINE \"T\" BEAM \"4\" \"1\" 0\n LINE \"N\" BRACE \"1\" \"3\" 0\n",
         )
-        .replace(" LINEASSIGN \"C\" \"Roof\"\n", " LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"\n")
+        .replace(
+            " LINEASSIGN \"C\" \"Roof\"\n",
+            " LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"\n",
+        )
         .replace(
             " LINEASSIGN \"B\" \"Roof\"\n",
-            " LINEASSIGN \"B\" \"Roof\" SECTION \"RECT\" CARDINALPT 8\n LINEASSIGN \"G\" \"Roof\" SECTION \"ROUND\"\n LINEASSIGN \"K\" \"Roof\" SECTION \"W14\"\n LINEASSIGN \"X\" \"Roof\" SECTION \"RECT\"\n",
+            " LINEASSIGN \"B\" \"Roof\" SECTION \"RECT\" CARDINALPT 8\n LINEASSIGN \"G\" \"Roof\" SECTION \"ROUND\"\n LINEASSIGN \"K\" \"Roof\" SECTION \"W14\"\n LINEASSIGN \"X\" \"Roof\" SECTION \"RECT\" CARDINALPT 5\n LINEASSIGN \"T\" \"Roof\" SECTION \"TUBE\" CARDINALPT 5\n LINEASSIGN \"N\" \"Roof\" SECTION \"NOPE\"\n",
         )
 }
 fn extent(mesh: &Mesh, e: &EntityMesh) -> [f64; 3] {
@@ -409,39 +431,41 @@ fn extent(mesh: &Mesh, e: &EntityMesh) -> [f64; 3] {
     }
     std::array::from_fn(|axis| hi[axis] - lo[axis])
 }
+fn frame<'a>(mesh: &'a Mesh, id: &str) -> &'a FrameSource {
+    entity(mesh, id)
+        .frame
+        .as_ref()
+        .expect("frame source attributes")
+}
+use FrameReason as R;
 #[test]
 fn rectangular_source_sections_use_source_depth_and_width_in_default_local_axes() {
     let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
     let near = |a: f64, b: f64| (a - b).abs() < 1e-5;
-    // Beam along +X: local 2 is +Z (depth), local 3 is horizontal (width).
-    let beam = entity(&mesh, "B");
-    let source = beam.frame.as_ref().expect("frame source attributes");
-    assert_eq!(source.fidelity, SectionFidelity::SourceRectangle);
-    assert_eq!(source.section.as_deref(), Some("RECT"));
-    assert_eq!(source.material.as_deref(), Some("C"));
-    assert!(near(source.depth_m.expect("D"), 0.6096) && near(source.width_m.expect("B"), 0.3048));
-    let [x, y, z] = extent(&mesh, beam);
-    assert!(
-        near(x, 3.048) && near(y, 0.3048) && near(z, 0.6096),
-        "{x} {y} {z}"
-    );
+    let column = frame(&mesh, "C");
+    assert_eq!(column.fidelity, GeometryFidelity::Resolved);
+    assert_eq!(column.reasons, [R::LocalAxisRotationUnavailable]);
+    assert_eq!(column.section.as_deref(), Some("RECT"));
+    assert_eq!(column.material.as_deref(), Some("C"));
+    assert!(near(column.depth_m.expect("D"), 0.6096) && near(column.width_m.expect("B"), 0.3048));
     // Column: local 2 is global +X (depth), local 3 is +Y (width).
     let [x, y, z] = extent(&mesh, entity(&mesh, "C"));
     assert!(
         near(x, 0.6096) && near(y, 0.3048) && near(z, 3.048),
         "{x} {y} {z}"
     );
+    // Beam along +X: local 2 is +Z (depth), local 3 is horizontal (width).
+    let [x, y, z] = extent(&mesh, entity(&mesh, "B"));
+    assert!(
+        near(x, 3.048) && near(y, 0.3048) && near(z, 0.6096),
+        "{x} {y} {z}"
+    );
 }
 #[test]
 fn diagonal_and_inclined_members_use_the_csi_default_local_two_axis() {
     let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
-    let brace = entity(&mesh, "X");
-    assert_eq!(
-        brace.frame.as_ref().expect("frame").fidelity,
-        SectionFidelity::SourceRectangle
-    );
     // Plan diagonal at roof elevation: local 1 is horizontal, so depth is vertical.
-    let [_, _, z] = extent(&mesh, brace);
+    let [_, _, z] = extent(&mesh, entity(&mesh, "X"));
     assert!((z - 0.6096).abs() < 1e-5, "{z}");
     // Truly inclined local 1: local 2 is unit, perpendicular and upward in the
     // vertical plane through local 1; vertical members take global +X.
@@ -453,54 +477,80 @@ fn diagonal_and_inclined_members_use_the_csi_default_local_two_axis() {
     assert_eq!(default_local_two([1.0e-4, 0.0, 1.0]), [1.0, 0.0, 0.0]);
 }
 #[test]
-fn circular_catalog_and_unassigned_sections_are_never_presented_as_actual() {
+fn unproven_profiles_and_unresolved_sections_follow_the_backend_reasons() {
     let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
-    let round = entity(&mesh, "G").frame.as_ref().expect("frame");
-    assert_eq!(round.fidelity, SectionFidelity::CircleBoundingSquare);
-    assert_eq!(round.width_m, None, "a circle declares no width");
-    // Beam G runs along +Y, so local 3 is global X.
-    let [x, _, z] = extent(&mesh, entity(&mesh, "G"));
-    assert!(
-        (x - 0.4572).abs() < 1e-5 && (z - 0.4572).abs() < 1e-5,
-        "{x} {z}"
-    );
-    let catalog = entity(&mesh, "K").frame.as_ref().expect("frame");
-    assert_eq!(catalog.fidelity, SectionFidelity::UnsupportedProxy);
-    assert_eq!(catalog.section.as_deref(), Some("W14"));
-    let [_, y, z] = extent(&mesh, entity(&mesh, "K"));
-    assert!(
-        (y - 0.1).abs() < 1e-6 && (z - 0.1).abs() < 1e-6,
-        "fixed proxy"
+    // A non-rectangular family with both dimensions: the D x B envelope is
+    // swept, as the backend viewer does, but never Resolved.
+    let tube = frame(&mesh, "T");
+    assert_eq!(tube.fidelity, GeometryFidelity::Approximate);
+    assert!(tube.swept() && tube.reasons.contains(&R::RectangularProfileEnvelope));
+    // Unresolved dimensions: Symbolic, a typed missing-dimension reason, and
+    // the labelled fixed proxy in place of the backend's bare centreline.
+    for (id, reason) in [
+        ("G", R::SectionDimensionsMissing),
+        ("K", R::SectionDimensionsInLibrary),
+        ("N", R::SectionDefinitionMissing),
+    ] {
+        let source = frame(&mesh, id);
+        assert_eq!(source.fidelity, GeometryFidelity::Symbolic, "{id}");
+        assert_eq!(source.reasons, [reason, R::FixedDisplayProxy], "{id}");
+        let [_, _, z] = extent(&mesh, entity(&mesh, id));
+        assert!((z - 0.1).abs() < 1e-6, "{id} keeps the fixed proxy");
+    }
+    assert_eq!(
+        frame(&mesh, "G").width_m,
+        None,
+        "a circle declares no width"
     );
     let plain = build(SOURCE.as_bytes(), Config::default()).expect("source");
-    let unassigned = entity(&plain, "B").frame.as_ref().expect("frame");
-    assert_eq!(unassigned.fidelity, SectionFidelity::UnsupportedProxy);
+    let unassigned = frame(&plain, "B");
+    assert_eq!(
+        unassigned.reasons,
+        [R::SectionNotAssigned, R::FixedDisplayProxy]
+    );
     assert_eq!(unassigned.section, None);
 }
 #[test]
-fn declared_cardinal_points_and_offsets_are_reported_as_not_applied() {
+fn cardinal_points_joint_offsets_and_mirrors_degrade_like_the_backend() {
     let mesh = build(sectioned_source().as_bytes(), Config::default()).expect("source");
-    let beam = entity(&mesh, "B").frame.as_ref().expect("frame");
+    let beam = frame(&mesh, "B");
     assert_eq!(beam.cardinal_point, Some(8));
-    assert!(!beam.placement_applied, "top-centre insertion is not drawn");
-    let column = entity(&mesh, "C").frame.as_ref().expect("frame");
-    assert_eq!(column.cardinal_point, None);
+    assert_eq!(beam.fidelity, GeometryFidelity::Approximate);
+    assert!(beam.reasons.contains(&R::CardinalPointOffsetIgnored));
+    // Point 5 coincides with the centroid only on a proven doubly symmetric family.
+    assert_eq!(frame(&mesh, "X").fidelity, GeometryFidelity::Resolved);
     assert!(
-        column.placement_applied,
-        "default centroid is the drawn centreline"
+        frame(&mesh, "T")
+            .reasons
+            .contains(&R::CardinalPointOffsetIgnored)
     );
-    let offset = sectioned_source().replace(
-        "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"",
-        "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\" OFFSETXI 0.5",
+    let source = sectioned_source()
+        .replace(
+            "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\"",
+            "LINEASSIGN \"C\" \"Roof\" SECTION \"RECT\" OFFSETXI 0.5 MIRROR2 \"Yes\"",
+        )
+        .replace(
+            "SECTION \"TUBE\" CARDINALPT 5",
+            "SECTION \"TUBE\" MIRROR3 \"Yes\"",
+        );
+    let scene = ext_e2k::project_scene(&ext_e2k::parse_str(&source).expect("parse"));
+    assert_eq!(
+        scene
+            .frames
+            .iter()
+            .filter(|f| f.insertion.is_mirrored())
+            .count(),
+        2,
+        "both mirror rows parse"
     );
-    let mesh = build(offset.as_bytes(), Config::default()).expect("source");
+    let mesh = build(source.as_bytes(), Config::default()).expect("source");
+    let column = frame(&mesh, "C");
+    assert!(column.reasons.contains(&R::FrameJointOffsetsIgnored));
     assert!(
-        !entity(&mesh, "C")
-            .frame
-            .as_ref()
-            .expect("frame")
-            .placement_applied
+        !column.reasons.contains(&R::SectionMirrorIgnored),
+        "a mirrored rectangle maps onto itself"
     );
+    assert!(frame(&mesh, "T").reasons.contains(&R::SectionMirrorIgnored));
 }
 #[test]
 fn a_section_change_between_versions_changes_geometry_and_source_attribution() {
@@ -508,7 +558,7 @@ fn a_section_change_between_versions_changes_geometry_and_source_attribution() {
     let v2_source = sectioned_source().replace("D 2 B 1\n", "D 3 B 1\n");
     let v2 = build(v2_source.as_bytes(), Config::default()).expect("v2");
     assert_ne!(v1.revision().geometry_sha256, v2.revision().geometry_sha256);
-    let depth = |m: &Mesh| entity(m, "B").frame.as_ref().and_then(|f| f.depth_m);
+    let depth = |m: &Mesh| frame(m, "B").depth_m;
     assert!((depth(&v2).expect("D") - 0.9144).abs() < 1e-9);
     assert_ne!(depth(&v1), depth(&v2));
 }
