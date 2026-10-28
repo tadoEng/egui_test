@@ -196,7 +196,9 @@ check below).
   - header-to-tab gap below 12 pt; a failed load still shows its warning.
 
   The old `Grid` fails both Inspector tests and the old header fails the gap
-  test. These are headless egui layout checks. Windows rendering at each DPI
+  test. Clean-worktree gate @ `6ce4087` (`evidence/app-01a/gate-6ce4087.txt`):
+  **144 passed, 0 failed, 6 ignored** (GPU-only); check, fmt, doc tests and
+  WASM pass; Clippy as before (only the G-ENV-1 exception). These are headless egui layout checks. Windows rendering at each DPI
   still needs the owner check below.
 
 ## Owner Windows check (public data only)
