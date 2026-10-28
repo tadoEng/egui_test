@@ -1,56 +1,139 @@
-//! Windows: the Results chart as `ECharts` in a `WebView2` child window.
-//!
-//! The transport is the bounded offline child `WebView` the Windows examples
-//! already use (`examples/support/webview_host.rs`): authored HTML only, no
-//! navigation, no new windows, no downloads, IPC messages of at most 1 KiB.
-//! The `ECharts` runtime is the pinned offline asset in `assets/vendor/echarts`.
-//! What the chart is sent and what it may answer is [`crate::chart_bridge`].
+//! Windows adapter for the existing bounded offline child WebView host.
 #[path = "../../../examples/support/webview_host.rs"]
 mod webview_host;
 
 use crate::chart_bridge::{Bridge, Content, EmbeddedChart, is_ready};
 use crate::state::Action;
+use std::time::{Duration, Instant};
 use webview_host::ChildWebView;
+use wry::raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 
 const MARKER: &str = "/*__ECHARTS_RUNTIME__*/";
 #[expect(
     clippy::large_include_file,
-    reason = "the pinned offline ECharts asset, as in native_results"
+    reason = "Reuse the pinned offline ECharts asset"
 )]
 const ECHARTS: &str = include_str!("../../../assets/vendor/echarts/echarts.min.js");
 const PAGE: &str = include_str!("../assets/results_chart.html");
 
 pub struct WebViewChart {
-    view: ChildWebView,
+    // Dropping a failed child removes its HWND even if hiding failed.
+    view: Option<ChildWebView>,
     bridge: Bridge,
-    /// Set once the child window failed; the page then draws the chart.
     failed: Option<String>,
-    navigation_reported: bool,
+    parent: isize,
+    visible: bool,
+    started: Instant,
 }
 
 impl WebViewChart {
-    /// Creates the hidden child window over the application window.
-    ///
+    /// Create the hidden child using the actual native parent, not CreationContext.
     /// # Errors
-    /// `WebView2` could not be created (for example, no runtime installed).
+    /// No Windows parent, missing WebView2 runtime, or child creation failure.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Result<Self, String> {
+        let parent = cc
+            .winit_window
+            .ok_or("WebView2 requires a native parent window")?;
+        let RawWindowHandle::Win32(handle) =
+            parent.window_handle().map_err(|e| e.to_string())?.as_raw()
+        else {
+            return Err("WebView2 requires a Windows parent".into());
+        };
         let html = PAGE.replacen(MARKER, ECHARTS, 1);
-        let view = ChildWebView::new(cc, &cc.egui_ctx, html, is_ready)?;
+        let view = ChildWebView::new(parent, &cc.egui_ctx, html, is_ready)?;
         Ok(Self {
-            view,
+            view: Some(view),
             bridge: Bridge::default(),
             failed: None,
-            navigation_reported: false,
+            parent: handle.hwnd.get(),
+            visible: false,
+            started: Instant::now(),
         })
     }
 
     fn fail(&mut self, error: String) {
-        log::warn!("ECharts chart disabled, the native chart is used: {error}");
-        // Best effort: a child window that cannot be placed should not stay up.
-        if let Err(hide) = self.view.webview.set_visible(false) {
-            log::warn!("hide the chart window: {hide}");
-        }
         self.failed = Some(error);
+        self.view = None;
+        self.visible = false;
+        // Generation is never reused; no failed/hidden chart can issue an action.
+        let _cleared = self.bridge.update(None);
+    }
+
+    #[expect(
+        unsafe_code,
+        reason = "Read focus ownership within our own native parent only"
+    )]
+    fn child_has_focus(&self) -> bool {
+        use windows_sys::Win32::UI::{
+            Input::KeyboardAndMouse::GetFocus, WindowsAndMessaging::IsChild,
+        };
+        let parent = self.parent as windows_sys::Win32::Foundation::HWND;
+        let focus = unsafe { GetFocus() };
+        !focus.is_null() && unsafe { IsChild(parent, focus) } != 0
+    }
+
+    fn sync_checked(
+        &mut self,
+        ctx: &egui::Context,
+        area: Option<egui::Rect>,
+        content: Option<Content>,
+    ) -> Result<Vec<Action>, String> {
+        // Invalidate the old frame before draining queued messages. This also
+        // refuses a late selection or shortcut on Model or a changed query.
+        self.bridge.update(content)?;
+        let restore_focus = self.visible && area.is_none() && self.child_has_focus();
+        let Some(view) = &mut self.view else {
+            return Ok(Vec::new());
+        };
+        if view
+            .navigation
+            .lock()
+            .map_err(|_| "WebView2 navigation state unavailable")?
+            .contains(&"denied navigation")
+        {
+            return Err("WebView2 refused unexpected navigation".into());
+        }
+        if !view.is_ready() {
+            if self.started.elapsed() > Duration::from_secs(30) {
+                return Err("ECharts / WebView2 offline bootstrap timed out".into());
+            }
+            ctx.request_repaint_after(Duration::from_millis(50));
+        }
+        let mut actions = Vec::new();
+        for raw in view.pending_messages() {
+            if serde_json::from_str::<serde_json::Value>(&raw)
+                .is_ok_and(|v| v == serde_json::json!({"protocol":1,"type":"chart_error"}))
+            {
+                return Err("ECharts reported a browser rendering error".into());
+            }
+            if let Ok(action) = self.bridge.accept(&raw) {
+                let navigates = matches!(
+                    action,
+                    Action::SelectWorkspace(_) | Action::NextWorkspace | Action::PreviousWorkspace
+                );
+                actions.push(action);
+                if navigates {
+                    break;
+                }
+            }
+        }
+        if view.is_ready()
+            && let Some(frame) = self.bridge.outgoing()
+        {
+            let json = frame?;
+            view.webview
+                .evaluate_script(&format!("window.talosChart.apply({json});"))
+                .map_err(|e| format!("Send ECharts frame: {e}"))?;
+        }
+        let visible = area.is_some() && view.is_ready() && self.bridge.frame().is_some();
+        view.place(area, ctx.pixels_per_point(), visible)?;
+        if restore_focus {
+            view.webview
+                .focus_parent()
+                .map_err(|e| format!("Restore native parent focus: {e}"))?;
+        }
+        self.visible = visible;
+        Ok(actions)
     }
 }
 
@@ -58,7 +141,9 @@ impl EmbeddedChart for WebViewChart {
     fn available(&self) -> bool {
         self.failed.is_none()
     }
-
+    fn error(&self) -> Option<&str> {
+        self.failed.as_deref()
+    }
     fn sync(
         &mut self,
         ctx: &egui::Context,
@@ -68,52 +153,13 @@ impl EmbeddedChart for WebViewChart {
         if self.failed.is_some() {
             return Vec::new();
         }
-        // Messages are checked against the frame they were sent about, before
-        // this frame's content replaces it.
-        let mut actions = Vec::new();
-        for message in self.view.pending_messages() {
-            match self.bridge.accept(&message) {
-                Ok(action) => actions.push(action),
-                Err(refused) => log::debug!(
-                    "chart message refused ({refused:?}; {} so far)",
-                    self.bridge.refused()
-                ),
+        match self.sync_checked(ctx, area, content) {
+            Ok(actions) => actions,
+            Err(error) => {
+                self.fail(error);
+                ctx.request_repaint();
+                Vec::new()
             }
         }
-        if let Err(error) = self.bridge.update(content) {
-            self.fail(error);
-            return actions;
-        }
-        if self.view.is_ready()
-            && let Some(frame) = self.bridge.outgoing()
-        {
-            let sent = frame.and_then(|json| {
-                self.view
-                    .webview
-                    .evaluate_script(&format!("window.talosChart.apply({json});"))
-                    .map_err(|error| format!("send chart frame: {error}"))
-            });
-            if let Err(error) = sent {
-                log::warn!("{error}; retrying");
-                self.bridge.resend();
-            }
-        }
-        if !self.navigation_reported
-            && self
-                .view
-                .navigation
-                .lock()
-                .is_ok_and(|entries| entries.contains(&"denied navigation"))
-        {
-            log::warn!("the chart page attempted a navigation; it was blocked");
-            self.navigation_reported = true;
-        }
-        // Shown only once the page is ready and has been sent the frame, so
-        // it never flashes an empty page over the card.
-        let visible = area.is_some() && self.view.is_ready() && self.bridge.frame().is_some();
-        if let Err(error) = self.view.place(area, ctx.pixels_per_point(), visible) {
-            self.fail(error);
-        }
-        actions
     }
 }

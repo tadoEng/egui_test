@@ -21,10 +21,14 @@ pub const PROTOCOL: u8 = 1;
 pub const MAX_MESSAGE: usize = 1024;
 
 /// A chart drawn outside egui, in a native child window over the Results
-/// chart area. The page draws its own chart whenever this is unavailable.
+/// chart area. Unavailability is explicit; there is no renderer fallback.
 pub trait EmbeddedChart {
-    /// Whether it can draw. When it cannot, the page draws the native chart.
+    /// Whether the host can draw. No other renderer replaces an unavailable host.
     fn available(&self) -> bool;
+    /// An explicit host failure, visible in the native shell.
+    fn error(&self) -> Option<&str> {
+        (!self.available()).then_some("ECharts / WebView2 unavailable")
+    }
     /// Called once per frame: shows `content` (or nothing) placed over `area`
     /// (hidden when `None`), and returns the actions the chart's accepted
     /// messages ask for.
@@ -219,6 +223,17 @@ impl Bridge {
         result
     }
 
+    fn check_identity(&self, message: &Message) -> Result<&Frame, Refused> {
+        let frame = self.frame.as_ref().ok_or(Refused::Stale)?;
+        if message.version.as_deref() != Some(frame.version.as_str())
+            || message.source.as_deref() != Some(frame.source.as_str())
+            || message.generation != Some(frame.generation)
+        {
+            return Err(Refused::Stale);
+        }
+        Ok(frame)
+    }
+
     fn check(&self, raw: &str) -> Result<Action, Refused> {
         if raw.len() > MAX_MESSAGE {
             return Err(Refused::Oversized);
@@ -229,15 +244,12 @@ impl Bridge {
             return Err(Refused::Stale);
         }
         match message.kind.as_str() {
-            "shortcut" => shortcut(&message),
+            "shortcut" => {
+                self.check_identity(&message)?;
+                shortcut(&message)
+            }
             "select_story" | "clear_selection" => {
-                let frame = self.frame.as_ref().ok_or(Refused::Stale)?;
-                if message.version.as_deref() != Some(frame.version.as_str())
-                    || message.source.as_deref() != Some(frame.source.as_str())
-                    || message.generation != Some(frame.generation)
-                {
-                    return Err(Refused::Stale);
-                }
+                let frame = self.check_identity(&message)?;
                 if message.key.is_some() {
                     return Err(Refused::Malformed);
                 }
@@ -258,11 +270,7 @@ impl Bridge {
 /// The workspace shortcuts, forwarded while the chart has keyboard focus
 /// (the child window receives the keys, not egui). Nothing else is forwarded.
 fn shortcut(message: &Message) -> Result<Action, Refused> {
-    if message.version.is_some()
-        || message.source.is_some()
-        || message.generation.is_some()
-        || message.story.is_some()
-    {
+    if message.story.is_some() {
         return Err(Refused::Malformed);
     }
     let digit = |n: usize| Ok(Action::SelectWorkspace(Workspace::ALL[n]));

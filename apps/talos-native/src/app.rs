@@ -16,8 +16,9 @@ pub struct App {
     loader: Loader,
     last_refusal: Option<Refusal>,
     /// The Results chart outside egui (`ECharts` in a `WebView2` child on
-    /// Windows); without one, or while it is unavailable, the page draws it.
+    /// Windows). An unavailable host is explicit, without a renderer fallback.
     chart: Option<Box<dyn EmbeddedChart>>,
+    chart_start_error: Option<String>,
 }
 
 impl App {
@@ -33,20 +34,21 @@ impl App {
         .with_platform_chart(cc)
     }
     /// Windows: the Results chart is `ECharts` in a `WebView2` child window.
-    /// If it cannot be created (no `WebView2` runtime), the page draws it.
+    /// A creation failure stays visible in the shell; no renderer replaces it.
     #[cfg(target_os = "windows")]
-    fn with_platform_chart(self, cc: &eframe::CreationContext<'_>) -> Self {
+    fn with_platform_chart(mut self, cc: &eframe::CreationContext<'_>) -> Self {
         match crate::webview_chart::WebViewChart::new(cc) {
             Ok(chart) => self.with_chart(Box::new(chart)),
             Err(error) => {
-                log::warn!("ECharts chart unavailable, the native chart is used: {error}");
+                self.chart_start_error = Some(error);
                 self
             }
         }
     }
-    /// Elsewhere the page draws the chart.
+    /// The current prototype requires the Windows host for ECharts.
     #[cfg(not(target_os = "windows"))]
-    fn with_platform_chart(self, _cc: &eframe::CreationContext<'_>) -> Self {
+    fn with_platform_chart(mut self, _cc: &eframe::CreationContext<'_>) -> Self {
+        self.chart_start_error = Some("ECharts requires Windows WebView2 in this prototype".into());
         self
     }
     pub fn with_parts(project: Project, view: Box<dyn ModelView>, loader: Loader) -> Self {
@@ -57,6 +59,7 @@ impl App {
             loader,
             last_refusal: None,
             chart: None,
+            chart_start_error: None,
         };
         for effect in effects {
             app.loader.run(effect);
@@ -68,6 +71,11 @@ impl App {
     pub fn with_chart(mut self, chart: Box<dyn EmbeddedChart>) -> Self {
         self.chart = Some(chart);
         self
+    }
+    pub fn chart_error(&self) -> Option<&str> {
+        self.chart_start_error
+            .as_deref()
+            .or_else(|| self.chart.as_ref().and_then(|chart| chart.error()))
     }
     pub fn state(&self) -> &State {
         &self.state
@@ -313,12 +321,30 @@ impl eframe::App for App {
             )
             .show(ui, |ui| actions.extend(self.header(ui)));
         // Only drawn when something is wrong; an empty panel would still take space.
-        if matches!(self.state.session.document, DocumentState::Failed { .. }) {
+        if matches!(self.state.session.document, DocumentState::Failed { .. })
+            || self.chart_error().is_some()
+        {
             egui::Panel::top("talos-warning")
                 .frame(egui::Frame::NONE)
-                .show(ui, |ui| self.warning(ui));
+                .show(ui, |ui| {
+                    self.warning(ui);
+                    if let Some(error) = self.chart_error() {
+                        ui.colored_label(
+                            tokens.warning_text,
+                            format!("ECharts / WebView2 unavailable: {error}"),
+                        );
+                    }
+                });
         }
         let workspace = self.state.workspace;
+        let rendered_ticket = self.state.session.ticket().clone();
+        let rendered_query = self.state.results.query.clone();
+        if workspace != Workspace::Results
+            && let Some(chart) = &mut self.chart
+        {
+            // Hide before Model draws, not one input/frame later.
+            let _discarded = chart.sync(&ctx, None, None);
+        }
         let embedded = self.chart.as_ref().is_some_and(|chart| chart.available());
         let mut embed = None;
         egui::CentralPanel::no_frame().show(ui, |ui| match workspace {
@@ -336,6 +362,23 @@ impl eframe::App for App {
             }
             other => crate::pages::placeholder::show(ui, other),
         });
+        // Apply the native controls first: queued chart messages must not be
+        // accepted against the previous query/version/workspace in this frame.
+        if !actions.is_empty() {
+            // A native table click changes the chart selection after layout.
+            ctx.request_repaint();
+        }
+        for action in actions {
+            self.dispatch(action);
+        }
+        if self.state.workspace != workspace
+            || self.state.session.ticket() != &rendered_ticket
+            || self.state.results.query != rendered_query
+        {
+            embed = None;
+            ctx.request_repaint();
+        }
+        let mut chart_actions = Vec::new();
         if let Some(chart) = &mut self.chart {
             // A child window draws above everything egui paints, so it hides
             // while an egui popup (a selector's list) is open, and while the
@@ -352,10 +395,16 @@ impl eframe::App for App {
                 // when it is next synced, so draw another frame.
                 ctx.request_repaint();
             }
-            actions.extend(requested);
+            chart_actions.extend(requested);
         }
-        for action in actions {
+        for action in chart_actions {
             self.dispatch(action);
+        }
+        if self.state.workspace != Workspace::Results
+            && let Some(chart) = &mut self.chart
+        {
+            // Chart shortcuts are dispatched after sync; hide immediately too.
+            let _discarded = chart.sync(&ctx, None, None);
         }
     }
 }

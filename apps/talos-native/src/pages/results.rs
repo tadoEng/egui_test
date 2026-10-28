@@ -27,8 +27,8 @@ pub struct Embed {
 }
 
 /// Draws the page. With `embedded`, a stored profile's plot area is left to
-/// the embedded chart and returned with its content; otherwise the page
-/// draws the chart itself.
+/// the embedded chart and returned with its content. An unavailable host is
+/// explicit; stored table values remain readable without a renderer fallback.
 pub fn show(ui: &mut egui::Ui, state: &State, embedded: bool) -> (Vec<Action>, Option<Embed>) {
     let mut actions = Vec::new();
     let mut embed = None;
@@ -86,15 +86,7 @@ pub fn show(ui: &mut egui::Ui, state: &State, embedded: bool) -> (Vec<Action>, O
                         )
                     };
                     let embedded = if embedded { source.clone() } else { None };
-                    let area = chart_card(
-                        ui,
-                        chart,
-                        document,
-                        &plot,
-                        selected,
-                        embedded.is_some(),
-                        &mut actions,
-                    );
+                    let area = chart_card(ui, chart, document, &plot, embedded.is_some());
                     table_card(ui, table, &plot, selected, &mut actions);
                     if let (Some(area), Some(source)) = (area, embedded) {
                         let style = chart_style(&tokens, plot.series.len());
@@ -427,9 +419,7 @@ fn chart_card(
     rect: egui::Rect,
     document: &Document,
     plot: &Plot,
-    selected: Option<&str>,
     embedded: bool,
-    actions: &mut Vec<Action>,
 ) -> Option<egui::Rect> {
     let mut reserved = None;
     card(ui, rect, |ui| {
@@ -464,14 +454,7 @@ fn chart_card(
             }
         });
         let area = ui.available_rect_before_wrap();
-        let response = ui.allocate_rect(
-            area,
-            if embedded {
-                egui::Sense::hover()
-            } else {
-                egui::Sense::click()
-            },
-        );
+        let response = ui.allocate_rect(area, egui::Sense::hover());
         response.widget_info(|| {
             egui::WidgetInfo::labeled(
                 egui::accesskit::Role::Image,
@@ -479,41 +462,18 @@ fn chart_card(
                 format!("Chart: {}", plot.title),
             )
         });
-        if embedded {
-            // Seen only until the chart window first shows, or while it is
-            // hidden under an open selector list.
-            ui.painter().text(
-                area.center(),
-                egui::Align2::CENTER_CENTER,
-                "Chart",
-                egui::FontId::proportional(theme::SMALL),
-                tokens.faint,
-            );
-            reserved = Some(area);
-            return;
-        }
-        let hovered = draw_chart(ui, area, plot, selected, response.hover_pos());
-        if let Some(story) = &hovered {
-            response.clone().on_hover_ui_at_pointer(|ui| {
-                ui.label(egui::RichText::new(story).family(theme::semibold()));
-                let at = plot.stories.iter().position(|s| s == story).unwrap_or(0);
-                for series in &plot.series {
-                    ui.label(format!(
-                        "{}: {}",
-                        series.name,
-                        series.values[at].map_or_else(
-                            || "no stored value".to_owned(),
-                            |v| number(v, &plot.unit)
-                        )
-                    ));
-                }
-            });
-        }
-        if response.clicked() {
-            actions.push(Action::SelectResultStory(
-                hovered.filter(|story| Some(story.as_str()) != selected),
-            ));
-        }
+        ui.painter().text(
+            area.center(),
+            egui::Align2::CENTER_CENTER,
+            if embedded {
+                "ECharts · WebView2"
+            } else {
+                "ECharts host unavailable; stored table remains readable"
+            },
+            egui::FontId::proportional(theme::SMALL),
+            tokens.muted,
+        );
+        reserved = embedded.then_some(area);
     });
     reserved
 }
@@ -599,164 +559,6 @@ fn legend(ui: &mut egui::Ui, color: egui::Color32, text: &str, dashed: bool) {
                 .color(tokens.muted),
         );
     });
-}
-
-/// Draws the profile (stories top to bottom in stored order, values along
-/// x) and returns the story row under `pointer`, if any.
-fn draw_chart(
-    ui: &egui::Ui,
-    area: egui::Rect,
-    plot: &Plot,
-    selected: Option<&str>,
-    pointer: Option<egui::Pos2>,
-) -> Option<String> {
-    let tokens = Tokens::of(ui);
-    let painter = ui.painter_at(area);
-    let frame = egui::Rect::from_min_max(
-        area.min + egui::vec2(72.0, 8.0),
-        area.max - egui::vec2(16.0, 34.0),
-    );
-    let count = plot.stories.len().max(1);
-    #[expect(clippy::cast_precision_loss, reason = "story counts are small")]
-    let row = frame.height() / count as f32;
-    #[expect(clippy::cast_precision_loss, reason = "story counts are small")]
-    let y_of = |index: usize| frame.top() + row * (index as f32 + 0.5);
-    let values = plot
-        .series
-        .iter()
-        .flat_map(|s| s.values.iter().flatten().copied())
-        .chain(plot.reference)
-        .chain(std::iter::once(0.0));
-    let (low, high) = values.fold((f64::MAX, f64::MIN), |(l, h), v| (l.min(v), h.max(v)));
-    let (low, high) = if (high - low).abs() < f64::EPSILON {
-        (low - 1.0, high + 1.0)
-    } else {
-        let pad = (high - low) * 0.06;
-        (low - pad, high + pad)
-    };
-    #[expect(clippy::cast_possible_truncation, reason = "screen coordinates")]
-    let x_of = |value: f64| frame.left() + ((value - low) / (high - low)) as f32 * frame.width();
-
-    // Value grid and labels.
-    for tick in ticks(low, high) {
-        let x = x_of(tick);
-        painter.vline(x, frame.y_range(), egui::Stroke::new(1.0, tokens.border));
-        painter.text(
-            egui::pos2(x, frame.bottom() + 6.0),
-            egui::Align2::CENTER_TOP,
-            number(tick, &plot.unit),
-            egui::FontId::proportional(theme::SMALL),
-            tokens.muted,
-        );
-    }
-    painter.vline(
-        x_of(0.0),
-        frame.y_range(),
-        egui::Stroke::new(1.0, tokens.muted),
-    );
-
-    // Story rows, the hovered/selected band, and labels.
-    let hovered = pointer
-        .filter(|p| frame.y_range().contains(p.y))
-        .and_then(|p| {
-            #[expect(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "a row index"
-            )]
-            let index = ((p.y - frame.top()) / row).floor() as usize;
-            plot.stories.get(index).cloned()
-        });
-    for (index, story) in plot.stories.iter().enumerate() {
-        let y = y_of(index);
-        let band = egui::Rect::from_center_size(
-            egui::pos2(area.center().x, y),
-            egui::vec2(area.width(), row.min(28.0)),
-        );
-        if selected == Some(story.as_str()) {
-            painter.rect_filled(band, 4.0, tokens.accent_weak);
-        } else if hovered.as_deref() == Some(story.as_str()) {
-            painter.rect_filled(band, 4.0, ui.visuals().widgets.hovered.weak_bg_fill);
-        }
-        // Label every row when they fit, otherwise every nth.
-        let every = (14.0 / row).ceil().max(1.0);
-        #[expect(clippy::cast_precision_loss, reason = "story counts are small")]
-        if (index as f32 % every) == 0.0 || selected == Some(story.as_str()) {
-            painter.text(
-                egui::pos2(frame.left() - 10.0, y),
-                egui::Align2::RIGHT_CENTER,
-                story,
-                egui::FontId::proportional(theme::SMALL),
-                tokens.muted,
-            );
-        }
-    }
-
-    if let Some(reference) = plot.reference {
-        let x = x_of(reference);
-        painter.add(egui::Shape::dashed_line(
-            &[egui::pos2(x, frame.top()), egui::pos2(x, frame.bottom())],
-            egui::Stroke::new(1.5, reference_color(&tokens)),
-            6.0,
-            4.0,
-        ));
-    }
-    draw_series(&painter, plot, &tokens, &x_of, &y_of);
-    hovered
-}
-
-/// The stored series: lines broken at gaps, a marker per stored value.
-fn draw_series(
-    painter: &egui::Painter,
-    plot: &Plot,
-    tokens: &Tokens,
-    x_of: &dyn Fn(f64) -> f32,
-    y_of: &dyn Fn(usize) -> f32,
-) {
-    for (index, series) in plot.series.iter().enumerate() {
-        let color = palette(tokens, index);
-        // A gap breaks the line; nothing is interpolated across it.
-        let mut run: Vec<egui::Pos2> = Vec::new();
-        for (at, value) in series.values.iter().enumerate() {
-            match value {
-                Some(v) => run.push(egui::pos2(x_of(*v), y_of(at))),
-                None => {
-                    painter.add(egui::Shape::line(
-                        std::mem::take(&mut run),
-                        egui::Stroke::new(2.0, color),
-                    ));
-                }
-            }
-        }
-        painter.add(egui::Shape::line(run, egui::Stroke::new(2.0, color)));
-        for (at, value) in series.values.iter().enumerate() {
-            if let Some(v) = value {
-                painter.circle_filled(egui::pos2(x_of(*v), y_of(at)), 2.5, color);
-            }
-        }
-    }
-}
-
-/// About five round steps between `low` and `high`.
-fn ticks(low: f64, high: f64) -> Vec<f64> {
-    let span = high - low;
-    if !(span.is_finite() && span > 0.0) {
-        return Vec::new();
-    }
-    let raw = span / 5.0;
-    let magnitude = 10f64.powf(raw.log10().floor());
-    let step = [1.0, 2.0, 2.5, 5.0, 10.0]
-        .into_iter()
-        .map(|m| m * magnitude)
-        .find(|s| *s >= raw)
-        .unwrap_or(raw);
-    let mut tick = (low / step).ceil() * step;
-    let mut out = Vec::new();
-    while tick <= high && out.len() < 12 {
-        out.push(if tick.abs() < step * 1e-9 { 0.0 } else { tick });
-        tick += step;
-    }
-    out
 }
 
 /// A stored value as text, with no rounding of meaning: ratios to five
