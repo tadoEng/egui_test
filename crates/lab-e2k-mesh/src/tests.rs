@@ -667,7 +667,19 @@ fn shell_source_attributes_carry_section_thickness_and_insertion_without_inferri
     assert_eq!(shell.section.as_deref(), Some("SL"));
     assert!((shell.thickness_m.expect("thickness") - 0.1524).abs() < 1e-9);
     assert_eq!(shell.insertion_point.as_deref(), Some("TOP"));
-    assert!(!shell.thickness_drawn, "surfaces stay zero thickness");
+    assert!(
+        !shell.thickness_drawn,
+        "TOP needs the unproven local-3 side: drawn flat at the ring, not centred"
+    );
+    assert_eq!(shell.placement, ShellPlacement::FlatAtDeclaredFace);
+    assert_eq!(
+        (shell.fidelity, shell.reasons.as_slice()),
+        (
+            GeometryFidelity::Approximate,
+            [ShellReason::ShellInsertionPointIgnored].as_slice()
+        ),
+        "TOP insertion is not applied"
+    );
     assert!(entity(&mesh, "B").shell.is_none());
 }
 mod picking {
@@ -899,4 +911,492 @@ fn an_opening_on_another_story_never_withholds_a_near_coincident_shell() {
         entity(&mesh, "S").limitation,
         Some(Limitation::OverlapsUnsubtractedOpening)
     );
+}
+mod shell_bodies {
+    //! Expected corners are written out by hand from the fixture coordinates
+    //! (ft x 0.3048), independently of the mesh builder. Tolerance 1e-5 m.
+    use super::*;
+    use crate::pick::{PickIndex, Ray};
+    const FT: f64 = 0.3048;
+    const TOL: f64 = 1e-5;
+    const SLAB: &str = "SHELLPROP \"SL\" PROPTYPE \"Slab\" MATERIAL \"C\" SLABTHICKNESS 0.5";
+    const WALL: &str = "SHELLPROP \"WL\" PROPTYPE \"Wall\" MATERIAL \"C\" WALLTHICKNESS 1";
+    /// Floor `S` (0..10 ft square at Roof = 10 ft) plus wall `W` on x = 10 ft
+    /// spanning Base..Roof, with the given property lines and assignments.
+    fn source(props: &[&str], s_assign: &str, w_assign: &str) -> String {
+        SOURCE
+            .replace(
+                "$ POINT COORDINATES",
+                &format!("$ SLAB PROPERTIES\n {}\n$ POINT COORDINATES", props.join("\n ")),
+            )
+            .replace(
+                "$ LINE ASSIGNS",
+                " AREA \"W\" PANEL 4 \"2\" \"3\" \"3\" \"2\" 0 0 0 0\n$ LINE ASSIGNS",
+            )
+            .replace(
+                "AREAASSIGN \"S\" \"Roof\" OPENING \"NO\"",
+                &format!("AREAASSIGN \"S\" \"Roof\" OPENING \"NO\" {s_assign}\n AREAASSIGN \"W\" \"Roof\" OPENING \"NO\" {w_assign}"),
+            )
+    }
+    fn mesh(text: &str) -> Mesh {
+        build(text.as_bytes(), Config::default()).expect("authored source")
+    }
+    fn shell<'a>(mesh: &'a Mesh, id: &str) -> &'a ShellSource {
+        entity(mesh, id).shell.as_ref().expect("shell source")
+    }
+    /// World-metre bounds of an entity's drawn vertices.
+    fn world_bounds(mesh: &Mesh, e: &EntityMesh) -> [Point; 2] {
+        let mut b = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
+        for &i in &mesh.indices()[e.indices.start as usize..e.indices.end as usize] {
+            let p = mesh.vertices()[i as usize].position;
+            for a in 0..3 {
+                let w = f64::from(p[a]) + mesh.origin_m()[a];
+                b[0][a] = b[0][a].min(w);
+                b[1][a] = b[1][a].max(w);
+            }
+        }
+        b
+    }
+    fn assert_bounds(actual: [Point; 2], expected: [Point; 2], what: &str) {
+        for k in 0..2 {
+            for a in 0..3 {
+                assert!(
+                    (actual[k][a] - expected[k][a]).abs() < TOL,
+                    "{what}: bound {k} axis {a}: {} vs {}",
+                    actual[k][a],
+                    expected[k][a]
+                );
+            }
+        }
+    }
+    /// Divergence-theorem volume: positive only for a closed, outward body.
+    fn volume(mesh: &Mesh, e: &EntityMesh) -> f64 {
+        mesh.indices()[e.indices.start as usize..e.indices.end as usize]
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|t| {
+                let p: [Point; 3] = t.map(|i| mesh.vertices()[i as usize].position.map(f64::from));
+                dot(p[0], cross(p[1], p[2])) / 6.0
+            })
+            .sum()
+    }
+    fn assert_outward_finite(mesh: &Mesh, e: &EntityMesh) {
+        for t in mesh.indices()[e.indices.start as usize..e.indices.end as usize]
+            .as_chunks::<3>()
+            .0
+        {
+            let v = t.map(|i| mesh.vertices()[i as usize]);
+            let p = v.map(|v| v.position.map(f64::from));
+            let n = v[0].normal.map(f64::from);
+            assert!(n.iter().all(|c| c.is_finite()) && (dot(n, n) - 1.0).abs() < 1e-5);
+            assert!(
+                dot(cross(sub(p[1], p[0]), sub(p[2], p[0])), n) > 0.0,
+                "triangle winds with its normal"
+            );
+        }
+    }
+    const MIDDLE: &str = "SECTION \"SL\" CARDINALPOINT \"MIDDLE\"";
+    const WALL_MIDDLE: &str = "SECTION \"WL\" CARDINALPOINT \"MIDDLE\"";
+
+    #[test]
+    fn a_middle_slab_and_a_middle_wall_are_closed_bodies_at_their_source_extents() {
+        let m = mesh(&source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE));
+        let (s, w) = (entity(&m, "S"), entity(&m, "W"));
+        // Slab: 10 ft square at z = 10 ft, 0.5 ft thick, centred on the ring.
+        assert_bounds(
+            world_bounds(&m, s),
+            [[0.0, 0.0, 9.75 * FT], [10.0 * FT, 10.0 * FT, 10.25 * FT]],
+            "slab",
+        );
+        // Wall: plane x = 10 ft, y 0..10 ft, z Base..Roof, 1 ft thick about the plane.
+        assert_bounds(
+            world_bounds(&m, w),
+            [[9.5 * FT, 0.0, 0.0], [10.5 * FT, 10.0 * FT, 10.0 * FT]],
+            "wall",
+        );
+        assert!((volume(&m, s) - 10.0 * 10.0 * 0.5 * FT.powi(3)).abs() < 1e-6);
+        assert!((volume(&m, w) - 10.0 * 10.0 * 1.0 * FT.powi(3)).abs() < 1e-6);
+        for (e, id) in [(s, "S"), (w, "W")] {
+            assert_eq!(e.mode, DisplayMode::ExtrudedShell, "{id}");
+            assert_eq!(e.indices.len(), 12 * 3, "{id}: 2 + 2 caps, 4 side quads");
+            assert_outward_finite(&m, e);
+            let src = shell(&m, id);
+            assert_eq!(
+                (src.thickness_source, src.placement, src.thickness_drawn),
+                (
+                    ThicknessSource::Resolved,
+                    ShellPlacement::CentredMiddle,
+                    true
+                ),
+                "{id}"
+            );
+            assert_eq!(
+                (src.fidelity, src.reasons.as_slice()),
+                (GeometryFidelity::Exact, [].as_slice())
+            );
+        }
+    }
+    #[test]
+    fn top_bottom_absent_and_unknown_insertions_are_never_extruded_as_middle() {
+        for (assign, placement) in [
+            (
+                "SECTION \"SL\" CARDINALPOINT \"TOP\"",
+                ShellPlacement::FlatAtDeclaredFace,
+            ),
+            (
+                "SECTION \"SL\" CARDINALPOINT \"BOTTOM\"",
+                ShellPlacement::FlatAtDeclaredFace,
+            ),
+            ("SECTION \"SL\"", ShellPlacement::FlatInsertionUnproven),
+            (
+                "SECTION \"SL\" CARDINALPOINT \"SIDEWAYS\"",
+                ShellPlacement::FlatInsertionUnproven,
+            ),
+        ] {
+            let m = mesh(&source(&[SLAB, WALL], assign, WALL_MIDDLE));
+            let s = entity(&m, "S");
+            assert_eq!(s.mode, DisplayMode::ZeroThicknessSurface, "{assign}");
+            // The ring itself, unmoved: the true face (TOP/BOTTOM) or a plane in the body.
+            assert_bounds(
+                world_bounds(&m, s),
+                [[0.0, 0.0, 10.0 * FT], [10.0 * FT, 10.0 * FT, 10.0 * FT]],
+                assign,
+            );
+            let src = shell(&m, "S");
+            assert_eq!(
+                (src.placement, src.thickness_drawn),
+                (placement, false),
+                "{assign}"
+            );
+            assert_eq!(
+                src.thickness_source,
+                ThicknessSource::Resolved,
+                "thickness available, not drawn"
+            );
+            assert_eq!(
+                (src.fidelity, src.reasons.as_slice()),
+                (
+                    GeometryFidelity::Approximate,
+                    [ShellReason::ShellInsertionPointIgnored].as_slice()
+                ),
+                "canonical backend reason is kept: {assign}"
+            );
+        }
+    }
+    #[test]
+    fn reversed_winding_and_concave_rings_extrude_to_the_same_outward_body() {
+        let reversed = source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE).replace(
+            "AREA \"S\" FLOOR 4 \"1\" \"2\" \"3\" \"4\"",
+            "AREA \"S\" FLOOR 4 \"4\" \"3\" \"2\" \"1\"",
+        );
+        let m = mesh(&reversed);
+        let s = entity(&m, "S");
+        assert_bounds(
+            world_bounds(&m, s),
+            [[0.0, 0.0, 9.75 * FT], [10.0 * FT, 10.0 * FT, 10.25 * FT]],
+            "reversed slab",
+        );
+        assert!(
+            (volume(&m, s) - 50.0 * FT.powi(3)).abs() < 1e-6,
+            "reversed ring still closes outward"
+        );
+        assert_outward_finite(&m, s);
+        // Dart (0,0) (10,0) (2,2) (0,10) ft: area 20 ft^2, concave at (2,2).
+        let dart = source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE)
+            .replace("POINT \"3\" 10 10", "POINT \"3\" 2 2");
+        let m = mesh(&dart);
+        let s = entity(&m, "S");
+        assert_eq!(s.mode, DisplayMode::ExtrudedShell);
+        assert!((volume(&m, s) - 20.0 * 0.5 * FT.powi(3)).abs() < 1e-6);
+        assert_outward_finite(&m, s);
+    }
+    #[test]
+    fn every_non_drawable_thickness_keeps_its_distinct_source_state_and_stays_flat() {
+        for (props, assign, expected) in [
+            (
+                vec![SLAB],
+                "CARDINALPOINT \"MIDDLE\"",
+                ThicknessSource::NoSection,
+            ),
+            (
+                vec![SLAB],
+                "SECTION \"NOPE\" CARDINALPOINT \"MIDDLE\"",
+                ThicknessSource::DefinitionMissing,
+            ),
+            (
+                vec!["SHELLPROP \"SL\" PROPTYPE \"Slab\" SLABTHICKNESS 0"],
+                MIDDLE,
+                ThicknessSource::Undeclared,
+            ),
+            (
+                vec!["SHELLPROP \"SL\" PROPTYPE \"Slab\" SLABTHICKNESS -1"],
+                MIDDLE,
+                ThicknessSource::Undeclared,
+            ),
+            (
+                vec!["SHELLPROP \"SL\" SLABTHICKNESS 0.5 WALLTHICKNESS 1"],
+                MIDDLE,
+                ThicknessSource::Ambiguous,
+            ),
+            (
+                vec!["SHELLPROP \"SL\" PROPTYPE \"Deck\""],
+                MIDDLE,
+                ThicknessSource::FamilyUnmodeled,
+            ),
+            (
+                vec!["SHELLPROP \"SL\" PROPTYPE \"Slab\" SLABTHICKNESS 100"],
+                MIDDLE,
+                ThicknessSource::OutOfRange,
+            ),
+        ] {
+            let mut props = props;
+            props.push(WALL);
+            let m = mesh(&source(&props, assign, WALL_MIDDLE));
+            let src = shell(&m, "S");
+            assert_eq!(src.thickness_source, expected, "{props:?} {assign}");
+            // Only a source that declares no body may say the flat ring is it.
+            let placement = if expected == ThicknessSource::Undeclared {
+                ShellPlacement::FlatNoDeclaredBody
+            } else {
+                ShellPlacement::FlatBodyUnresolved
+            };
+            assert_eq!(
+                (entity(&m, "S").mode, src.placement, src.thickness_drawn),
+                (DisplayMode::ZeroThicknessSurface, placement, false),
+                "{props:?}"
+            );
+            let native = src.placement.native_display();
+            assert!(!native.contains("drawn ±t/2"), "{native}");
+            if placement == ShellPlacement::FlatBodyUnresolved {
+                assert!(native.contains("unresolved or not rendered"), "{native}");
+            }
+            let [lo, hi] = world_bounds(&m, entity(&m, "S"));
+            assert!(
+                (hi[2] - lo[2]).abs() < TOL,
+                "no invented thickness: {props:?}"
+            );
+        }
+    }
+    #[test]
+    fn an_omitted_body_never_reads_as_reproduced_even_when_the_backend_tier_is_exact() {
+        let m = mesh(&source(
+            &["SHELLPROP \"SL\" PROPTYPE \"Slab\" SLABTHICKNESS 100", WALL],
+            MIDDLE,
+            WALL_MIDDLE,
+        ));
+        let src = shell(&m, "S");
+        // Canonical backend classification stays byte-identical (oracle parity)...
+        assert_eq!(
+            (src.fidelity, src.reasons.as_slice()),
+            (GeometryFidelity::Exact, [].as_slice())
+        );
+        // ...while the native display status says the body was not rendered.
+        assert_eq!(
+            (src.thickness_source, src.placement, src.thickness_drawn),
+            (
+                ThicknessSource::OutOfRange,
+                ShellPlacement::FlatBodyUnresolved,
+                false
+            )
+        );
+        // Every placement other than CentredMiddle discloses an omitted body.
+        for placement in [
+            ShellPlacement::FlatAtDeclaredFace,
+            ShellPlacement::FlatInsertionUnproven,
+            ShellPlacement::FlatBodyUnresolved,
+        ] {
+            assert!(placement.native_display().contains("only"), "{placement:?}");
+        }
+        assert!(
+            ShellPlacement::CentredMiddle
+                .native_display()
+                .contains("body drawn")
+        );
+    }
+    #[test]
+    fn voids_hosts_and_overlaps_are_never_filled_by_an_extruded_body() {
+        let with_section = |text: String| {
+            text.replace(
+                "$ POINT COORDINATES",
+                &format!("$ SLAB PROPERTIES\n {SLAB}\n$ POINT COORDINATES"),
+            )
+            .replace(
+                "AREAASSIGN \"S\" \"Roof\" OPENING \"NO\"",
+                &format!("AREAASSIGN \"S\" \"Roof\" OPENING \"NO\" {MIDDLE}"),
+            )
+            .replace(
+                "AREAASSIGN \"R\" \"Roof\" OPENING \"NO\"",
+                &format!("AREAASSIGN \"R\" \"Roof\" OPENING \"NO\" {MIDDLE}"),
+            )
+            .replace(
+                "AREAASSIGN \"VOID\" \"Roof\" OPENING \"YES\"",
+                &format!("AREAASSIGN \"VOID\" \"Roof\" OPENING \"YES\" {MIDDLE}"),
+            )
+        };
+        let m = mesh(&with_section(scoped_opening_source()));
+        assert_eq!(entity(&m, "VOID").limitation, Some(Limitation::OpeningVoid));
+        assert_eq!(
+            entity(&m, "S").limitation,
+            Some(Limitation::HostOpeningSubtractionUnavailable)
+        );
+        for id in ["VOID", "S"] {
+            assert!(
+                entity(&m, id).indices.is_empty() && !shell(&m, id).thickness_drawn,
+                "{id}"
+            );
+            assert_eq!(shell(&m, id).placement, ShellPlacement::Withheld);
+        }
+        assert_eq!(
+            entity(&m, "R").mode,
+            DisplayMode::ExtrudedShell,
+            "independent slab extrudes"
+        );
+        let partial = with_section(scoped_opening_source())
+            .replace("POINT \"5\" 4 4", "POINT \"5\" 8 4")
+            .replace("POINT \"6\" 6 4", "POINT \"6\" 12 4")
+            .replace("POINT \"7\" 6 6", "POINT \"7\" 12 6")
+            .replace("POINT \"8\" 4 6", "POINT \"8\" 8 6");
+        let m = mesh(&partial);
+        assert_eq!(
+            entity(&m, "S").limitation,
+            Some(Limitation::OverlapsUnsubtractedOpening)
+        );
+        assert!(entity(&m, "S").indices.is_empty());
+        let cross = with_section(cross_story_source("Roof")).replace(
+            "AREAASSIGN \"VOID\" \"Roof\"",
+            "AREAASSIGN \"VOID\" \"Mezz\"",
+        );
+        let m = mesh(&cross);
+        assert_eq!(
+            entity(&m, "S").mode,
+            DisplayMode::ExtrudedShell,
+            "other-story void hides nothing"
+        );
+    }
+    #[test]
+    fn picking_hits_extruded_top_and_side_faces_behind_foreground_members() {
+        let m = mesh(&source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE));
+        let index = PickIndex::new(m.vertices(), m.indices(), m.entities());
+        let id = |e: &EntityMesh| match &e.key {
+            EntityKey::Instance { id, .. } => id.as_str().to_owned(),
+            _ => String::new(),
+        };
+        let pick = |from: Point, dir: Point| {
+            let ray = Ray {
+                origin: sub(from, m.origin_m()),
+                direction: unit(dir).expect("dir"),
+                min_distance: 0.0,
+                max_distance: 1e3,
+            };
+            index
+                .pick(m.vertices(), m.indices(), m.entities(), &ray, |_| true)
+                .map(|h| (id(&m.entities()[h.entity]), h.distance))
+        };
+        // Top face at z = 10.25 ft, from z = 10 m straight down.
+        let (hit, d) = pick([1.5, 1.5, 10.0], [0.0, 0.0, -1.0]).expect("top face");
+        assert_eq!(hit, "S");
+        assert!((d - (10.0 - 10.25 * FT)).abs() < TOL, "{d}");
+        // Side face x = 0 at mid-thickness, from x = -5 m along +x.
+        let (hit, d) = pick([-5.0, 1.5, 10.0 * FT], [1.0, 0.0, 0.0]).expect("side face");
+        assert_eq!(hit, "S");
+        assert!((d - 5.0).abs() < TOL, "{d}");
+        // The 0.1 m column at x = 0 occludes the slab side behind it.
+        let (hit, d) = pick([-5.0, 0.0, 10.0 * FT - 0.05], [1.0, 0.0, 0.0]).expect("column");
+        assert_eq!(hit, "C");
+        assert!((d - 4.95).abs() < TOL, "{d}");
+        // Wall body face at x = 10.5 ft, from the far side.
+        let (hit, d) = pick([10.0, 1.5, 1.0], [-1.0, 0.0, 0.0]).expect("wall back face");
+        assert_eq!(hit, "W");
+        assert!((d - (10.0 - 10.5 * FT)).abs() < TOL, "{d}");
+    }
+    #[test]
+    fn thickness_changes_geometry_identity_and_frames_are_unchanged() {
+        let a = mesh(&source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE));
+        let b = mesh(&source(&[SLAB, WALL], MIDDLE, WALL_MIDDLE));
+        let c = mesh(&source(
+            &[&SLAB.replace("0.5", "0.6"), WALL],
+            MIDDLE,
+            WALL_MIDDLE,
+        ));
+        assert_eq!(a.revision(), b.revision(), "same bytes, same identity");
+        assert_ne!(a.revision().geometry_sha256, c.revision().geometry_sha256);
+        // Frame bodies are byte-identical whether or not shells have thickness.
+        let flat = mesh(SOURCE);
+        for frame_id in ["B", "C"] {
+            let (fa, fb) = (entity(&a, frame_id), entity(&flat, frame_id));
+            let span = |m: &Mesh, e: &EntityMesh| -> Vec<[f64; 3]> {
+                m.indices()[e.indices.start as usize..e.indices.end as usize]
+                    .iter()
+                    .map(|&i| {
+                        let p = m.vertices()[i as usize].position;
+                        std::array::from_fn(|k| f64::from(p[k]) + m.origin_m()[k])
+                    })
+                    .collect()
+            };
+            assert_eq!(span(&a, fa), span(&flat, fb), "{frame_id}");
+            assert_eq!(fa.frame, fb.frame, "{frame_id}");
+        }
+    }
+    #[test]
+    fn a_base_story_column_carries_the_backend_degenerate_extrusion_reason() {
+        let source = SOURCE.replace(
+            " LINEASSIGN \"C\" \"Roof\"\n",
+            " LINEASSIGN \"C\" \"Base\"\n",
+        );
+        let mesh = build(source.as_bytes(), Config::default()).expect("remaining geometry");
+        let column = entity(&mesh, "C");
+        assert_eq!(column.limitation, Some(Limitation::DegenerateFrame));
+        let frame = column.frame.as_ref().expect("frame");
+        assert!(
+            frame.reasons.contains(&FrameReason::DegenerateExtrusion),
+            "{:?}",
+            frame.reasons
+        );
+    }
+}
+/// The REAL-03 owner procedure opens committed public fixtures; fail the gate
+/// if any manifest entry is missing or changed, or the report names a fixture
+/// that is not in the tree (the repository ignores *.e2k by default).
+#[test]
+fn published_real03_fixtures_exist_match_their_manifest_and_build() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/native");
+    let dir = root.join("evidence/real03-shells/fixtures");
+    let manifest = std::fs::read_to_string(root.join("evidence/real03-shells/fixtures.sha256"))
+        .expect("fixture manifest");
+    let mut names = Vec::new();
+    for line in manifest.lines().filter(|l| !l.trim().is_empty()) {
+        let (hash, name) = line.split_once("  ").expect("sha256sum line");
+        let bytes =
+            std::fs::read(dir.join(name)).unwrap_or_else(|_| panic!("{name} is not committed"));
+        let actual = Sha256::digest(&bytes)
+            .iter()
+            .fold(String::new(), |mut hex, b| {
+                use std::fmt::Write as _;
+                let _ok = write!(hex, "{b:02x}");
+                hex
+            });
+        assert_eq!(actual, hash, "{name} bytes differ from the manifest");
+        build(&bytes, Config::default()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        names.push(name.to_owned());
+    }
+    assert_eq!(names.len(), 22, "manifest entries");
+    let report =
+        std::fs::read_to_string(root.join("real03-shell-verification.md")).expect("report");
+    for referenced in report
+        .split(|c: char| {
+            !(c.is_ascii_alphanumeric() || c == '.' || c == '/' || c == '-' || c == '_')
+        })
+        .filter(|w| {
+            std::path::Path::new(w)
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("e2k"))
+        })
+    {
+        let name = referenced.rsplit('/').next().expect("file name");
+        assert!(
+            names.iter().any(|n| n == name),
+            "report references {referenced}, not in the manifest"
+        );
+    }
 }

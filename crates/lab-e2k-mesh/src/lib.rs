@@ -5,7 +5,7 @@
 //! calculations or result joins.
 use ext_e2k::{
     EntityKey, ForceUnit, FrameKind, LengthUnit, ScenePoint, ShellInsertionPoint, ShellKind,
-    SourceMap, TempUnit,
+    ShellThickness, SkipReason, SourceMap, TempUnit,
 };
 use lab_fixture::{Bounds, Geometry, PRISM_FACE_RINGS, Point};
 use sha2::{Digest as _, Sha256};
@@ -74,6 +74,9 @@ pub enum DisplayMode {
     /// [`FrameSource::fidelity`], never implied by this mode.
     RectangularFrame,
     ZeroThicknessSurface,
+    /// A MIDDLE-inserted shell extruded ±t/2 about its connectivity ring by its
+    /// source thickness. Symmetric, so it needs no local-3 sign.
+    ExtrudedShell,
     Withheld,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,13 +94,14 @@ pub enum Limitation {
     /// are triangulated, not withheld.
     InvalidShellRing,
 }
-/// The `ext-api` `SceneGeometryFidelity` tiers a frame can take.
+/// The `ext-api` `SceneGeometryFidelity` tiers a frame or shell can take.
 ///
-/// Mirrors `model_inspect/fidelity.rs::classify_frame` at 9eb1c879. The backend
+/// Mirrors `model_inspect/fidelity.rs` `classify_frame`/`classify_shell` at 9eb1c879. The backend
 /// classification is the authority; this mirror exists only until the native
 /// host can consume it (#18 holds `ext-api`), and must never be more optimistic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum GeometryFidelity {
+    Exact,
     Resolved,
     Approximate,
     Symbolic,
@@ -117,6 +121,8 @@ pub enum FrameReason {
     CardinalPointOffsetIgnored,
     FrameJointOffsetsIgnored,
     SectionMirrorIgnored,
+    /// The projection flagged the member `NoStoryBelow`: drawn planar.
+    DegenerateExtrusion,
     /// Native only: where the backend's viewer draws a bare centreline, this
     /// one draws the configured fixed proxy so the member stays pickable.
     FixedDisplayProxy,
@@ -139,6 +145,80 @@ impl FrameSource {
         self.fidelity != GeometryFidelity::Symbolic
     }
 }
+/// `ext-api` `SceneFidelityReason` names for shells, in backend declaration order.
+///
+/// Opening reasons describe the backend's drawing; this viewer withholds
+/// such shells instead, which `EntityMesh::limitation` records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ShellReason {
+    ShellThicknessAmbiguous,
+    ShellThicknessFamilyUnmodeled,
+    ShellInsertionPointIgnored,
+    ShellOpeningRenderedAsSolid,
+    ShellOpeningNotSubtracted,
+    DegenerateExtrusion,
+}
+/// What the shell's property definition says about its body thickness. Kept
+/// distinct because "no thickness" has several different source meanings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThicknessSource {
+    /// No section assigned.
+    NoSection,
+    /// The assigned section has no definition in this file.
+    DefinitionMissing,
+    /// The definition declares no positive body (zero/negative/absent fields).
+    Undeclared,
+    /// Slab and wall fields disagree; the parser refuses to choose.
+    Ambiguous,
+    /// A family (e.g. deck) whose thickness fields the parser does not read.
+    FamilyUnmodeled,
+    /// A positive source thickness, in range for drawing.
+    Resolved,
+    /// A source thickness outside this viewer's drawable range (not finite, at
+    /// most 1e-7 m, or above 20 m); reported and drawn flat, never clamped.
+    OutOfRange,
+}
+/// Where the drawn shell sits relative to its source body. This is a native
+/// display status, never an upgrade of the canonical `ext-api` fidelity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShellPlacement {
+    /// MIDDLE: drawn ±t/2 about the ring, which is the shell's mid-surface.
+    CentredMiddle,
+    /// TOP/BOTTOM with a thickness: the ring is a true face of the body, drawn
+    /// flat. Which side the body occupies needs the shell local-3 direction,
+    /// which the pinned source does not certify, so it is not extruded.
+    FlatAtDeclaredFace,
+    /// A thickness with an absent or unrecognised insertion: the ring's place
+    /// within the body is unknown; drawn flat, never assumed MIDDLE.
+    FlatInsertionUnproven,
+    /// The definition declares no positive body (`Undeclared`): the flat ring
+    /// is the whole modeled shell surface.
+    FlatNoDeclaredBody,
+    /// The body is unknown or not rendered: no section, a missing definition,
+    /// an ambiguous or unmodeled thickness, or a thickness outside the drawable
+    /// range. The flat ring is not the modeled body.
+    FlatBodyUnresolved,
+    /// Not drawn (`EntityMesh::limitation` says why).
+    Withheld,
+}
+impl ShellPlacement {
+    /// What the native viewer actually displays, independent of the canonical
+    /// backend fidelity tier, which describes the backend's own drawing.
+    pub fn native_display(self) -> &'static str {
+        match self {
+            Self::CentredMiddle => "body drawn ±t/2 about the ring (MIDDLE)",
+            Self::FlatAtDeclaredFace => {
+                "flat ring only: a TOP/BOTTOM face; body thickness omitted (side unproven)"
+            }
+            Self::FlatInsertionUnproven => {
+                "flat ring only: body thickness omitted (insertion absent or unrecognised)"
+            }
+            Self::FlatNoDeclaredBody => "flat ring: the source declares no body",
+            Self::FlatBodyUnresolved => "flat ring only: body unresolved or not rendered",
+            Self::Withheld => "not drawn",
+        }
+    }
+}
 /// Source shell attributes for an inspector, in metres where dimensional.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShellSource {
@@ -150,8 +230,12 @@ pub struct ShellSource {
     /// pinned `ext-api`, only an explicit `true` makes a void, so such a shell
     /// is drawn and this field is what discloses that nothing was declared.
     pub opening: Option<bool>,
-    /// Surfaces are zero thickness at the connectivity plane; always false today.
+    pub thickness_source: ThicknessSource,
+    pub placement: ShellPlacement,
+    /// Whether the body is drawn with its thickness (`CentredMiddle` only).
     pub thickness_drawn: bool,
+    pub fidelity: GeometryFidelity,
+    pub reasons: Vec<ShellReason>,
 }
 #[derive(Clone, Debug)]
 pub struct EntityMesh {
@@ -323,6 +407,7 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
         entities: Vec::new(),
         seen: BTreeSet::new(),
         origin_m,
+        degenerate: degenerate_keys(&scene.skipped),
     };
     for frame in &scene.frames {
         let section = frame
@@ -331,7 +416,7 @@ pub fn build(source: &[u8], config: Config) -> Result<Mesh, Error> {
             .and_then(|section| model.find_frame_section(section.as_str()));
         builder.frame(frame, section, factor, config.proxy_half_extents_m)?;
     }
-    builder.shells(&scene.shells, factor)?;
+    builder.shells(&model, &scene.shells, factor)?;
     if builder.indices.is_empty() {
         return Err(Error::NoGeometry);
     }
@@ -426,6 +511,7 @@ struct Builder {
     entities: Vec<EntityMesh>,
     seen: BTreeSet<String>,
     origin_m: Point,
+    degenerate: BTreeSet<String>,
 }
 impl Builder {
     fn frame(
@@ -447,7 +533,12 @@ impl Builder {
             FrameKind::Brace => SourceClass::Brace,
             _ => SourceClass::OtherFrame,
         };
-        let source = frame_source(frame, section, factor);
+        let mut source = frame_source(frame, section, factor);
+        if self.degenerate.contains(&frame.key.as_stable_str()) {
+            source.reasons.push(FrameReason::DegenerateExtrusion);
+            source.reasons.sort_unstable();
+            source.fidelity = source.fidelity.max(GeometryFidelity::Approximate);
+        }
         let half_extents = if source.swept() {
             [source.depth_m, source.width_m].map(|v| v.unwrap_or(0.0) / 2.0)
         } else {
@@ -491,7 +582,24 @@ impl Builder {
         Ok(())
     }
     /// Opening attribution needs every ring first, so shells are built together.
-    fn shells(&mut self, shells: &[ext_e2k::ShellPolygon], factor: f64) -> Result<(), Error> {
+    fn shells(
+        &mut self,
+        model: &ext_e2k::BuildingModel,
+        shells: &[ext_e2k::ShellPolygon],
+        factor: f64,
+    ) -> Result<(), Error> {
+        // The definition's own typed answer, reached by the resolved section
+        // name exactly as the backend classifier reaches it.
+        let thicknesses: Vec<_> = shells
+            .iter()
+            .map(|shell| {
+                shell
+                    .section
+                    .as_ref()
+                    .and_then(|section| model.find_shell_section(section.as_str()))
+                    .map(ext_e2k::ShellPropDef::effective_thickness)
+            })
+            .collect();
         let rings = shells
             .iter()
             .map(|shell| {
@@ -512,6 +620,12 @@ impl Builder {
             .collect();
         let hosts = openings::authoritative_hosts(shells);
         for (index, (shell, ring)) in shells.iter().zip(&rings).enumerate() {
+            let (fidelity, reasons) = shell_fidelity(
+                shell,
+                thicknesses.get(index).copied().flatten(),
+                hosts.contains(&index),
+                self.degenerate.contains(&shell.key.as_stable_str()),
+            );
             let opening = if shell.opening == Some(true) {
                 None
             } else if hosts.contains(&index) {
@@ -524,7 +638,15 @@ impl Builder {
             } else {
                 None
             };
-            self.shell(shell, ring, factor, opening)?;
+            let definition = thicknesses.get(index).copied().flatten();
+            let thickness_source = thickness_source(shell, definition, factor);
+            self.shell(
+                shell,
+                ring,
+                factor,
+                opening,
+                (fidelity, reasons, thickness_source),
+            )?;
         }
         Ok(())
     }
@@ -534,6 +656,11 @@ impl Builder {
         points: &[Point],
         factor: f64,
         opening_limitation: Option<Limitation>,
+        (fidelity, reasons, thickness_source): (
+            GeometryFidelity,
+            Vec<ShellReason>,
+            ThicknessSource,
+        ),
     ) -> Result<(), Error> {
         if !self.seen.insert(shell.key.as_stable_str()) {
             return Err(Error::DuplicateIdentity);
@@ -544,28 +671,58 @@ impl Builder {
             _ => SourceClass::OtherShell,
         };
         let first = self.index()?;
+        let thickness_m = shell
+            .thickness
+            .map(|t| t * factor)
+            .filter(|_| thickness_source == ThicknessSource::Resolved);
+        let face = match (thickness_m, shell.insertion_point.as_ref()) {
+            (None, _) if thickness_source == ThicknessSource::Undeclared => {
+                ShellPlacement::FlatNoDeclaredBody
+            }
+            (None, _) => ShellPlacement::FlatBodyUnresolved,
+            (Some(_), Some(ShellInsertionPoint::Middle)) => ShellPlacement::CentredMiddle,
+            (Some(_), Some(ShellInsertionPoint::Top | ShellInsertionPoint::Bottom)) => {
+                ShellPlacement::FlatAtDeclaredFace
+            }
+            (Some(_), Some(ShellInsertionPoint::Other(_)) | None) => {
+                ShellPlacement::FlatInsertionUnproven
+            }
+        };
+        let triangulated = convex_normal(points)
+            .map(|normal| {
+                let fan = (1..points.len() - 1).map(|i| [0, i, i + 1]).collect();
+                (normal, fan)
+            })
+            .or_else(|| triangulate::ear_clip(points));
         let limitation = if shell.opening == Some(true) {
             Some(Limitation::OpeningVoid)
         } else if opening_limitation.is_some() {
             opening_limitation
-        } else if let Some(normal) = convex_normal(points) {
-            self.polygon(points, normal, color(class))?;
-            None
-        } else if let Some((normal, triangles)) = triangulate::ear_clip(points) {
-            self.triangles(points, &triangles, normal, color(class))?;
+        } else if let Some((normal, triangles)) = triangulated {
+            if let (ShellPlacement::CentredMiddle, Some(t)) = (face, thickness_m) {
+                self.slab(points, &triangles, normal, t, color(class))?;
+            } else {
+                self.triangles(points, &triangles, normal, color(class))?;
+            }
             None
         } else {
             Some(Limitation::InvalidShellRing)
         };
+        let placement = if limitation.is_some() {
+            ShellPlacement::Withheld
+        } else {
+            face
+        };
+        let extruded = placement == ShellPlacement::CentredMiddle;
         self.entities.push(EntityMesh {
             key: shell.key.clone(),
             story: shell.story.as_str().into(),
             class,
             indices: first..self.index()?,
-            mode: if limitation.is_none() {
-                DisplayMode::ZeroThicknessSurface
-            } else {
-                DisplayMode::Withheld
+            mode: match (limitation, extruded) {
+                (Some(_), _) => DisplayMode::Withheld,
+                (None, true) => DisplayMode::ExtrudedShell,
+                (None, false) => DisplayMode::ZeroThicknessSurface,
             },
             limitation,
             source_centerline_m: None,
@@ -581,7 +738,11 @@ impl Builder {
                     ShellInsertionPoint::Other(value) => value.as_str().into(),
                 }),
                 opening: shell.opening,
-                thickness_drawn: false,
+                thickness_source,
+                placement,
+                thickness_drawn: extruded,
+                fidelity,
+                reasons,
             }),
         });
 
@@ -589,6 +750,36 @@ impl Builder {
     }
     fn index(&self) -> Result<u32, Error> {
         u32::try_from(self.indices.len()).map_err(|_private_error| Error::Budget)
+    }
+    /// A ring extruded ±t/2 about itself: both caps from the ring's own
+    /// triangulation and one outward quad per edge (ring CCW about `normal`).
+    fn slab(
+        &mut self,
+        points: &[Point],
+        triangles: &[[usize; 3]],
+        normal: Point,
+        thickness: f64,
+        color: [f32; 3],
+    ) -> Result<(), Error> {
+        let half = normal.map(|v| v * thickness / 2.0);
+        let top: Vec<Point> = points
+            .iter()
+            .map(|p| std::array::from_fn(|i| p[i] + half[i]))
+            .collect();
+        let bottom: Vec<Point> = points
+            .iter()
+            .map(|p| std::array::from_fn(|i| p[i] - half[i]))
+            .collect();
+        self.triangles(&top, triangles, normal, color)?;
+        let reversed: Vec<_> = triangles.iter().map(|[a, b, c]| [*a, *c, *b]).collect();
+        self.triangles(&bottom, &reversed, normal.map(|v| -v), color)?;
+        for i in 0..points.len() {
+            let j = (i + 1) % points.len();
+            let outward =
+                unit(cross(sub(points[j], points[i]), normal)).ok_or(Error::InvalidGeometry)?;
+            self.polygon(&[bottom[i], bottom[j], top[j], top[i]], outward, color)?;
+        }
+        Ok(())
     }
     fn polygon(&mut self, points: &[Point], normal: Point, color: [f32; 3]) -> Result<(), Error> {
         let fan: Vec<[usize; 3]> = (1..points.len().saturating_sub(1))
@@ -645,6 +836,80 @@ impl Builder {
         }
         Ok(())
     }
+}
+/// The definition's thickness state, with the native drawable bound applied
+/// visibly (`OutOfRange`) rather than as a silent clamp.
+fn thickness_source(
+    shell: &ext_e2k::ShellPolygon,
+    definition: Option<ShellThickness>,
+    factor: f64,
+) -> ThicknessSource {
+    match definition {
+        None if shell.section.is_none() => ThicknessSource::NoSection,
+        None => ThicknessSource::DefinitionMissing,
+        Some(ShellThickness::Undeclared) => ThicknessSource::Undeclared,
+        Some(ShellThickness::Ambiguous) => ThicknessSource::Ambiguous,
+        Some(ShellThickness::Unavailable { .. }) => ThicknessSource::FamilyUnmodeled,
+        Some(ShellThickness::Resolved { .. }) => {
+            let drawable = shell
+                .thickness
+                .map(|t| t * factor)
+                .is_some_and(|t| t.is_finite() && t > EPS && t <= MAX_SECTION_M);
+            if drawable {
+                ThicknessSource::Resolved
+            } else {
+                ThicknessSource::OutOfRange
+            }
+        }
+    }
+}
+/// Keys the projection emitted but flagged planar (`NoStoryBelow`), which the
+/// backend classifies as `DegenerateExtrusion`.
+fn degenerate_keys(skipped: &[ext_e2k::SkippedEntity]) -> BTreeSet<String> {
+    skipped
+        .iter()
+        .filter(|skip| skip.reason == SkipReason::NoStoryBelow)
+        .map(|skip| skip.key.as_stable_str())
+        .collect()
+}
+/// Mirrors `ext-api` `classify_shell`: thickness the definition cannot answer
+/// for, an insertion other than MIDDLE when a body is drawn (undeclared counts,
+/// as the backend's `Unproven`), the two opening statements and a flagged
+/// planar extrusion. Never more optimistic than the backend.
+fn shell_fidelity(
+    shell: &ext_e2k::ShellPolygon,
+    thickness: Option<ShellThickness>,
+    host: bool,
+    degenerate: bool,
+) -> (GeometryFidelity, Vec<ShellReason>) {
+    let mut reasons = Vec::new();
+    match thickness {
+        Some(ShellThickness::Ambiguous) => reasons.push(ShellReason::ShellThicknessAmbiguous),
+        Some(ShellThickness::Unavailable { .. }) => {
+            reasons.push(ShellReason::ShellThicknessFamilyUnmodeled);
+        }
+        Some(ShellThickness::Resolved { .. } | ShellThickness::Undeclared) | None => {}
+    }
+    if shell.thickness.is_some_and(|t| t > 0.0)
+        && !matches!(shell.insertion_point, Some(ShellInsertionPoint::Middle))
+    {
+        reasons.push(ShellReason::ShellInsertionPointIgnored);
+    }
+    if shell.opening == Some(true) {
+        reasons.push(ShellReason::ShellOpeningRenderedAsSolid);
+    }
+    if host {
+        reasons.push(ShellReason::ShellOpeningNotSubtracted);
+    }
+    if degenerate {
+        reasons.push(ShellReason::DegenerateExtrusion);
+    }
+    let fidelity = if reasons.is_empty() {
+        GeometryFidelity::Exact
+    } else {
+        GeometryFidelity::Approximate
+    };
+    (fidelity, reasons)
 }
 /// Largest source section dimension accepted as drawable, in metres.
 const MAX_SECTION_M: f64 = 20.0;

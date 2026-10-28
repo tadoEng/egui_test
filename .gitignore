@@ -21,3 +21,6 @@ output/playwright/
 *.EDB
 # Independently authored public REAL-01 fixture; all other model exports stay ignored.
 !assets/fixtures/real01.e2k
+# Independently authored public REAL-03 shell fixtures (generated from the public
+# two-story fixture; sha256 in ../fixtures.sha256). Nothing else under docs.
+!docs/native/evidence/real03-shells/fixtures/*.e2k

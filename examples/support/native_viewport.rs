@@ -1192,7 +1192,7 @@ fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
     let metres = |v: Option<f64>| v.map_or_else(|| "—".to_owned(), |v| format!("{v:.3} m"));
     let detail = if let Some(frame) = &entity.frame {
         format!(
-            "section {} · {} · material {} · D {} × B {} · {:?} {:?}",
+            "section {} · {} · material {} · D {} × B {} · backend fidelity {:?} {:?}",
             frame.section.as_deref().unwrap_or("unassigned"),
             frame.shape.as_deref().unwrap_or("shape unknown"),
             frame.material.as_deref().unwrap_or("—"),
@@ -1203,16 +1203,26 @@ fn describe(entity: &lab_e2k_mesh::EntityMesh) -> String {
         )
     } else if let Some(shell) = &entity.shell {
         format!(
-            "section {} · material {} · t {} (not drawn) · insertion {} · opening {}",
+            "section {} · material {} · t {} ({:?}, {}) · insertion {} · native display: {} ({:?}) · opening {} · backend fidelity {:?} {:?}",
             shell.section.as_deref().unwrap_or("unassigned"),
             shell.material.as_deref().unwrap_or("—"),
             metres(shell.thickness_m),
+            shell.thickness_source,
+            if shell.thickness_drawn {
+                "drawn ±t/2 about ring"
+            } else {
+                "not drawn"
+            },
             shell.insertion_point.as_deref().unwrap_or("undeclared"),
+            shell.placement.native_display(),
+            shell.placement,
             match shell.opening {
                 Some(true) => "declared void",
                 Some(false) => "declared no",
                 None => "not declared by source",
             },
+            shell.fidelity,
+            shell.reasons,
         )
     } else {
         String::new()
@@ -1826,6 +1836,59 @@ mod tests {
         );
         let described = describe(&mesh.source_entities[floor]);
         assert!(described.contains("FloorShell") && described.contains("not drawn"));
+    }
+
+    #[cfg(feature = "real-workbench")]
+    #[test]
+    fn inspector_separates_backend_fidelity_from_what_is_natively_displayed() {
+        let fixtures = [
+            (
+                "outofrange",
+                include_str!("../../docs/native/evidence/real03-shells/fixtures/outofrange.e2k"),
+            ),
+            (
+                "nosection",
+                include_str!("../../docs/native/evidence/real03-shells/fixtures/nosection.e2k"),
+            ),
+            (
+                "missingdef",
+                include_str!("../../docs/native/evidence/real03-shells/fixtures/missingdef.e2k"),
+            ),
+            (
+                "ambiguous",
+                include_str!("../../docs/native/evidence/real03-shells/fixtures/ambiguous.e2k"),
+            ),
+            (
+                "deck",
+                include_str!("../../docs/native/evidence/real03-shells/fixtures/deck.e2k"),
+            ),
+        ];
+        for (name, text) in fixtures {
+            let mesh =
+                source_mesh(lab_e2k_mesh::build(text.as_bytes(), Default::default()).expect(name));
+            let slab = mesh
+                .source_entities
+                .iter()
+                .find(|e| e.class == lab_e2k_mesh::SourceClass::FloorShell)
+                .expect("floor");
+            let shown = describe(slab);
+            assert!(shown.contains("backend fidelity"), "{name}: {shown}");
+            assert!(
+                shown.contains("native display: flat ring only: body unresolved or not rendered"),
+                "{name}: {shown}"
+            );
+            assert!(!shown.contains("body drawn"), "{name}: {shown}");
+        }
+        let middle = include_str!("../../docs/native/evidence/real03-shells/fixtures/middle.e2k");
+        let mesh = source_mesh(
+            lab_e2k_mesh::build(middle.as_bytes(), Default::default()).expect("middle"),
+        );
+        let slab = mesh
+            .source_entities
+            .iter()
+            .find(|e| e.class == lab_e2k_mesh::SourceClass::FloorShell)
+            .expect("floor");
+        assert!(describe(slab).contains("native display: body drawn ±t/2 about the ring (MIDDLE)"));
     }
 
     #[cfg(feature = "real-workbench")]
