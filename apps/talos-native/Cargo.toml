@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
-description = "Experimental TALOS native application shell (APP-01A): read-only, public synthetic data only"
+description = "Experimental TALOS native application (APP-01): read-only; public fixtures or explicitly named version folders"
 publish = false
 
-[dependencies]
+# A desktop application: native only. On wasm32 the library is empty and the
+# binary is a no-op (lab-results needs ext-calc, which cannot target wasm32).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 eframe = "0.37.0"
 egui = "0.37.0"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
@@ -16,8 +18,6 @@ lab-viewport = { path = "../../crates/lab-viewport" }
 lab-results = { path = "../../crates/lab-results" }
 log = "0.4.34"
 web-time = "1.1.0"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.11"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
