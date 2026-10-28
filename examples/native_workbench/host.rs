@@ -36,7 +36,11 @@ type SmokeReport = Arc<Mutex<Option<serde_json::Value>>>;
 
 pub(crate) fn run() -> eframe::Result {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let public = args.len() == 1 && args[0] == "--public-workbench-smoke";
+    let smoke_mode = args.len() == 1 && args[0] == "--public-workbench-smoke";
+    // Visible manual testing on an owned temporary copy of the authored public
+    // fixture: never a user path, never a real snapshot, removed on exit.
+    let interactive = args.len() == 1 && args[0] == "--public-workbench-interactive";
+    let public = smoke_mode || interactive;
     let check = args.len() == 2 && args[0] == "--check-only";
     let owned = if public {
         Some(model::public_fixture().map_err(failure)?)
@@ -57,7 +61,7 @@ pub(crate) fn run() -> eframe::Result {
         [path] if !path.to_string_lossy().starts_with("--") => PathBuf::from(path),
         _ => {
             return Err(failure(
-                "Usage: native_workbench <version-directory> | --check-only <version-directory> | --public-workbench-smoke",
+                "Usage: native_workbench <version-directory> | --check-only <version-directory> | --public-workbench-smoke | --public-workbench-interactive",
             ));
         }
     };
@@ -68,14 +72,21 @@ pub(crate) fn run() -> eframe::Result {
     let mesh = session.mesh.take().ok_or_else(|| failure("mesh_missing"))?;
     let receipt: SmokeReport = Arc::new(Mutex::new(None));
     let result = Arc::clone(&receipt);
-    let smoke = owned.as_ref().map(|input| Smoke::new(input, result));
+    let smoke = owned
+        .as_ref()
+        .filter(|_| smoke_mode)
+        .map(|input| Smoke::new(input, result));
+    let interactive_fixture = owned
+        .as_ref()
+        .filter(|_| interactive)
+        .map(|input| input.path().to_owned());
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         depth_buffer: 24,
         persist_window: false,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("talos-read-only-version-workbench")
-            .with_visible(!public)
+            .with_visible(!smoke_mode)
             .with_inner_size([1540.0, 960.0])
             .with_min_inner_size([960.0, 640.0]),
         ..Default::default()
@@ -96,9 +107,15 @@ pub(crate) fn run() -> eframe::Result {
                 rejected: 0,
                 transport_error: false,
                 smoke,
+                interactive_fixture,
             }))
         }),
     )?;
+    if interactive {
+        // Dropping the TempDir removes the owned fixture; there is no receipt.
+        drop(owned);
+        return Ok(());
+    }
     if let Some(owned) = owned {
         let path = owned.path().to_owned();
         drop(owned);
@@ -133,6 +150,9 @@ struct Workbench {
     rejected: u64,
     transport_error: bool,
     smoke: Option<Smoke>,
+    /// Owned public fixture of `--public-workbench-interactive`, the only
+    /// path the visible UNLINKED test control may write a marker into.
+    interactive_fixture: Option<PathBuf>,
 }
 impl Workbench {
     fn controls(&mut self, ui: &mut egui::Ui) {
@@ -145,6 +165,11 @@ impl Workbench {
             ui.horizontal_wrapped(|ui| {
                 if ui.button("Recheck selected version").clicked() { let _checked = self.session.recheck(); }
                 if ui.button("Fit geometry").clicked() { self.viewport.fit(); }
+                if let Some(input) = &self.interactive_fixture
+                    && ui.add_enabled(self.session.linked, egui::Button::new("UNLINK test: invalidate owned public fixture")).clicked()
+                {
+                    let _proof = invalidate_owned_fixture(input, &mut self.session);
+                }
                 ui.add_enabled_ui(self.session.linked, |ui| {
                     if ui.button("Clear selection").clicked() { let _selection = self.session.select(None); }
                     ui.selectable_value(&mut config.direction, Direction::X, "X");
@@ -161,7 +186,7 @@ impl Workbench {
             ui.small(format!("Geometry: {} · cached plots: {} · manifest: {} · metadata: {} / {} · QA: {}",
                 report.geometry_ready, report.supported_plots_ready, report.manifest_analysis,
                 report.metadata_analysis, report.metadata_story_coherence, report.engineering_check_status));
-            ui.small("Metres in 3D; stored chart units. Gold = source-assigned story ranges, not a geometric storey cut or member-result contour. No picking in this slice.");
+            ui.small("Metres in 3D; stored chart units. Gold = source-assigned story ranges, not a geometric storey cut or member-result contour. Click a member to inspect it; Ctrl/Cmd-click toggles; picking is CPU ray casting against drawn geometry and is disabled while UNLINKED.");
             if !self.session.linked {
                 ui.colored_label(egui::Color32::LIGHT_RED, "UNLINKED: selected inputs changed or became unreadable. Last valid display retained; selection disabled. Reopen the version to adopt files.");
             }
@@ -370,40 +395,50 @@ impl Smoke {
     }
 
     fn invalidate_owned_fixture(&self, session: &mut Session) -> Option<UnlinkProof> {
-        let paths = [
-            "manifest.json",
-            "results/calc_output.json",
-            "results/source-units.json",
-            "authored.e2k",
-        ]
-        .map(|name| self.public_input.join(name));
-        let originals = paths
-            .iter()
-            .map(|path| Ok((std::fs::read(path)?, std::fs::metadata(path)?.modified()?)))
-            .collect::<std::io::Result<Vec<_>>>()
-            .ok()?;
-        let marker = self.public_input.join(".partial");
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&marker)
-            .ok()?;
-        drop(file);
-        let changed_recheck_refused = session.recheck().is_err() && !session.linked;
-        std::fs::remove_file(marker).ok()?;
-        let restored_recheck_refused = session.recheck().is_err() && !session.linked;
-        let original_inputs_unchanged = paths.iter().zip(originals).all(|(path, (bytes, time))| {
-            std::fs::read(path).is_ok_and(|current| current == bytes)
-                && std::fs::metadata(path)
-                    .and_then(|metadata| metadata.modified())
-                    .is_ok_and(|current| current == time)
-        });
-        Some(UnlinkProof {
-            original_inputs_unchanged,
-            changed_recheck_refused,
-            restored_recheck_refused,
-        })
+        invalidate_owned_fixture(&self.public_input, session)
     }
+}
+
+/// Exercise UNLINKED on an owned public fixture only: create a `.partial`
+/// marker (never clobbering one), recheck, remove it, recheck again, and prove
+/// every input file kept its bytes and modification time.
+fn invalidate_owned_fixture(
+    public_input: &std::path::Path,
+    session: &mut Session,
+) -> Option<UnlinkProof> {
+    let paths = [
+        "manifest.json",
+        "results/calc_output.json",
+        "results/source-units.json",
+        "authored.e2k",
+    ]
+    .map(|name| public_input.join(name));
+    let originals = paths
+        .iter()
+        .map(|path| Ok((std::fs::read(path)?, std::fs::metadata(path)?.modified()?)))
+        .collect::<std::io::Result<Vec<_>>>()
+        .ok()?;
+    let marker = public_input.join(".partial");
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&marker)
+        .ok()?;
+    drop(file);
+    let changed_recheck_refused = session.recheck().is_err() && !session.linked;
+    std::fs::remove_file(marker).ok()?;
+    let restored_recheck_refused = session.recheck().is_err() && !session.linked;
+    let original_inputs_unchanged = paths.iter().zip(originals).all(|(path, (bytes, time))| {
+        std::fs::read(path).is_ok_and(|current| current == bytes)
+            && std::fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .is_ok_and(|current| current == time)
+    });
+    Some(UnlinkProof {
+        original_inputs_unchanged,
+        changed_recheck_refused,
+        restored_recheck_refused,
+    })
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -627,6 +662,16 @@ mod tests {
         assert!(!session.linked && session.packet.selected_story.is_none());
         assert!(session.select(Some("Roof".into())).is_err());
         assert!(session.recheck().is_err());
+    }
+
+    #[test]
+    fn interactive_unlink_control_uses_the_same_owned_fixture_guard() {
+        let input = model::public_fixture().expect("authored input");
+        let mut session = Session::load(input.path()).expect("checked version");
+        let proof = invalidate_owned_fixture(input.path(), &mut session).expect("owned control");
+        assert!(proof.original_inputs_unchanged);
+        assert!(proof.changed_recheck_refused && proof.restored_recheck_refused);
+        assert!(!session.linked && !input.path().join(".partial").exists());
     }
 
     #[test]
