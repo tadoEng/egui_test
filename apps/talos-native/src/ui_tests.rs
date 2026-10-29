@@ -1425,7 +1425,20 @@ fn native_navigation_refuses_a_queued_chart_click_in_the_same_frame() {
     settle(&mut harness);
     let old = chart_message(&probe.borrow(), "select_story", Some("Roof"));
     probe.borrow_mut().inbox.push(old);
-    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num1);
+    // The shortcut helper runs a modifier-only frame before the key press.
+    // Batch the key and modifiers so navigation and IPC share the same frame.
+    let input = harness.input_mut();
+    input.events.extend([
+        egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+        egui::Event::Key {
+            key: egui::Key::Num1,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        },
+    ]);
+    harness.step();
     settle(&mut harness);
     assert_eq!(harness.state().state().workspace, Workspace::Model);
     assert_eq!(harness.state().state().results.story, None);
