@@ -1242,11 +1242,11 @@ impl crate::chart_bridge::EmbeddedChart for FakeChart {
     ) -> Vec<Action> {
         let mut probe = self.0.borrow_mut();
         let inbox = std::mem::take(&mut probe.inbox);
+        probe.bridge.update(content).expect("update");
         let actions = inbox
             .iter()
             .filter_map(|raw| probe.bridge.accept(raw).ok())
             .collect();
-        probe.bridge.update(content).expect("update");
         probe.area = area;
         probe.synced += 1;
         actions
@@ -1384,23 +1384,65 @@ fn chart_messages_select_only_in_the_frame_shown_and_forward_shortcuts() {
     );
     assert_eq!(probe.borrow().bridge.refused(), 1);
     // Workspace shortcuts typed while the chart has focus still work.
-    probe
-        .borrow_mut()
-        .inbox
-        .push(r#"{"protocol":1,"type":"shortcut","key":"Digit1"}"#.into());
+    let mut key: serde_json::Value =
+        serde_json::from_str(&chart_message(&probe.borrow(), "shortcut", None)).expect("message");
+    key["key"] = "Digit1".into();
+    probe.borrow_mut().inbox.push(key.to_string());
     harness.run_ok();
     assert_eq!(harness.state().state().workspace, Workspace::Model);
 }
 
 #[test]
-fn an_unavailable_chart_window_leaves_the_native_chart() {
+fn an_unavailable_chart_is_explicit_without_a_native_chart_fallback() {
     let (mut harness, probe) = results_with_chart(false);
     harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
     settle(&mut harness);
     assert_eq!(probe.borrow().area, None);
     assert!(probe.borrow().bridge.frame().is_none());
-    // The native chart still takes clicks: the page draws it.
+    assert!(present(&harness, "ECharts / WebView2 unavailable"));
     let chart = harness.get_by_label_contains("Chart: Story drift").rect();
     click_at(&mut harness, chart.center(), egui::Modifiers::NONE);
-    assert!(harness.state().state().results.story.is_some());
+    assert_eq!(
+        harness.state().state().results.story,
+        None,
+        "No silent alternate renderer"
+    );
+    harness
+        .get_by_label("Roof  ·  0.00200  ·  -0.00250")
+        .click();
+    settle(&mut harness);
+    assert_eq!(
+        harness.state().state().results.story.as_deref(),
+        Some("Roof"),
+        "Stored table remains readable"
+    );
+}
+
+#[test]
+fn native_navigation_refuses_a_queued_chart_click_in_the_same_frame() {
+    let (mut harness, probe) = results_with_chart(true);
+    harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num2);
+    settle(&mut harness);
+    let old = chart_message(&probe.borrow(), "select_story", Some("Roof"));
+    probe.borrow_mut().inbox.push(old);
+    // The shortcut helper runs a modifier-only frame before the key press.
+    // Batch the key and modifiers so navigation and IPC share the same frame.
+    let input = harness.input_mut();
+    input.events.extend([
+        egui::Event::ModifiersChanged(egui::Modifiers::COMMAND),
+        egui::Event::Key {
+            key: egui::Key::Num1,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        },
+    ]);
+    harness.step();
+    settle(&mut harness);
+    assert_eq!(harness.state().state().workspace, Workspace::Model);
+    assert_eq!(harness.state().state().results.story, None);
+    assert_eq!(probe.borrow().area, None);
+    assert!(probe.borrow().bridge.frame().is_none());
+    assert!(probe.borrow().bridge.refused() > 0);
 }

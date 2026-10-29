@@ -7122,6 +7122,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "web-time",
+ "windows-sys 0.61.2",
  "wry",
 ]
 

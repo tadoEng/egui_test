@@ -189,7 +189,12 @@ fn malformed_oversized_and_unknown_messages_are_refused() {
 #[test]
 fn only_workspace_shortcuts_are_forwarded() {
     let mut bridge = Bridge::default();
-    let key = |key: &str| format!(r#"{{"protocol":1,"type":"shortcut","key":"{key}"}}"#);
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("frame");
+    let key = |key: &str| {
+        serde_json::json!({"protocol":1,"type":"shortcut","key":key,"version":"main/v2","source":"abc123","generation":1}).to_string()
+    };
     assert!(matches!(
         bridge.accept(&key("Digit1")),
         Ok(Action::SelectWorkspace(Workspace::Model))
@@ -209,8 +214,19 @@ fn only_workspace_shortcuts_are_forwarded() {
     for refused in [key("KeyQ"), key("Digit6")] {
         assert_eq!(bridge.accept(&refused).err(), Some(Refused::UnknownKind));
     }
-    let with_story = r#"{"protocol":1,"type":"shortcut","key":"Digit1","story":"L2"}"#;
-    assert_eq!(bridge.accept(with_story).err(), Some(Refused::Malformed));
+    let mut with_story: serde_json::Value = serde_json::from_str(&key("Digit1")).expect("message");
+    with_story["story"] = "L2".into();
+    assert_eq!(
+        bridge.accept(&with_story.to_string()).err(),
+        Some(Refused::Malformed)
+    );
+    let old = key("Digit1");
+    bridge.update(None).expect("hidden Model");
+    assert_eq!(bridge.accept(&old).err(), Some(Refused::Stale));
+    bridge
+        .update(Some(content("Story shear", None)))
+        .expect("return");
+    assert_eq!(bridge.accept(&old).err(), Some(Refused::Stale));
 }
 
 #[test]
@@ -245,7 +261,13 @@ fn the_chart_pages_own_messages_are_accepted_and_go_stale() {
         .iter()
         .partition(|raw| !raw.contains(r#""generation":2"#));
     for raw in &first {
-        assert!(bridge.accept(raw).is_ok(), "{raw}");
+        // Preserve the historical browser receipt. Its old unscoped shortcuts
+        // are now refused; do not edit old evidence to imply a new browser run.
+        if raw.contains("shortcut") {
+            assert_eq!(bridge.accept(raw).err(), Some(Refused::Stale));
+        } else {
+            assert!(bridge.accept(raw).is_ok(), "{raw}");
+        }
     }
     // The page was then sent generation 2 ("Story moment").
     bridge
