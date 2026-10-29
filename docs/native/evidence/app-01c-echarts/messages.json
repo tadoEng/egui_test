@@ -1,0 +1,9 @@
+[
+ "{\"protocol\":1,\"type\":\"ready\"}",
+ "{\"protocol\":1,\"type\":\"select_story\",\"story\":\"L2\",\"version\":\"main/v2\",\"source\":\"abc123\",\"generation\":1}",
+ "{\"protocol\":1,\"type\":\"clear_selection\",\"story\":null,\"version\":\"main/v2\",\"source\":\"abc123\",\"generation\":1}",
+ "{\"protocol\":1,\"type\":\"clear_selection\",\"story\":null,\"version\":\"main/v2\",\"source\":\"abc123\",\"generation\":1}",
+ "{\"protocol\":1,\"type\":\"shortcut\",\"key\":\"Digit2\"}",
+ "{\"protocol\":1,\"type\":\"shortcut\",\"key\":\"PageDown\"}",
+ "{\"protocol\":1,\"type\":\"select_story\",\"story\":\"Roof\",\"version\":\"main/v2\",\"source\":\"abc123\",\"generation\":2}"
+]

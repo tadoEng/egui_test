@@ -17,12 +17,19 @@ lab-e2k-mesh = { path = "../../crates/lab-e2k-mesh" }
 lab-viewport = { path = "../../crates/lab-viewport" }
 lab-results = { path = "../../crates/lab-results" }
 log = "0.4.34"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.145"
 web-time = "1.1.0"
 env_logger = "0.11.11"
 
+# The Results chart as ECharts in a WebView2 child window (Windows only), on
+# the same transport and pinned versions as the Windows examples.
+[target.'cfg(target_os = "windows")'.dependencies]
+base64 = "0.22.1"
+wry = "=0.55.1"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { version = "0.37.0", features = ["eframe"] }
-serde_json = "1.0.145"
 tempfile = "3.27.0"
 
 [lints]

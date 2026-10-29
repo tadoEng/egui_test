@@ -7108,6 +7108,7 @@ dependencies = [
 name = "talos-native"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "eframe",
  "egui",
  "egui_kittest",
@@ -7117,9 +7118,11 @@ dependencies = [
  "lab-results",
  "lab-viewport",
  "log",
+ "serde",
  "serde_json",
  "tempfile",
  "web-time",
+ "wry",
 ]
 
 [[package]]

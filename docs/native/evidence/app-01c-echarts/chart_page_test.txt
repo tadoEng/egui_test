@@ -1,0 +1,12 @@
+ok   ready is the first and only message on load
+ok   frame applied
+ok   clicking a row selects that story, with version, source and generation
+ok   clicking the selected story clears it
+ok   a click outside the plot posts nothing
+ok   Escape clears; only workspace shortcuts are forwarded
+ok   an older generation is ignored
+ok   messages name the generation shown
+ok   a malformed frame is refused
+ok   network access is blocked by the page CSP
+ok   no page errors: 
+all checks passed

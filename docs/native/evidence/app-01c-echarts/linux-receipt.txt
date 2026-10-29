@@ -1,0 +1,22 @@
+APP-01C ECharts/WebView2 — Linux receipt at cfacb26 (2026-10-28)
+Container: Linux, rustc 1.99.1, -j 2, CARGO_INCREMENTAL=0, --locked --offline.
+Target dir: this worktree's .codex-target (handed over from the merged
+APP-01C worktree after its gate at 0bc2d35 finished; not shared).
+
+cargo fmt --all -- --check                                         ok
+cargo clippy -p talos-native -p lab-viewport -p lab-e2k-mesh \
+  -p lab-fixture -p lab-results --all-targets --all-features \
+  -- -D warnings -W clippy::all                                    ok (0 findings)
+cargo test --workspace --all-features                              ok: 152 passed, 0 failed, 2 ignored
+  of which talos-native lib: 61 passed (8 chart_bridge + 3 embedded-chart UI tests new)
+node docs/native/evidence/app-01c-echarts/chart_page_test.js       11/11 checks (chart_page_test.txt)
+
+NOT run here:
+- apps/talos-native/src/webview_chart.rs and the #[path]-included
+  examples/support/webview_host.rs: Windows only; no Windows Rust target in
+  this container. Not compiled.
+- GPU tests, WASM, and the full gate script were not re-run for this slice:
+  the change touches no renderer code and talos-native is native-only.
+  The last full gate is 0bc2d35 (main's content): test 183/0/8, GPU 191/0,
+  WASM ok; workspace Clippy fails only on the pre-existing
+  webview_stage_a eprintln!.
