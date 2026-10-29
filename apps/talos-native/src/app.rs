@@ -45,7 +45,7 @@ impl App {
             }
         }
     }
-    /// The current prototype requires the Windows host for ECharts.
+    /// The current prototype requires the Windows host for `ECharts`.
     #[cfg(not(target_os = "windows"))]
     fn with_platform_chart(mut self, _cc: &eframe::CreationContext<'_>) -> Self {
         self.chart_start_error = Some("ECharts requires Windows WebView2 in this prototype".into());
@@ -75,7 +75,7 @@ impl App {
     pub fn chart_error(&self) -> Option<&str> {
         self.chart_start_error
             .as_deref()
-            .or_else(|| self.chart.as_ref().and_then(|chart| chart.error()))
+            .or_else(|| self.chart.as_ref()?.error())
     }
     pub fn state(&self) -> &State {
         &self.state

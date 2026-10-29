@@ -26,7 +26,9 @@ pub struct Embed {
     pub content: Content,
 }
 
-/// Draws the page. With `embedded`, a stored profile's plot area is left to
+/// Draws the Results page.
+///
+/// With `embedded`, a stored profile's plot area is left to
 /// the embedded chart and returned with its content. An unavailable host is
 /// explicit; stored table values remain readable without a renderer fallback.
 pub fn show(ui: &mut egui::Ui, state: &State, embedded: bool) -> (Vec<Action>, Option<Embed>) {

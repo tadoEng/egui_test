@@ -1,4 +1,4 @@
-//! Windows adapter for the existing bounded offline child WebView host.
+//! Windows adapter for the existing bounded offline child `WebView` host.
 #[path = "../../../examples/support/webview_host.rs"]
 mod webview_host;
 
@@ -27,9 +27,9 @@ pub struct WebViewChart {
 }
 
 impl WebViewChart {
-    /// Create the hidden child through the CreationContext native handle.
+    /// Create the hidden child through the `CreationContext` native handle.
     /// # Errors
-    /// No Windows parent, missing WebView2 runtime, or child creation failure.
+    /// No Windows parent, missing `WebView2` runtime, or child creation failure.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Result<Self, String> {
         // eframe 0.37 CreationContext implements HasWindowHandle directly.
         let RawWindowHandle::Win32(handle) =
@@ -66,8 +66,16 @@ impl WebViewChart {
             Input::KeyboardAndMouse::GetFocus, WindowsAndMessaging::IsChild,
         };
         let parent = self.parent as windows_sys::Win32::Foundation::HWND;
+        // SAFETY: GetFocus takes no arguments and only queries this UI thread.
+        // Its returned window handle is checked for null before use below.
         let focus = unsafe { GetFocus() };
-        !focus.is_null() && unsafe { IsChild(parent, focus) } != 0
+        if focus.is_null() {
+            return false;
+        }
+        // SAFETY: parent is the application's native parent handle and focus
+        // is a non-null handle returned by GetFocus on this UI thread. IsChild
+        // only queries their window relationship and retains neither handle.
+        unsafe { IsChild(parent, focus) != 0 }
     }
 
     fn sync_checked(
@@ -86,7 +94,7 @@ impl WebViewChart {
         if view
             .navigation
             .lock()
-            .map_err(|_| "WebView2 navigation state unavailable")?
+            .map_err(|error| format!("WebView2 navigation state unavailable: {error}"))?
             .contains(&"denied navigation")
         {
             return Err("WebView2 refused unexpected navigation".into());
