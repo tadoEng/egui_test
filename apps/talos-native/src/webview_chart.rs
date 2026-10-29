@@ -27,20 +27,18 @@ pub struct WebViewChart {
 }
 
 impl WebViewChart {
-    /// Create the hidden child using the actual native parent, not CreationContext.
+    /// Create the hidden child through the CreationContext native handle.
     /// # Errors
     /// No Windows parent, missing WebView2 runtime, or child creation failure.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Result<Self, String> {
-        let parent = cc
-            .winit_window
-            .ok_or("WebView2 requires a native parent window")?;
+        // eframe 0.37 CreationContext implements HasWindowHandle directly.
         let RawWindowHandle::Win32(handle) =
-            parent.window_handle().map_err(|e| e.to_string())?.as_raw()
+            cc.window_handle().map_err(|e| e.to_string())?.as_raw()
         else {
             return Err("WebView2 requires a Windows parent".into());
         };
         let html = PAGE.replacen(MARKER, ECHARTS, 1);
-        let view = ChildWebView::new(parent, &cc.egui_ctx, html, is_ready)?;
+        let view = ChildWebView::new(cc, &cc.egui_ctx, html, is_ready)?;
         Ok(Self {
             view: Some(view),
             bridge: Bridge::default(),
