@@ -1,0 +1,1 @@
+lucide-static 1.63.0, npm tarball sha256 521f0d535c03b159c6ea9b475920724dee2755005ad7360fd621b9bab7bf211d
