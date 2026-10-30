@@ -28,3 +28,5 @@ output/playwright/
 # sha256 in fixtures.sha256). Exactly these two files.
 !docs/native/fixtures/tower/tower-v1.e2k
 !docs/native/fixtures/tower/tower-v2.e2k
+
+.codex-target
