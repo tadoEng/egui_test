@@ -82,6 +82,10 @@ Story 2, verified Rust's selection and closed the host.
 
 Small raw reports: [run 1](evidence/webview-smoke-1.json),
 [run 2](evidence/webview-smoke-2.json), [run 3](evidence/webview-smoke-3.json).
+The [run manifest](evidence/webview-run-manifest.json) binds the source commit,
+binary/report hashes, UTC capture times and exit codes. Every run uses a fresh
+unique report path and rejects missing reports or abnormal process exit, so an
+older PASS file cannot be mistaken for a new run.
 They contain synthetic state only. These runs are correctness checks, **not
 mouse/keyboard input tests, performance runs, presentation timing or leak tests**.
 
@@ -91,9 +95,12 @@ internal deadline and closes itself. Unset the variable for interactive use.
 
 ```powershell
 cargo build --release --locked --offline --example webview_stage_a --features webview
-$env:WEBVIEW_SMOKE_REPORT = Join-Path $PWD 'target/webview-smoke.json'
+$env:WEBVIEW_SMOKE_REPORT = Join-Path $PWD ("target/webview-smoke-{0}.json" -f [guid]::NewGuid())
 & ./target/release/examples/webview_stage_a.exe
-Get-Content $env:WEBVIEW_SMOKE_REPORT
+if ($LASTEXITCODE -ne 0) { throw 'Smoke process exited abnormally' }
+$result = Get-Content $env:WEBVIEW_SMOKE_REPORT -Raw -ErrorAction Stop | ConvertFrom-Json
+if ($result.assessment -ne 'PASS') { throw 'Bridge smoke failed' }
+$result
 Remove-Item Env:WEBVIEW_SMOKE_REPORT
 ```
 
