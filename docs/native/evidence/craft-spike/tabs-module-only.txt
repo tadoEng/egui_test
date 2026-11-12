@@ -1,0 +1,13 @@
+[package]
+name = "tabs-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[dependencies]
+egui = "0.37.0"
+[workspace]
+--- src/lib.rs
+pub mod tabs;
+--- src/tabs.rs = craft-libs crates/ui/src/tabs/mod.rs @ b4afa6d with its '#[cfg(test)] mod tests;' tail removed (scratch only, not committed)
+--- result
+cargo check --offline (existing egui_test Cargo.lock copied in): Finished, 0 errors, 0 warnings
